@@ -295,4 +295,123 @@ describe('stale responses', () => {
     expect(result.current.workspace?.name).toBe('u2-view')
     expect(result.current.loading).toBe(false)
   })
+
+  it('useWorkspaces ignores a createWorkspace that resolves after a user switch', async () => {
+    vi.resetModules()
+    const calls: Deferred<{ data: unknown[]; error: null }>[] = []
+    const rpc = deferred<{ data: unknown; error: null }>()
+    const channel = mockChannel()
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: () => ({
+          select: () => ({
+            eq: () => {
+              const d = deferred<{ data: unknown[]; error: null }>()
+              calls.push(d)
+              return d.promise
+            },
+          }),
+        }),
+        rpc: () => rpc.promise,
+        channel: () => channel,
+        removeChannel: vi.fn(),
+      },
+    }))
+    let uid = 'u1'
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: uid } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const ws = (id: string) => ({ workspaces: { id, name: id } })
+    const { result, rerender } = renderHook(() => mod.useWorkspaces())
+    await waitFor(() => expect(calls.length).toBe(1))
+    await act(async () => {
+      calls[0].resolve({ data: [ws('u1-ws')], error: null })
+      await calls[0].promise
+    })
+    let pending!: Promise<unknown>
+    act(() => {
+      pending = result.current.createWorkspace('New')
+    })
+    uid = 'u2'
+    rerender()
+    await waitFor(() => expect(calls.length).toBe(2))
+    await act(async () => {
+      calls[1].resolve({ data: [ws('u2-ws')], error: null })
+      await calls[1].promise
+    })
+    expect(result.current.workspaces.map((w) => w.id)).toEqual(['u2-ws'])
+    await act(async () => {
+      rpc.resolve({ data: { id: 'created', name: 'New' }, error: null })
+      await expect(pending).resolves.toEqual({ id: 'created', name: 'New' })
+    })
+    for (const d of calls.slice(2)) d.resolve({ data: [ws('u1-late')], error: null })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(calls.length).toBe(2)
+    expect(result.current.workspaces.map((w) => w.id)).toEqual(['u2-ws'])
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('useWorkspace ignores a rename that resolves after switching workspaces', async () => {
+    vi.resetModules()
+    const calls: Deferred<{ data: unknown; error: null }>[] = []
+    const update = deferred<{ data: null; error: null }>()
+    const members = Promise.resolve({ data: [], error: null })
+    const channel = mockChannel()
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: (table: string) =>
+          table === 'workspaces'
+            ? {
+                select: () => ({
+                  eq: () => ({
+                    maybeSingle: () => {
+                      const d = deferred<{ data: unknown; error: null }>()
+                      calls.push(d)
+                      return d.promise
+                    },
+                  }),
+                }),
+                update: () => ({ eq: () => update.promise }),
+              }
+            : { select: () => ({ eq: () => ({ order: () => members }) }) },
+        channel: () => channel,
+        removeChannel: vi.fn(),
+      },
+    }))
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const { result, rerender } = renderHook(({ id }) => mod.useWorkspace(id), {
+      initialProps: { id: 'A' },
+    })
+    await waitFor(() => expect(calls.length).toBe(1))
+    await act(async () => {
+      calls[0].resolve({ data: { id: 'A', name: 'A' }, error: null })
+      await calls[0].promise
+    })
+    let pending!: Promise<void>
+    act(() => {
+      pending = result.current.rename('A2')
+    })
+    rerender({ id: 'B' })
+    await waitFor(() => expect(calls.length).toBe(2))
+    await act(async () => {
+      calls[1].resolve({ data: { id: 'B', name: 'B' }, error: null })
+      await calls[1].promise
+    })
+    expect(result.current.workspace?.id).toBe('B')
+    await act(async () => {
+      update.resolve({ data: null, error: null })
+      await pending
+    })
+    for (const d of calls.slice(2)) d.resolve({ data: { id: 'A', name: 'A2' }, error: null })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(calls.length).toBe(2)
+    expect(result.current.workspace?.id).toBe('B')
+    expect(result.current.loading).toBe(false)
+  })
 })

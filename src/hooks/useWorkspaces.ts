@@ -70,6 +70,10 @@ export function useWorkspaces(): {
   // Bumped on every effect run and cleanup so responses from any earlier
   // run (including an A->B->A key sequence) are recognised as obsolete.
   const genRef = useRef(0)
+  // Identity of the currently mounted effect. Callbacks closed over an older
+  // identity (e.g. a mutation that resolves after a user switch) compare
+  // against it and bail instead of writing state under the old key.
+  const identityRef = useRef<string | null>(null)
   // Reset to empty/loading during render whenever the identity changes, so
   // data cached for an earlier visit to the same key is never shown.
   const [trackedKey, setTrackedKey] = useState(userId)
@@ -79,13 +83,13 @@ export function useWorkspaces(): {
   }
 
   const refresh = useCallback(async () => {
-    if (!userId) return
+    if (!userId || identityRef.current !== userId) return
     const gen = genRef.current
     const { data, error: err } = await supabase
       .from('workspace_members')
       .select('workspace_id, workspaces(*)')
       .eq('user_id', userId)
-    if (gen !== genRef.current) return
+    if (gen !== genRef.current || identityRef.current !== userId) return
     if (err) {
       setState((prev) => ({
         key: userId,
@@ -104,9 +108,11 @@ export function useWorkspaces(): {
 
   useEffect(() => {
     genRef.current += 1
+    identityRef.current = userId
     if (!userId) {
       return () => {
         genRef.current += 1
+        identityRef.current = null
       }
     }
     const timer = setTimeout(() => void refresh(), 0)
@@ -125,6 +131,7 @@ export function useWorkspaces(): {
       .subscribe()
     return () => {
       genRef.current += 1
+      identityRef.current = null
       clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
@@ -134,10 +141,10 @@ export function useWorkspaces(): {
     async (name: string): Promise<Workspace> => {
       const { data, error: err } = await supabase.rpc('create_workspace', { p_name: name.trim() })
       if (err) throw toError(err)
-      await refresh()
+      if (identityRef.current === userId) await refresh()
       return data
     },
-    [refresh],
+    [userId, refresh],
   )
 
   const joinWorkspace = useCallback(
@@ -146,10 +153,10 @@ export function useWorkspaces(): {
         p_code: code.trim().toUpperCase(),
       })
       if (err) throw toError(err)
-      await refresh()
+      if (identityRef.current === userId) await refresh()
       return data
     },
-    [refresh],
+    [userId, refresh],
   )
 
   return {
@@ -187,6 +194,8 @@ export function useWorkspace(workspaceId: string): {
   // switch within the same workspace never shows the previous user's data.
   const key = `${userId ?? ''}:${workspaceId}`
   const genRef = useRef(0)
+  // See useWorkspaces: guards callbacks that outlive their identity.
+  const identityRef = useRef<string | null>(null)
   const [trackedKey, setTrackedKey] = useState(key)
   if (trackedKey !== key) {
     setTrackedKey(key)
@@ -199,6 +208,7 @@ export function useWorkspace(workspaceId: string): {
   const loading = !current
 
   const refresh = useCallback(async () => {
+    if (identityRef.current !== key) return
     const gen = genRef.current
     const [wsRes, memRes] = await Promise.all([
       supabase.from('workspaces').select('*').eq('id', workspaceId).maybeSingle(),
@@ -208,7 +218,7 @@ export function useWorkspace(workspaceId: string): {
         .eq('workspace_id', workspaceId)
         .order('joined_at', { ascending: true }),
     ])
-    if (gen !== genRef.current) return
+    if (gen !== genRef.current || identityRef.current !== key) return
     if (wsRes.error || !wsRes.data) {
       setState({ key, workspace: null, members: [], notFound: true })
     } else {
@@ -223,6 +233,7 @@ export function useWorkspace(workspaceId: string): {
 
   useEffect(() => {
     genRef.current += 1
+    identityRef.current = key
     const gen = genRef.current
     const timer = setTimeout(() => void refresh(), 0)
     const markGone = () => {
@@ -255,6 +266,7 @@ export function useWorkspace(workspaceId: string): {
       .subscribe()
     return () => {
       genRef.current += 1
+      identityRef.current = null
       clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
@@ -269,9 +281,9 @@ export function useWorkspace(workspaceId: string): {
         .update({ name: name.trim() })
         .eq('id', workspaceId)
       if (err) throw toError(err)
-      await refresh()
+      if (identityRef.current === key) await refresh()
     },
-    [workspaceId, refresh],
+    [key, workspaceId, refresh],
   )
 
   const regenerateInviteCode = useCallback(async (): Promise<string> => {
@@ -279,9 +291,9 @@ export function useWorkspace(workspaceId: string): {
       p_workspace_id: workspaceId,
     })
     if (err) throw toError(err)
-    await refresh()
+    if (identityRef.current === key) await refresh()
     return data
-  }, [workspaceId, refresh])
+  }, [key, workspaceId, refresh])
 
   const removeMember = useCallback(
     async (memberId: string) => {
@@ -290,9 +302,9 @@ export function useWorkspace(workspaceId: string): {
         p_user_id: memberId,
       })
       if (err) throw toError(err)
-      await refresh()
+      if (identityRef.current === key) await refresh()
     },
-    [workspaceId, refresh],
+    [key, workspaceId, refresh],
   )
 
   const transferOwnership = useCallback(
@@ -302,9 +314,9 @@ export function useWorkspace(workspaceId: string): {
         p_new_owner: memberId,
       })
       if (err) throw toError(err)
-      await refresh()
+      if (identityRef.current === key) await refresh()
     },
-    [workspaceId, refresh],
+    [key, workspaceId, refresh],
   )
 
   const deleteWorkspace = useCallback(async () => {
