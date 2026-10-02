@@ -101,15 +101,33 @@ describe('CaptureBar', () => {
     expect(box.value).toBe('')
   })
 
-  it('ignores a second Enter while a submit is in flight', async () => {
-    speechState.listening = true
-    const { onSubmit, box } = setup()
+  it('ignores a second Enter while a submit is in flight and keeps the new draft', async () => {
+    let resolve: () => void = () => {}
+    const { onSubmit, box } = setup(vi.fn(() => new Promise<void>((r) => (resolve = r))))
     fireEvent.change(box, { target: { value: 'once' } })
     fireEvent.keyDown(box, { key: 'Enter' })
-    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    fireEvent.change(box, { target: { value: 'next draft' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await act(async () => {})
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(box.value).toBe('next draft')
+    await act(async () => resolve())
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(box.value).toBe('next draft')
+  })
+
+  it('uses severity changed during the speech flush wait', async () => {
+    speechState.listening = true
+    const { onSubmit, box } = setup()
+    fireEvent.change(box, { target: { value: 'sev' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.keyDown(box, { key: '1', code: 'Digit1', altKey: true })
     await act(async () => speechState.onFinal(''))
     await act(async () => new Promise((r) => setTimeout(r, 350)))
     expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].severity).toBe('low')
   })
 
   it('Alt+digit changes severity', () => {

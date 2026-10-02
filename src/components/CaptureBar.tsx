@@ -47,7 +47,12 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
   const setTranscript = (t: string | null) => {
     transcriptRef.current = t
   }
-  const [severity, setSeverity] = useState<Severity>('medium')
+  const [severity, setSeverityState] = useState<Severity>('medium')
+  const severityRef = useRef<Severity>('medium')
+  const setSeverity = (s: Severity) => {
+    severityRef.current = s
+    setSeverityState(s)
+  }
   const [chips, setChips] = useState<Chip[]>([])
   const innerRef = useRef<HTMLTextAreaElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
@@ -159,13 +164,14 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
 
   const runSubmit = async () => {
     if (speech.listening) await flushSpeech()
+    // Read everything from refs only after the flush: state may have changed during the wait.
     setInterim('')
     const description = valueRef.current.trim()
     if (!description) return
     const snapshot = {
       value: valueRef.current,
       transcript: transcriptRef.current,
-      severity,
+      severity: severityRef.current,
       chips: chipsRef.current,
     }
     const files = snapshot.chips.map((c) => c.file)
