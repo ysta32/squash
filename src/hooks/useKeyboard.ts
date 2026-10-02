@@ -13,6 +13,24 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   )
 }
 
+let overlayCount = 0
+
+/** Registers an open overlay (modal, sheet, popover); shortcuts other than Esc and ? pause while any is open. */
+export function useOverlayOpen(open: boolean): void {
+  useEffect(() => {
+    if (!open) return
+    overlayCount += 1
+    return () => {
+      overlayCount -= 1
+    }
+  }, [open])
+}
+
+/** True while a registered overlay or any rendered `role="dialog"` element is open. */
+export function isOverlayOpen(): boolean {
+  return overlayCount > 0 || document.querySelector('[role="dialog"]') !== null
+}
+
 /** Matches `key` against the event: single letters are case-insensitive, everything else exact. */
 function matches(e: KeyboardEvent, key: string): boolean {
   if (/^[a-z]$/i.test(key)) return e.key.toLowerCase() === key.toLowerCase() && !e.shiftKey
@@ -21,7 +39,8 @@ function matches(e: KeyboardEvent, key: string): boolean {
 
 /**
  * Global single-key shortcut. Ignores events with Ctrl/Meta/Alt held, events already handled
- * (defaultPrevented), and keystrokes inside text inputs unless `allowInInput`.
+ * (defaultPrevented, e.g. Esc consumed by a menu), keystrokes inside text inputs unless
+ * `allowInInput`, and — except for Esc and ? — any key while an overlay is open.
  */
 export function useShortcut(
   key: string,
@@ -34,6 +53,7 @@ export function useShortcut(
     if (e.defaultPrevented || e.isComposing) return
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (!matches(e, key)) return
+    if (key !== 'Escape' && key !== '?' && isOverlayOpen()) return
     if (!allowInInput && isTypingTarget(e.target)) return
     handler(e)
   })

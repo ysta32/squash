@@ -3,7 +3,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToastProvider } from '../components/Toast'
 import type { Bug, BugWithMeta, Workspace as WorkspaceRow, WorkspaceMember } from '../lib/types'
+import { useRef, type ReactNode } from 'react'
 import type * as UseBugsModule from '../hooks/useBugs'
+import { useDismiss } from '../hooks/useDismiss'
 import Workspace from './Workspace'
 
 const NOW = new Date().toISOString()
@@ -143,7 +145,14 @@ function LocationProbe() {
   return <output data-testid="path">{location.pathname}</output>
 }
 
-function show(path: string) {
+/** Stand-in for a Header menu: an open popover dismissed by Esc through useDismiss. */
+function OpenMenu({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDismiss(ref, onClose)
+  return <div ref={ref}>menu</div>
+}
+
+function show(path: string, extra?: ReactNode) {
   render(
     <MemoryRouter initialEntries={[path]}>
       <ToastProvider>
@@ -153,6 +162,7 @@ function show(path: string) {
           <Route path="/app" element={<p>Workspace picker</p>} />
         </Routes>
         <LocationProbe />
+        {extra}
       </ToastProvider>
     </MemoryRouter>,
   )
@@ -221,6 +231,54 @@ describe('Workspace', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     press('o')
     expect(screen.getByRole('dialog', { name: 'Reopen bug' })).toBeInTheDocument()
+  })
+
+  it('suspends navigation shortcuts while any dialog is open', () => {
+    show('/app/ws/bug/2')
+    const overlay = document.createElement('div')
+    overlay.setAttribute('role', 'dialog')
+    document.body.appendChild(overlay)
+    try {
+      press('j')
+      press('k')
+      press('n')
+      expect(path()).toBe('/app/ws/bug/2')
+      expect(document.activeElement).toBe(document.body)
+    } finally {
+      overlay.remove()
+    }
+    press('j')
+    expect(path()).toBe('/app/ws/bug/1')
+  })
+
+  it('suspends shortcuts while the resolve popover is open', () => {
+    show('/app/ws/bug/2')
+    press('r')
+    expect(screen.getByRole('dialog', { name: 'Resolve bug' })).toBeInTheDocument()
+    ;(document.activeElement as HTMLElement).blur()
+    press('j')
+    expect(path()).toBe('/app/ws/bug/2')
+  })
+
+  it('Esc consumed by an open menu does not also close the mobile detail', () => {
+    const onClose = vi.fn()
+    show('/app/ws/bug/2', <OpenMenu onClose={onClose} />)
+    press('Escape')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(path()).toBe('/app/ws/bug/2')
+  })
+
+  it('Esc closes the mobile detail when nothing else handles it', () => {
+    show('/app/ws/bug/2')
+    press('Escape')
+    expect(path()).toBe('/app/ws')
+  })
+
+  it('N from the mobile detail returns to the list and focuses capture after commit', () => {
+    show('/app/ws/bug/2')
+    press('n')
+    expect(path()).toBe('/app/ws')
+    expect(document.activeElement).toBe(screen.getByLabelText('Capture'))
   })
 
   it('N focuses the capture box and ? opens the shortcut sheet', () => {

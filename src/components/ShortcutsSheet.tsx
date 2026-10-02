@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
+import { useOverlayOpen } from '../hooks/useKeyboard'
 import { isMac } from '../lib/utils'
 
 const ALT = isMac ? '⌥' : 'Alt'
@@ -26,6 +27,7 @@ export interface ShortcutsSheetProps {
 export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const onCloseRef = useRef(onClose)
+  useOverlayOpen(open)
 
   useEffect(() => {
     onCloseRef.current = onClose

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { BugDetail } from '../components/BugDetail'
@@ -10,7 +18,7 @@ import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
 import { filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
-import { useShortcut } from '../hooks/useKeyboard'
+import { useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
@@ -175,14 +183,30 @@ export default function Workspace() {
     select(visible[nextIdx].id, { replace: idx !== -1 })
   }
 
+  /** Input to focus once the mobile list view has committed (N and / from the detail view). */
+  const pendingFocus = useRef<RefObject<HTMLElement | null> | null>(null)
+  useEffect(() => {
+    if (showDetail || !pendingFocus.current) return
+    pendingFocus.current.current?.focus()
+    pendingFocus.current = null
+  }, [showDetail])
+  const focusInList = (target: RefObject<HTMLElement | null>) => {
+    if (showDetail && !isDesktop()) {
+      pendingFocus.current = target
+      deselect()
+      return
+    }
+    target.current?.focus()
+  }
+
+  useOverlayOpen(inviteOpen)
   const shortcutsEnabled = !inviteOpen && !shortcutsOpen && ws.workspace !== null
   const opts = { enabled: shortcutsEnabled }
   useShortcut(
     'n',
     (e) => {
       e.preventDefault()
-      if (showDetail && !isDesktop()) deselect()
-      captureRef.current?.focus()
+      focusInList(captureRef)
     },
     opts,
   )
@@ -190,8 +214,7 @@ export default function Workspace() {
     '/',
     (e) => {
       e.preventDefault()
-      if (showDetail && !isDesktop()) deselect()
-      searchRef.current?.focus()
+      focusInList(searchRef)
     },
     opts,
   )
