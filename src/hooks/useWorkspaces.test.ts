@@ -44,3 +44,100 @@ describe('friendlyError', () => {
     expect(friendlyError(null)).toBe('Something went wrong.')
   })
 })
+
+describe('stale responses', () => {
+  interface Deferred<T> {
+    promise: Promise<T>
+    resolve: (v: T) => void
+  }
+  function deferred<T>(): Deferred<T> {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  it('useWorkspaces ignores a previous user response and clears state', async () => {
+    vi.resetModules()
+    const slow = deferred<{ data: unknown[]; error: null }>()
+    const fast = deferred<{ data: unknown[]; error: null }>()
+    const queue = [slow, fast]
+    const channel = { on: vi.fn(), subscribe: vi.fn() }
+    channel.on.mockReturnValue(channel)
+    channel.subscribe.mockReturnValue(channel)
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: () => ({
+          select: () => ({ eq: () => queue.shift()?.promise }),
+        }),
+        channel: () => channel,
+        removeChannel: vi.fn(),
+      },
+    }))
+    let uid = 'u1'
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: uid } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const ws = (id: string) => ({ workspaces: { id, name: id } })
+    const { result, rerender } = renderHook(() => mod.useWorkspaces())
+    await waitFor(() => expect(queue.length).toBe(1))
+    uid = 'u2'
+    rerender()
+    expect(result.current.workspaces).toEqual([])
+    expect(result.current.loading).toBe(true)
+    await waitFor(() => expect(queue.length).toBe(0))
+    await act(async () => {
+      fast.resolve({ data: [ws('B')], error: null })
+      await fast.promise
+    })
+    await act(async () => {
+      slow.resolve({ data: [ws('A')], error: null })
+      await slow.promise
+    })
+    expect(result.current.workspaces.map((w) => w.id)).toEqual(['B'])
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('useWorkspace ignores a response for a previous workspaceId', async () => {
+    vi.resetModules()
+    const slow = deferred<{ data: unknown; error: null }>()
+    const fast = deferred<{ data: unknown; error: null }>()
+    const wsQueue = [slow, fast]
+    const members = Promise.resolve({ data: [], error: null })
+    const channel = { on: vi.fn(), subscribe: vi.fn() }
+    channel.on.mockReturnValue(channel)
+    channel.subscribe.mockReturnValue(channel)
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: (table: string) =>
+          table === 'workspaces'
+            ? { select: () => ({ eq: () => ({ maybeSingle: () => wsQueue.shift()?.promise }) }) }
+            : { select: () => ({ eq: () => ({ order: () => members }) }) },
+        channel: () => channel,
+        removeChannel: vi.fn(),
+      },
+    }))
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const { result, rerender } = renderHook(({ id }) => mod.useWorkspace(id), {
+      initialProps: { id: 'A' },
+    })
+    await waitFor(() => expect(wsQueue.length).toBe(1))
+    rerender({ id: 'B' })
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspace).toBeNull()
+    await waitFor(() => expect(wsQueue.length).toBe(0))
+    await act(async () => {
+      fast.resolve({ data: { id: 'B', name: 'B' }, error: null })
+      await fast.promise
+    })
+    await act(async () => {
+      slow.resolve({ data: { id: 'A', name: 'A' }, error: null })
+      await slow.promise
+    })
+    expect(result.current.workspace?.id).toBe('B')
+    expect(result.current.loading).toBe(false)
+  })
+})

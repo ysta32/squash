@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { MemberRole, Workspace, WorkspaceMember } from '../lib/types'
@@ -62,9 +62,12 @@ export function useWorkspaces(): {
 } {
   const { user } = useAuth()
   const userId = user?.id ?? null
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<{
+    key: string | null
+    workspaces: Workspace[]
+    error: string | null
+  }>({ key: null, workspaces: [], error: null })
+  const activeKey = useRef<string | null>(null)
 
   const refresh = useCallback(async () => {
     if (!userId) return
@@ -72,22 +75,26 @@ export function useWorkspaces(): {
       .from('workspace_members')
       .select('workspace_id, workspaces(*)')
       .eq('user_id', userId)
+    if (activeKey.current !== userId) return
     if (err) {
-      setError(friendlyError(err))
+      setState((prev) => ({
+        key: userId,
+        workspaces: prev.key === userId ? prev.workspaces : [],
+        error: friendlyError(err),
+      }))
     } else {
-      setError(null)
       const list: Workspace[] = []
       for (const row of data) {
         const ws = row.workspaces
         if (ws && !Array.isArray(ws)) list.push(ws)
       }
-      setWorkspaces(list)
+      setState({ key: userId, workspaces: list, error: null })
     }
-    setLoading(false)
   }, [userId])
 
   useEffect(() => {
     if (!userId) return
+    activeKey.current = userId
     const timer = setTimeout(() => void refresh(), 0)
     const channel = supabase
       .channel(`my-workspaces:${userId}`)
@@ -103,6 +110,7 @@ export function useWorkspaces(): {
       )
       .subscribe()
     return () => {
+      activeKey.current = null
       clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
@@ -131,9 +139,9 @@ export function useWorkspaces(): {
   )
 
   return {
-    workspaces: userId ? workspaces : [],
-    loading: userId ? loading : false,
-    error,
+    workspaces: userId && state.key === userId ? state.workspaces : [],
+    loading: userId ? state.key !== userId : false,
+    error: state.key === userId ? state.error : null,
     createWorkspace,
     joinWorkspace,
     refresh,
@@ -155,10 +163,18 @@ export function useWorkspace(workspaceId: string): {
 } {
   const { user } = useAuth()
   const userId = user?.id ?? null
-  const [workspace, setWorkspace] = useState<Workspace | null>(null)
-  const [members, setMembers] = useState<WorkspaceMember[]>([])
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+  const [state, setState] = useState<{
+    key: string | null
+    workspace: Workspace | null
+    members: WorkspaceMember[]
+    notFound: boolean
+  }>({ key: null, workspace: null, members: [], notFound: false })
+  const activeKey = useRef<string | null>(null)
+  const current = state.key === workspaceId
+  const workspace = current ? state.workspace : null
+  const members = useMemo(() => (current ? state.members : []), [current, state.members])
+  const notFound = current ? state.notFound : false
+  const loading = !current
 
   const refresh = useCallback(async () => {
     const [wsRes, memRes] = await Promise.all([
@@ -169,29 +185,24 @@ export function useWorkspace(workspaceId: string): {
         .eq('workspace_id', workspaceId)
         .order('joined_at', { ascending: true }),
     ])
+    if (activeKey.current !== workspaceId) return
     if (wsRes.error || !wsRes.data) {
-      setWorkspace(null)
-      setMembers([])
-      setNotFound(true)
+      setState({ key: workspaceId, workspace: null, members: [], notFound: true })
     } else {
-      setWorkspace(wsRes.data)
-      setNotFound(false)
       const list: WorkspaceMember[] = []
       for (const row of memRes.data ?? []) {
         const profile = row.profile
         if (profile && !Array.isArray(profile)) list.push({ ...row, profile })
       }
-      setMembers(list)
+      setState({ key: workspaceId, workspace: wsRes.data, members: list, notFound: false })
     }
-    setLoading(false)
   }, [workspaceId])
 
   useEffect(() => {
+    activeKey.current = workspaceId
     const timer = setTimeout(() => void refresh(), 0)
     const markGone = () => {
-      setWorkspace(null)
-      setMembers([])
-      setNotFound(true)
+      setState({ key: workspaceId, workspace: null, members: [], notFound: true })
     }
     const channel = supabase
       .channel(`workspace:${workspaceId}`)
@@ -218,6 +229,7 @@ export function useWorkspace(workspaceId: string): {
       )
       .subscribe()
     return () => {
+      activeKey.current = null
       clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
