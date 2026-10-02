@@ -27,12 +27,12 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
+          className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-border bg-bg-elevated p-1 shadow-lg"
         >
           <div className="truncate px-2 py-1.5 text-sm font-medium">
             {profile?.display_name ?? ''}
           </div>
-          <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
+          <div className="my-1 border-t border-border" />
           <Link
             to={`/app/${workspaceId}/settings`}
             role="menuitem"

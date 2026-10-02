@@ -38,7 +38,7 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full z-30 mt-1 w-56 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
+          className="absolute left-0 top-full z-30 mt-1 w-56 rounded-lg border border-border bg-bg-elevated p-1 shadow-lg"
         >
           {workspaces.map((w) => (
             <button
@@ -52,7 +52,7 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
               {w.id === workspace.id && <Check className="h-3.5 w-3.5 shrink-0" />}
             </button>
           ))}
-          <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
+          <div className="my-1 border-t border-border" />
           <Link
             to="/app?new=1"
             role="menuitem"

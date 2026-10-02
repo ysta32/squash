@@ -64,7 +64,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
-        className="w-full max-w-sm rounded-xl border border-border bg-bg p-5 text-fg shadow-xl"
+        className="w-full max-w-sm rounded-xl border border-border bg-bg-elevated p-5 text-fg shadow-xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="shortcuts-title" className="text-sm font-semibold">

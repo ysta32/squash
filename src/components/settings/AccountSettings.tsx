@@ -171,7 +171,7 @@ export function AccountSettings() {
             if (!busy) setOpen(false)
           }}
           aria-labelledby="delete-account-title"
-          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-lg border border-border bg-bg p-6 text-fg backdrop:bg-black/50"
+          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-lg border border-border bg-bg-elevated p-6 text-fg backdrop:bg-black/50"
         >
           <h3 id="delete-account-title" className="text-lg font-medium">
             Delete account permanently?

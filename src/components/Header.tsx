@@ -55,7 +55,7 @@ export function Header({
   useDismiss(statsRef, closeStats, statsOpen)
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 px-3 dark:border-zinc-800">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold tracking-tight">Squash</span>
         <span className="text-zinc-300 dark:text-zinc-700">/</span>

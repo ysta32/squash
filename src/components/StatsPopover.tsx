@@ -48,7 +48,7 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
   const byId = new Map(members.map((m) => [m.user_id, m.profile]))
 
   return (
-    <div className="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-border bg-bg-elevated p-3 shadow-lg">
       <div className="mb-2 grid grid-cols-[1fr_4.5rem_4.5rem] gap-2 text-xs text-zinc-500">
         <span>Member</span>
         <span className="text-right">Filed 7d / all</span>
@@ -58,7 +58,7 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
       {!error && rows === null && (
         <div className="space-y-2" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-6 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+            <div key={i} className="h-6 animate-pulse rounded bg-bg-subtle" />
           ))}
         </div>
       )}
