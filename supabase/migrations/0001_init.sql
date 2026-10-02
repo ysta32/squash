@@ -104,8 +104,10 @@ $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   display_name text not null default 'User' check (char_length(display_name) between 1 and 80),
-  avatar_url text,
-  avatar_color text not null default '#6366f1',
+  avatar_url text check (
+    avatar_url is null or (avatar_url like 'https://%' and char_length(avatar_url) <= 2048)
+  ),
+  avatar_color text not null default '#6366f1' check (avatar_color ~ '^#[0-9a-fA-F]{6}$'),
   created_at timestamptz not null default now()
 );
 
@@ -261,7 +263,14 @@ declare
     '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#ec4899'
   ];
   v_name text;
+  v_avatar text;
 begin
+  -- Provider metadata is untrusted: drop avatar URLs that would violate the
+  -- profiles CHECK so signup can never fail on them.
+  v_avatar := coalesce(nullif(v_meta ->> 'avatar_url', ''), nullif(v_meta ->> 'picture', ''));
+  if v_avatar is not null and (v_avatar not like 'https://%' or char_length(v_avatar) > 2048) then
+    v_avatar := null;
+  end if;
   v_name := coalesce(
     nullif(btrim(v_meta ->> 'full_name'), ''),
     nullif(btrim(v_meta ->> 'name'), ''),
@@ -272,7 +281,7 @@ begin
   values (
     new.id,
     left(v_name, 80),
-    coalesce(nullif(v_meta ->> 'avatar_url', ''), nullif(v_meta ->> 'picture', '')),
+    v_avatar,
     v_palette[(mod(abs(hashtext(new.id::text)::bigint), 10) + 1)::int]
   )
   on conflict (id) do nothing;
@@ -991,7 +1000,9 @@ create policy bug_events_select on public.bug_events
 revoke all on table public.profiles, public.workspaces, public.workspace_members, public.bugs,
   public.bug_attachments, public.comments, public.bug_events, public.bug_filings
   from anon, authenticated;
-grant select, update on table public.profiles to authenticated;
+grant select on table public.profiles to authenticated;
+-- Column-level: id / created_at are never client-writable.
+grant update (display_name, avatar_color, avatar_url) on table public.profiles to authenticated;
 grant select, update on table public.workspaces to authenticated;
 grant select on table public.workspace_members to authenticated;
 grant select, insert, update on table public.bugs to authenticated;

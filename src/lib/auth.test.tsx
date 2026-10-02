@@ -75,7 +75,7 @@ describe('AuthProvider', () => {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/join/abc')}`,
-        queryParams: { access_type: 'offline', prompt: 'select_account' },
+        queryParams: { prompt: 'select_account' },
       },
     })
   })

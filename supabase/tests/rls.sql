@@ -209,6 +209,24 @@ do $$ declare n int; begin
   exception when sqlstate '42501' then n := 0; end;
   if n <> 0 then raise exception 'FAIL[25]: updated another user''s profile'; end if;
 end $$;
+-- [53] own profile: id not writable (column grant); [54] avatar CHECKs enforced; own name update works
+do $$ declare n int; begin
+  begin
+    update public.profiles set id = '10000000-0000-0000-0000-000000000099' where id = '10000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL[53]: profile id was writable';
+  exception when sqlstate '42501' then null; end;
+  begin
+    update public.profiles set avatar_color = 'red' where id = '10000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL[54]: invalid avatar_color accepted';
+  exception when check_violation then null; end;
+  begin
+    update public.profiles set avatar_url = 'javascript:alert(1)' where id = '10000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL[54]: non-https avatar_url accepted';
+  exception when check_violation then null; end;
+  update public.profiles set display_name = 'Bob', avatar_color = '#AbCdEf' where id = '10000000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[54]: own profile update failed'; end if;
+end $$;
 
 -- ===== Owner capabilities (as A) =====
 :as_a

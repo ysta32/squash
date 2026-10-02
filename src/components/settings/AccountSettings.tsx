@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
+import { removeScreenshots } from '../../lib/storageCleanup'
 import { useWorkspace, useWorkspaces } from '../../hooks/useWorkspaces'
 import type { Workspace } from '../../lib/types'
 
@@ -91,9 +92,33 @@ export function AccountSettings() {
     navigate('/', { replace: true })
   }
 
+  // delete_account deletes owned workspaces only when every one of them has no
+  // other members; otherwise it fails with transfer_ownership_required. Returns
+  // the owned workspace ids when that precondition holds, or null when it does
+  // not (so no screenshots are removed for an account that will survive).
+  async function soloOwnedWorkspaceIds(userId: string): Promise<string[] | null> {
+    const { data: owned, error: ownedError } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', userId)
+    if (ownedError) throw new Error(ownedError.message)
+    const ids = owned.map((workspace) => workspace.id)
+    if (ids.length === 0) return ids
+    const { data: memberRows, error: membersError } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, user_id')
+      .in('workspace_id', ids)
+    if (membersError) throw new Error(membersError.message)
+    const shared = memberRows.some((member) => member.user_id !== userId)
+    return shared ? null : ids
+  }
+
   async function deleteAccount() {
     await run(async () => {
       if (!deleted) {
+        if (!user) throw new Error('You are signed out.')
+        const soloOwned = await soloOwnedWorkspaceIds(user.id)
+        for (const workspaceId of soloOwned ?? []) await removeScreenshots(workspaceId)
         const { error: deleteError } = await supabase.rpc('delete_account')
         if (deleteError) {
           if (deleteError.message.includes('transfer_ownership_required')) {

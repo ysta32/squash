@@ -18,6 +18,10 @@ const COLORS = [
   '#14b8a6',
 ]
 
+// Mirrors the profiles CHECK constraints in supabase/migrations/0001_init.sql.
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+const MAX_NAME_LENGTH = 80
+
 export function ProfileSettings({ profile }: { profile: Profile }) {
   const { user, refreshProfile } = useAuth()
   const [name, setName] = useState(profile.display_name)
@@ -29,9 +33,17 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!user || !name.trim() || busy) return
+    setSaved(false)
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      setError(`Display name must be at most ${MAX_NAME_LENGTH} characters.`)
+      return
+    }
+    if (!HEX_COLOR.test(color)) {
+      setError('Pick a valid avatar color.')
+      return
+    }
     setBusy(true)
     setError(null)
-    setSaved(false)
     try {
       const { error: updateError } = await supabase
         .from('profiles')
@@ -55,6 +67,7 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
         <span>Display name</span>
         <input
           required
+          maxLength={MAX_NAME_LENGTH}
           value={name}
           onChange={(event) => {
             setName(event.target.value)
