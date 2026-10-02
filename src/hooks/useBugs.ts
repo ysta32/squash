@@ -287,6 +287,21 @@ function removePending(ws: string, bugId: string, localId?: string): void {
   publishPending(ws)
 }
 
+type CompletedListener = (ws: string, attachment: BugAttachment) => void
+const completedListeners = new Set<CompletedListener>()
+
+/** Announces a finished upload to every mounted useBugs instance. */
+function publishCompleted(ws: string, attachment: BugAttachment): void {
+  for (const listener of completedListeners) listener(ws, attachment)
+}
+
+function subscribeCompleted(listener: CompletedListener): () => void {
+  completedListeners.add(listener)
+  return () => {
+    completedListeners.delete(listener)
+  }
+}
+
 /** Test helper: drop all pending-upload state. */
 export function resetPendingUploads(): void {
   const workspaces = [...pendingFiles.keys()]
@@ -316,6 +331,11 @@ export function useBugs(
   const touchedRef = useRef(new Set<string>())
   const onRemoteInsertRef = useRef(opts?.onRemoteInsert)
   const bugsRef = useRef<BugWithMeta[]>(EMPTY)
+  /** Outstanding optimistic edits: bug id → field → owning mutation and last confirmed value. */
+  const fieldOwnersRef = useRef(
+    new Map<string, Map<keyof BugWithMeta, { mut: number; base: unknown }>>(),
+  )
+  const mutationSeqRef = useRef(0)
 
   const pendingByBug = useSyncExternalStore(
     subscribePending,
@@ -352,6 +372,20 @@ export function useBugs(
       })
     },
     [],
+  )
+
+  useEffect(
+    () =>
+      subscribeCompleted((ws, attachment) => {
+        touchedRef.current.add(`att:${attachment.id}`)
+        mutate(ws, (b) =>
+          mapBug(b, attachment.bug_id, (bug) => {
+            const attachments = mergeAttachments(bug.attachments, [attachment])
+            return attachments === bug.attachments ? bug : { ...bug, attachments }
+          }),
+        )
+      }),
+    [mutate],
   )
 
   useEffect(() => {
@@ -495,53 +529,46 @@ export function useBugs(
     }
   }, [workspaceId, mutate])
 
-  const runUploads = useCallback(
-    async (ws: string, bugId: string, from: 'queued' | 'failed') => {
-      // Claim synchronously (before any await) so concurrent callers never take the same file.
-      const claimed = (pendingFiles.get(ws)?.get(bugId) ?? []).filter((f) => f.status === from)
-      if (claimed.length === 0) return
-      for (const item of claimed) {
-        item.status = 'uploading'
-        item.progress = 0
-        item.error = undefined
-      }
-      publishPending(ws)
+  const runUploads = useCallback(async (ws: string, bugId: string, from: 'queued' | 'failed') => {
+    // Claim synchronously (before any await) so concurrent callers never take the same file.
+    const claimed = (pendingFiles.get(ws)?.get(bugId) ?? []).filter((f) => f.status === from)
+    if (claimed.length === 0) return
+    for (const item of claimed) {
+      item.status = 'uploading'
+      item.progress = 0
+      item.error = undefined
+    }
+    publishPending(ws)
 
-      for (const item of claimed) {
+    for (const item of claimed) {
+      try {
+        const image = await compressImage(item.file)
+        let attachment: BugAttachment
         try {
-          const image = await compressImage(item.file)
-          let attachment: BugAttachment
-          try {
-            attachment = await uploadAttachment({
-              workspaceId: ws,
-              bugId,
-              image,
-              onProgress: (p) => {
-                item.progress = p
-                publishPending(ws)
-              },
-            })
-          } finally {
-            if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
-          }
-          touchedRef.current.add(`att:${attachment.id}`)
-          mutate(ws, (b) =>
-            mapBug(b, bugId, (bug) => {
-              const attachments = mergeAttachments(bug.attachments, [attachment])
-              return attachments === bug.attachments ? bug : { ...bug, attachments }
-            }),
-          )
-          removePending(ws, bugId, item.localId)
-          URL.revokeObjectURL(item.previewUrl)
-        } catch (err) {
-          item.status = 'failed'
-          item.error = friendlyError(err, 'Upload failed.')
-          publishPending(ws)
+          attachment = await uploadAttachment({
+            workspaceId: ws,
+            bugId,
+            image,
+            onProgress: (p) => {
+              item.progress = p
+              publishPending(ws)
+            },
+          })
+        } finally {
+          if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
         }
+        // Through the shared store, so whichever hook instance is mounted now (even after a
+        // remount) merges the attachment.
+        publishCompleted(ws, attachment)
+        removePending(ws, bugId, item.localId)
+        URL.revokeObjectURL(item.previewUrl)
+      } catch (err) {
+        item.status = 'failed'
+        item.error = friendlyError(err, 'Upload failed.')
+        publishPending(ws)
       }
-    },
-    [mutate],
-  )
+    }
+  }, [])
 
   const fileBug = useCallback(
     async (input: NewBugInput) => {
@@ -633,7 +660,20 @@ export function useBugs(
     ) => {
       const ws = workspaceId
       const before = bugsRef.current.find((b) => b.id === id)
+      const mut = ++mutationSeqRef.current
+      const fields = Object.keys(optimisticPatch) as (keyof BugWithMeta)[]
+      let owners = fieldOwnersRef.current.get(id)
+      if (!owners) {
+        owners = new Map()
+        fieldOwnersRef.current.set(id, owners)
+      }
+      for (const f of fields) {
+        // `base` is the last confirmed value: inherited from an outstanding mutation, if any.
+        const prior = owners.get(f)
+        owners.set(f, { mut, base: prior ? prior.base : before?.[f] })
+      }
       mutate(ws, (b) => mapBug(b, id, (bug) => ({ ...bug, ...optimisticPatch })))
+
       let failure: unknown
       try {
         const { error } = await supabase.from('bugs').update(dbPatch).eq('id', id)
@@ -641,15 +681,30 @@ export function useBugs(
       } catch (err) {
         failure = err
       }
+
+      // Fields this mutation still owns are reverted on failure; on success, a later outstanding
+      // mutation of the same field now falls back to this (confirmed) value.
+      const revert: Partial<Record<keyof BugWithMeta, unknown>> = {}
+      for (const f of fields) {
+        const entry = owners.get(f)
+        if (!entry) continue
+        if (entry.mut === mut) {
+          if (failure) revert[f] = entry.base
+          owners.delete(f)
+        } else if (!failure) {
+          entry.base = optimisticPatch[f]
+        }
+      }
+      if (owners.size === 0 && fieldOwnersRef.current.get(id) === owners) {
+        fieldOwnersRef.current.delete(id)
+      }
       if (!failure) return
-      if (before) {
-        const revert: Partial<BugWithMeta> = Object.fromEntries(
-          Object.keys(optimisticPatch).map((k) => [k, before[k as keyof BugWithMeta]]),
-        )
+      if (before && Object.keys(revert).length) {
+        const patch = revert as Partial<BugWithMeta>
         // Revert only if no newer server row has been applied since the optimistic patch.
         mutate(ws, (b) =>
           mapBug(b, id, (bug) =>
-            bug.updated_at === before.updated_at ? { ...bug, ...revert } : bug,
+            bug.updated_at === before.updated_at ? { ...bug, ...patch } : bug,
           ),
         )
       }

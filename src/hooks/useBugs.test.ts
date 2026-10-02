@@ -548,4 +548,74 @@ describe('useBugs sync', () => {
     rerender({ ws: 'ws1' })
     await waitFor(() => expect(result.current.bugs[0]?.pending?.[0].error).toBe('network down'))
   })
+
+  it('a failed update does not clobber a later optimistic edit of the same field', async () => {
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'a', title: 'Orig' }), bug_attachments: [] }],
+      error: null,
+    }
+    h.state.deferUpdate = true
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let first: Promise<void> = Promise.resolve()
+    act(() => {
+      first = result.current.updateBug('a', { title: 'T1' })
+    })
+    const resolveFirst = h.state.resolveUpdate
+    let second: Promise<void> = Promise.resolve()
+    act(() => {
+      second = result.current.updateBug('a', { title: 'T2' })
+    })
+    const resolveSecond = h.state.resolveUpdate
+    expect(result.current.bugs[0].title).toBe('T2')
+
+    await act(async () => {
+      resolveFirst?.({ error: { message: 'boom' } })
+      await expect(first).rejects.toThrow('boom')
+    })
+    expect(result.current.bugs[0].title).toBe('T2')
+
+    await act(async () => {
+      resolveSecond?.({ error: { message: 'boom' } })
+      await expect(second).rejects.toThrow('boom')
+    })
+    expect(result.current.bugs[0].title).toBe('Orig')
+  })
+
+  it('delivers an upload that finishes after a remount to the mounted hook', async () => {
+    let finish: (a: ReturnType<typeof att>) => void = () => {}
+    vi.mocked(uploadAttachment).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const first = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    await act(async () => {
+      await first.result.current.fileBug({
+        description: 'x',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    const id = first.result.current.bugs[0].id
+    await waitFor(() => expect(vi.mocked(uploadAttachment)).toHaveBeenCalledTimes(1))
+    first.unmount()
+
+    h.state.selectResult = { data: [{ ...bug({ id }), bug_attachments: [] }], error: null }
+    const second = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(second.result.current.loading).toBe(false))
+    expect(second.result.current.bugs[0].pending).toHaveLength(1)
+
+    await act(async () => {
+      finish(att('late', id))
+    })
+    await waitFor(() => expect(second.result.current.bugs[0].attachments).toHaveLength(1))
+    expect(second.result.current.bugs[0].attachments[0].id).toBe('late')
+    expect(second.result.current.bugs[0].pending).toBeUndefined()
+  })
 })
