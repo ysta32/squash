@@ -80,6 +80,7 @@ export function BugList({
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.stopPropagation()
+                event.nativeEvent.stopImmediatePropagation()
                 onFilters({ ...filters, query: '' })
                 event.currentTarget.blur()
               }

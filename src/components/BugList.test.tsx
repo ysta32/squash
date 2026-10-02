@@ -165,7 +165,7 @@ describe('BugList', () => {
   it('binds the external search ref and clears and blurs on Escape', () => {
     const searchRef = createRef<HTMLInputElement>()
     const onFilters = vi.fn()
-    render(
+    const { container } = render(
       <Harness
         searchRef={searchRef}
         onFilters={onFilters}
@@ -175,7 +175,16 @@ describe('BugList', () => {
     expect(searchRef.current).toBe(screen.getByRole('searchbox'))
     expect(searchRef.current).toHaveAttribute('placeholder', 'Search  /')
     searchRef.current?.focus()
-    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' })
+    const shortcut = vi.fn()
+    container.addEventListener('keydown', shortcut)
+    document.addEventListener('keydown', shortcut)
+    try {
+      fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' })
+      expect(shortcut).not.toHaveBeenCalled()
+    } finally {
+      container.removeEventListener('keydown', shortcut)
+      document.removeEventListener('keydown', shortcut)
+    }
     expect(screen.getByRole('searchbox')).toHaveValue('')
     expect(screen.getByRole('searchbox')).not.toHaveFocus()
     expect(onFilters).toHaveBeenLastCalledWith(filters)
@@ -216,7 +225,7 @@ describe('BugList', () => {
     expect(within(resolved).getByTitle('Resolved by Ada')).toBeInTheDocument()
   })
 
-  it('uses the first signed attachment URL and falls back to an optimistic preview', () => {
+  it('prefers signed attachments for saved rows and pending previews for optimistic rows', () => {
     vi.mocked(useSignedUrl).mockReturnValue('https://example.test/signed')
     const attachment = {
       id: 'image',
@@ -227,24 +236,38 @@ describe('BugList', () => {
       size_bytes: 100,
       created_at: bugs[0].created_at,
     }
-    const { rerender } = render(<Harness bugs={[bug({ attachments: [attachment] })]} />)
+    const pending = [{ localId: 'pending', previewUrl: 'blob:preview', progress: 0 }]
+    const { rerender } = render(<Harness bugs={[bug({ attachments: [attachment], pending })]} />)
     expect(useSignedUrl).toHaveBeenCalledWith(attachment.storage_path)
     expect(screen.getByAltText('Screenshot preview')).toHaveAttribute(
       'src',
       'https://example.test/signed',
     )
-    vi.mocked(useSignedUrl).mockReturnValue(null)
     rerender(
       <Harness
         bugs={[
           bug({
             optimistic: true,
-            pending: [{ localId: 'pending', previewUrl: 'blob:preview', progress: 0 }],
+            number: 0,
+            attachments: [attachment],
+            pending,
           }),
         ]}
       />,
     )
     expect(screen.getByAltText('Screenshot preview')).toHaveAttribute('src', 'blob:preview')
+    const row = screen.getByRole('option', { name: '#… Broken login' })
+    expect(within(row).getByText('#…')).toBeInTheDocument()
+    expect(within(row).queryByText('#0')).not.toBeInTheDocument()
+    vi.mocked(useSignedUrl).mockReturnValue(null)
+    rerender(<Harness bugs={[bug({ pending })]} />)
+    expect(screen.getByAltText('Screenshot preview')).toHaveAttribute('src', 'blob:preview')
+    vi.mocked(useSignedUrl).mockReturnValue('https://example.test/signed')
+    rerender(<Harness bugs={[bug({ optimistic: true, attachments: [attachment] })]} />)
+    expect(screen.getByAltText('Screenshot preview')).toHaveAttribute(
+      'src',
+      'https://example.test/signed',
+    )
   })
 
   it('updates highlight and viewer presence from props', () => {

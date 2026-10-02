@@ -19,7 +19,10 @@ export interface BugRowProps {
 export function BugRow({ bug, selected, onSelect, members, viewers, highlighted }: BugRowProps) {
   const ref = useRef<HTMLButtonElement>(null)
   const signedUrl = useSignedUrl(bug.attachments[0]?.storage_path ?? null)
-  const thumbnail = signedUrl ?? bug.pending?.[0]?.previewUrl
+  const thumbnail = bug.optimistic
+    ? (bug.pending?.[0]?.previewUrl ?? signedUrl)
+    : (signedUrl ?? bug.pending?.[0]?.previewUrl)
+  const num = bug.optimistic ? '…' : String(bug.number)
   const filer = members.find((member) => member.user_id === bug.filed_by)?.profile ?? null
   const resolver = members.find((member) => member.user_id === bug.resolved_by)?.profile ?? null
 
@@ -33,7 +36,7 @@ export function BugRow({ bug, selected, onSelect, members, viewers, highlighted 
       type="button"
       role="option"
       aria-selected={selected}
-      aria-label={`#${bug.number} ${bug.title}`}
+      aria-label={`#${num} ${bug.title}`}
       onClick={() => onSelect(bug.id)}
       className={cn(
         't flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
@@ -46,7 +49,7 @@ export function BugRow({ bug, selected, onSelect, members, viewers, highlighted 
         className={cn('h-2 w-2 shrink-0 rounded-full', SEVERITY_COLOR[bug.severity])}
         title={`${SEVERITY_LABEL[bug.severity]} severity`}
       />
-      <span className="shrink-0 font-mono text-xs text-muted">#{bug.number}</span>
+      <span className="shrink-0 font-mono text-xs text-muted">#{num}</span>
       <span className="min-w-0 flex-1 truncate text-sm" title={bug.title}>
         {bug.title}
       </span>
