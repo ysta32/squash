@@ -345,6 +345,8 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Workspace row before the members key (see Lock order in the RPC section).
+  perform 1 from public.workspaces w where w.id = new.workspace_id for update;
   perform pg_advisory_xact_lock(hashtext('squash:members:' || new.workspace_id::text));
   if (select count(*) from public.workspace_members m
       where m.workspace_id = new.workspace_id) >= 10 then
@@ -623,7 +625,9 @@ begin
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
   perform pg_advisory_xact_lock(hashtext('squash:user:' || v_uid::text));
-  select w.* into v_ws from public.workspaces w where w.invite_code = v_code;
+  -- Workspace row before the members key (see Lock order); a workspace deleted
+  -- while we waited yields no row -> invalid_code.
+  select w.* into v_ws from public.workspaces w where w.invite_code = v_code for update;
   if not found then
     raise exception using message = 'invalid_code', errcode = 'P0001';
   end if;
