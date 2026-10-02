@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in Squash isn't working the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to file this. Please don't include secrets, keys, or private screenshots.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Paste a screenshot into …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where are you running Squash?
+      options:
+        - Hosted instance (squash-livid.vercel.app)
+        - Self-hosted
+        - Local development
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: Chrome 140 on macOS 26
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Any red errors from the browser devtools console.
+      render: text

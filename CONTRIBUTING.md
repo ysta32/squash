@@ -22,4 +22,8 @@ npm run build
 
 Use `npx prettier --write <changed-files>` to format a focused change and `npx vitest run <test-path>` for focused tests. Database access-policy checks are available in `supabase/tests/rls.sql`; run them against a test project when changing authorization behavior.
 
-CI runs the same checks on pull requests and pushes to `main`. The workflow specifies Node.js 22, while the current package engine requires Node.js >=24; local development should follow the package requirement.
+CI runs the same checks on Node.js 24 for every pull request and push to `main`.
+
+## Reporting issues
+
+Use the issue templates for bugs and feature requests. Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
