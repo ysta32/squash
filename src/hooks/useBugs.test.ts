@@ -18,6 +18,8 @@ const h = vi.hoisted(() => {
     updateResult: { error: null } as { error: { message: string } | null },
     resolveUpdate: null as null | ((r: { error: { message: string } | null }) => void),
     deferUpdate: false,
+    deferSelect: false,
+    resolveSelect: null as null | ((r: Result) => void),
     channels: [] as {
       topic: string
       handlers: { filter: { event: string; table: string }; cb: (p: unknown) => void }[]
@@ -36,6 +38,11 @@ vi.mock('../lib/supabase', () => {
       order: () => builder,
       limit: () => {
         state.selectCalls++
+        if (state.deferSelect) {
+          return new Promise<Result>((resolve) => {
+            state.resolveSelect = resolve
+          })
+        }
         return Promise.resolve(state.selectResult)
       },
       maybeSingle: () => Promise.resolve({ data: null, error: null }),
@@ -219,6 +226,8 @@ describe('useBugs', () => {
     h.state.updateResult = { error: null }
     h.state.deferUpdate = false
     h.state.resolveUpdate = null
+    h.state.deferSelect = false
+    h.state.resolveSelect = null
     resetPendingUploads()
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
@@ -617,5 +626,131 @@ describe('useBugs sync', () => {
     await waitFor(() => expect(second.result.current.bugs[0].attachments).toHaveLength(1))
     expect(second.result.current.bugs[0].attachments[0].id).toBe('late')
     expect(second.result.current.bugs[0].pending).toBeUndefined()
+  })
+
+  it('a failed later edit falls back to an earlier edit that is still outstanding', async () => {
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'a', title: 'Orig' }), bug_attachments: [] }],
+      error: null,
+    }
+    h.state.deferUpdate = true
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    for (const firstOutcome of ['ok', 'boom'] as const) {
+      let first: Promise<void> = Promise.resolve()
+      act(() => {
+        first = result.current.updateBug('a', { title: `T1-${firstOutcome}` })
+      })
+      const resolveFirst = h.state.resolveUpdate
+      let second: Promise<void> = Promise.resolve()
+      act(() => {
+        second = result.current.updateBug('a', { title: 'T2' })
+      })
+      const resolveSecond = h.state.resolveUpdate
+      // Second round starts from the value confirmed in the first.
+      const original = firstOutcome === 'ok' ? 'Orig' : 'T1-ok'
+
+      await act(async () => {
+        resolveSecond?.({ error: { message: 'boom' } })
+        await expect(second).rejects.toThrow('boom')
+      })
+      expect(result.current.bugs[0].title).toBe(`T1-${firstOutcome}`)
+
+      await act(async () => {
+        if (firstOutcome === 'ok') {
+          resolveFirst?.({ error: null })
+          await first
+        } else {
+          resolveFirst?.({ error: { message: 'boom' } })
+          await expect(first).rejects.toThrow('boom')
+        }
+      })
+      expect(result.current.bugs[0].title).toBe(firstOutcome === 'ok' ? 'T1-ok' : original)
+    }
+  })
+
+  it('a later edit failing after an earlier one succeeded shows the confirmed value', async () => {
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'a', title: 'Orig' }), bug_attachments: [] }],
+      error: null,
+    }
+    h.state.deferUpdate = true
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let first: Promise<void> = Promise.resolve()
+    act(() => {
+      first = result.current.updateBug('a', { title: 'T1' })
+    })
+    const resolveFirst = h.state.resolveUpdate
+    let second: Promise<void> = Promise.resolve()
+    act(() => {
+      second = result.current.updateBug('a', { title: 'T2' })
+    })
+    const resolveSecond = h.state.resolveUpdate
+
+    await act(async () => {
+      resolveFirst?.({ error: null })
+      await first
+    })
+    expect(result.current.bugs[0].title).toBe('T2')
+
+    await act(async () => {
+      resolveSecond?.({ error: { message: 'boom' } })
+      await expect(second).rejects.toThrow('boom')
+    })
+    expect(result.current.bugs[0].title).toBe('T1')
+  })
+
+  it('keeps an upload that completes while the initial fetch is in flight', async () => {
+    let finish: (a: ReturnType<typeof att>) => void = () => {}
+    vi.mocked(uploadAttachment).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const first = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    await act(async () => {
+      await first.result.current.fileBug({
+        description: 'x',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    const id = first.result.current.bugs[0].id
+    await waitFor(() => expect(vi.mocked(uploadAttachment)).toHaveBeenCalledTimes(1))
+    first.unmount()
+
+    h.state.deferSelect = true
+    const second = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(h.state.resolveSelect).not.toBeNull())
+    expect(second.result.current.loading).toBe(true)
+
+    await act(async () => {
+      finish(att('early', id))
+    })
+    await act(async () => {
+      // The fetch started before the upload finished, so its snapshot lacks the attachment.
+      h.state.resolveSelect?.({ data: [{ ...bug({ id }), bug_attachments: [] }], error: null })
+    })
+    await waitFor(() => expect(second.result.current.loading).toBe(false))
+    expect(second.result.current.bugs[0].attachments.map((a) => a.id)).toEqual(['early'])
+    expect(second.result.current.bugs[0].pending).toBeUndefined()
+
+    // A later fetch that started after the completion is authoritative again.
+    h.state.deferSelect = false
+    h.state.selectResult = {
+      data: [{ ...bug({ id }), bug_attachments: [att('early', id)] }],
+      error: null,
+    }
+    const status = h.state.channels.filter((c) => c.topic === 'ws:ws1:bugs').at(-1)?.status
+    await act(async () => status?.('SUBSCRIBED'))
+    await waitFor(() => expect(h.state.selectCalls).toBeGreaterThanOrEqual(3))
+    expect(second.result.current.bugs[0].attachments.map((a) => a.id)).toEqual(['early'])
   })
 })

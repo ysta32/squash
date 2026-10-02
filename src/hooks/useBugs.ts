@@ -165,6 +165,8 @@ function mapBug(
 export interface SnapshotOptions {
   truncated: boolean
   isRecent: (key: string) => boolean
+  /** Completed uploads the snapshot may predate, by bug id; merged into bugs it contains. */
+  retained?: (bugId: string) => BugAttachment[]
 }
 
 function snapshotAttachments(
@@ -198,10 +200,13 @@ export function applySnapshot(
   for (const f of fetched) {
     const existing = byId.get(f.id)
     const base = existing ? applyServerRow(existing, f) : f
-    out.push({
-      ...base,
-      attachments: snapshotAttachments(f.attachments, existing?.attachments ?? [], opts.isRecent),
-    })
+    const attachments = snapshotAttachments(
+      f.attachments,
+      existing?.attachments ?? [],
+      opts.isRecent,
+    )
+    const retained = (opts.retained?.(f.id) ?? []).filter((a) => !opts.isRecent(`del:${a.id}`))
+    out.push({ ...base, attachments: mergeAttachments(attachments, retained) })
   }
   for (const b of current) {
     if (fetchedIds.has(b.id)) continue
@@ -290,9 +295,81 @@ function removePending(ws: string, bugId: string, localId?: string): void {
 type CompletedListener = (ws: string, attachment: BugAttachment) => void
 const completedListeners = new Set<CompletedListener>()
 
+/**
+ * Completed uploads retained per workspace (bug id → attachment id → entry) until a list
+ * snapshot that is guaranteed to include them has been applied, so an upload finishing while a
+ * fetch is in flight (or before its bug is in state) is not lost. `seq` orders completions
+ * against fetch starts (same counter as `fetchesInFlight`).
+ */
+interface RetainedAttachment {
+  attachment: BugAttachment
+  seq: number
+  /** A fetch that started after this completion has been applied. */
+  covered: boolean
+}
+const retainedCompleted = new Map<string, Map<string, Map<string, RetainedAttachment>>>()
+/** Start sequence numbers of list fetches currently in flight, per workspace. */
+const fetchesInFlight = new Map<string, Set<number>>()
+let syncSeq = 0
+
 /** Announces a finished upload to every mounted useBugs instance. */
 function publishCompleted(ws: string, attachment: BugAttachment): void {
+  let byBug = retainedCompleted.get(ws)
+  if (!byBug) {
+    byBug = new Map()
+    retainedCompleted.set(ws, byBug)
+  }
+  let byId = byBug.get(attachment.bug_id)
+  if (!byId) {
+    byId = new Map()
+    byBug.set(attachment.bug_id, byId)
+  }
+  byId.set(attachment.id, { attachment, seq: ++syncSeq, covered: false })
   for (const listener of completedListeners) listener(ws, attachment)
+}
+
+function beginFetch(ws: string): number {
+  const seq = ++syncSeq
+  let set = fetchesInFlight.get(ws)
+  if (!set) {
+    set = new Set()
+    fetchesInFlight.set(ws, set)
+  }
+  set.add(seq)
+  return seq
+}
+
+/** Retained attachments completed after the fetch started at `startSeq` (it may lack them). */
+function retainedSince(ws: string, startSeq: number): (bugId: string) => BugAttachment[] {
+  const byBug = retainedCompleted.get(ws)
+  const out = new Map<string, BugAttachment[]>()
+  for (const [bugId, byId] of byBug ?? []) {
+    const list = [...byId.values()].filter((r) => r.seq > startSeq).map((r) => r.attachment)
+    if (list.length) out.set(bugId, list)
+  }
+  return (bugId) => out.get(bugId) ?? []
+}
+
+/**
+ * Ends a fetch. If it was applied, every retained completion before its start is covered (the
+ * server has it, or it was deleted since). Covered entries are dropped once no fetch that
+ * started before them is still in flight.
+ */
+function endFetch(ws: string, startSeq: number, applied: boolean): void {
+  const inflight = fetchesInFlight.get(ws)
+  inflight?.delete(startSeq)
+  if (inflight && inflight.size === 0) fetchesInFlight.delete(ws)
+  const byBug = retainedCompleted.get(ws)
+  if (!byBug) return
+  const oldestInFlight = inflight?.size ? Math.min(...inflight) : Infinity
+  for (const [bugId, byId] of byBug) {
+    for (const [id, r] of byId) {
+      if (applied && r.seq < startSeq) r.covered = true
+      if (r.covered && r.seq < oldestInFlight) byId.delete(id)
+    }
+    if (byId.size === 0) byBug.delete(bugId)
+  }
+  if (byBug.size === 0) retainedCompleted.delete(ws)
 }
 
 function subscribeCompleted(listener: CompletedListener): () => void {
@@ -306,7 +383,23 @@ function subscribeCompleted(listener: CompletedListener): () => void {
 export function resetPendingUploads(): void {
   const workspaces = [...pendingFiles.keys()]
   pendingFiles.clear()
+  retainedCompleted.clear()
+  fetchesInFlight.clear()
   for (const ws of workspaces) publishPending(ws)
+}
+
+/**
+ * Edits of one field, in issue order. Failed edits are removed; the shown value is that of the
+ * latest remaining edit (outstanding or confirmed), else `original`.
+ */
+interface FieldEdits {
+  original: unknown
+  edits: { mut: number; value: unknown; confirmed: boolean }[]
+}
+
+function shownValue(f: FieldEdits): unknown {
+  const last = f.edits[f.edits.length - 1]
+  return last ? last.value : f.original
 }
 
 interface ListState {
@@ -331,10 +424,8 @@ export function useBugs(
   const touchedRef = useRef(new Set<string>())
   const onRemoteInsertRef = useRef(opts?.onRemoteInsert)
   const bugsRef = useRef<BugWithMeta[]>(EMPTY)
-  /** Outstanding optimistic edits: bug id → field → owning mutation and last confirmed value. */
-  const fieldOwnersRef = useRef(
-    new Map<string, Map<keyof BugWithMeta, { mut: number; base: unknown }>>(),
-  )
+  /** Optimistic edits per bug id → field, while any edit of that field is outstanding. */
+  const fieldEditsRef = useRef(new Map<string, Map<keyof BugWithMeta, FieldEdits>>())
   const mutationSeqRef = useRef(0)
 
   const pendingByBug = useSyncExternalStore(
@@ -407,33 +498,42 @@ export function useBugs(
     const load = async () => {
       const seq = ++latest
       touched.clear()
-      let fetched: BugWithMeta[]
+      const startSeq = beginFetch(workspaceId)
+      let applied = false
       try {
-        const { data, error } = await supabase
-          .from('bugs')
-          .select('*, bug_attachments(*)')
-          .eq('workspace_id', workspaceId)
-          .order('created_at', { ascending: false })
-          .limit(FETCH_LIMIT)
-        if (error) throw error
-        fetched = (data ?? []).map(toBugWithMeta)
-      } catch (err) {
+        let fetched: BugWithMeta[]
+        try {
+          const { data, error } = await supabase
+            .from('bugs')
+            .select('*, bug_attachments(*)')
+            .eq('workspace_id', workspaceId)
+            .order('created_at', { ascending: false })
+            .limit(FETCH_LIMIT)
+          if (error) throw error
+          fetched = (data ?? []).map(toBugWithMeta)
+        } catch (err) {
+          if (!active || seq !== latest) return
+          console.error('Failed to load bugs', err)
+          mutate(workspaceId, (b) => b, true)
+          return
+        }
         if (!active || seq !== latest) return
-        console.error('Failed to load bugs', err)
-        mutate(workspaceId, (b) => b, true)
-        return
+        const recent = new Set(touched)
+        const retained = retainedSince(workspaceId, startSeq)
+        mutate(
+          workspaceId,
+          (b) =>
+            applySnapshot(b, fetched, {
+              truncated: fetched.length >= FETCH_LIMIT,
+              isRecent: (key) => recent.has(key),
+              retained,
+            }),
+          true,
+        )
+        applied = liveWsRef.current === workspaceId
+      } finally {
+        endFetch(workspaceId, startSeq, applied)
       }
-      if (!active || seq !== latest) return
-      const recent = new Set(touched)
-      mutate(
-        workspaceId,
-        (b) =>
-          applySnapshot(b, fetched, {
-            truncated: fetched.length >= FETCH_LIMIT,
-            isRecent: (key) => recent.has(key),
-          }),
-        true,
-      )
     }
 
     const channel = openChannel(`ws:${workspaceId}:bugs`)
@@ -662,15 +762,18 @@ export function useBugs(
       const before = bugsRef.current.find((b) => b.id === id)
       const mut = ++mutationSeqRef.current
       const fields = Object.keys(optimisticPatch) as (keyof BugWithMeta)[]
-      let owners = fieldOwnersRef.current.get(id)
-      if (!owners) {
-        owners = new Map()
-        fieldOwnersRef.current.set(id, owners)
+      let byField = fieldEditsRef.current.get(id)
+      if (!byField) {
+        byField = new Map()
+        fieldEditsRef.current.set(id, byField)
       }
       for (const f of fields) {
-        // `base` is the last confirmed value: inherited from an outstanding mutation, if any.
-        const prior = owners.get(f)
-        owners.set(f, { mut, base: prior ? prior.base : before?.[f] })
+        let entry = byField.get(f)
+        if (!entry) {
+          entry = { original: before?.[f], edits: [] }
+          byField.set(f, entry)
+        }
+        entry.edits.push({ mut, value: optimisticPatch[f], confirmed: false })
       }
       mutate(ws, (b) => mapBug(b, id, (bug) => ({ ...bug, ...optimisticPatch })))
 
@@ -682,32 +785,37 @@ export function useBugs(
         failure = err
       }
 
-      // Fields this mutation still owns are reverted on failure; on success, a later outstanding
-      // mutation of the same field now falls back to this (confirmed) value.
-      const revert: Partial<Record<keyof BugWithMeta, unknown>> = {}
+      // Settle this edit: drop it on failure, mark it confirmed on success; then show the latest
+      // remaining edit of each field (or the original once none remain).
+      const shown: Partial<Record<keyof BugWithMeta, unknown>> = {}
       for (const f of fields) {
-        const entry = owners.get(f)
+        const entry = byField.get(f)
         if (!entry) continue
-        if (entry.mut === mut) {
-          if (failure) revert[f] = entry.base
-          owners.delete(f)
-        } else if (!failure) {
-          entry.base = optimisticPatch[f]
-        }
+        const idx = entry.edits.findIndex((e) => e.mut === mut)
+        if (idx === -1) continue
+        if (failure) entry.edits.splice(idx, 1)
+        else entry.edits[idx].confirmed = true
+        shown[f] = shownValue(entry)
+        if (entry.edits.every((e) => e.confirmed)) byField.delete(f)
       }
-      if (owners.size === 0 && fieldOwnersRef.current.get(id) === owners) {
-        fieldOwnersRef.current.delete(id)
+      if (byField.size === 0 && fieldEditsRef.current.get(id) === byField) {
+        fieldEditsRef.current.delete(id)
       }
-      if (!failure) return
-      if (before && Object.keys(revert).length) {
-        const patch = revert as Partial<BugWithMeta>
-        // Revert only if no newer server row has been applied since the optimistic patch.
+      if (before && Object.keys(shown).length) {
+        const patch = shown as Partial<BugWithMeta>
+        // Only while no newer server row has been applied since this edit was made (a server row
+        // carries the authoritative value of every field).
         mutate(ws, (b) =>
-          mapBug(b, id, (bug) =>
-            bug.updated_at === before.updated_at ? { ...bug, ...patch } : bug,
-          ),
+          mapBug(b, id, (bug) => {
+            if (bug.updated_at !== before.updated_at) return bug
+            const changed = (Object.keys(patch) as (keyof BugWithMeta)[]).some(
+              (k) => bug[k] !== patch[k],
+            )
+            return changed ? { ...bug, ...patch } : bug
+          }),
         )
       }
+      if (!failure) return
       throw new Error(friendlyError(failure, 'Could not save changes.'))
     },
     [workspaceId, mutate],
