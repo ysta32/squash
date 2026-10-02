@@ -63,30 +63,32 @@ export async function compressImage(file: File | Blob): Promise<CompressedImage>
     const context = canvas.getContext('2d')
     if (!context) throw new Error('canvas_unavailable')
     context.drawImage(decoded.source, 0, 0, canvas.width, canvas.height)
+    const encode = (type: string, quality: number): Promise<Blob | null> =>
+      new Promise((resolve) => canvas.toBlob(resolve, type, quality))
+
+    let type = 'image/webp'
+    let blob: Blob | null = null
+    for (const quality of [0.82, 0.7, 0.6, 0.5, 0.4]) {
+      blob = await encode(type, quality)
+      if (type === 'image/webp' && blob?.type !== type) {
+        type = 'image/jpeg'
+        context.fillStyle = '#fff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        context.drawImage(decoded.source, 0, 0, canvas.width, canvas.height)
+        blob = await encode(type, quality)
+      }
+      if (!blob || blob.type !== type) throw new Error('image_encode_failed')
+      if (blob.size <= TARGET_BYTES) break
+    }
+    if (!blob) throw new Error('image_encode_failed')
+    return {
+      blob,
+      width: canvas.width,
+      height: canvas.height,
+      previewUrl: URL.createObjectURL(blob),
+    }
   } finally {
     decoded.release()
-  }
-
-  const encode = (type: string, quality: number): Promise<Blob | null> =>
-    new Promise((resolve) => canvas.toBlob(resolve, type, quality))
-
-  let type = 'image/webp'
-  let blob: Blob | null = null
-  for (const quality of [0.82, 0.7, 0.6, 0.5, 0.4]) {
-    blob = await encode(type, quality)
-    if (type === 'image/webp' && blob?.type !== type) {
-      type = 'image/jpeg'
-      blob = await encode(type, quality)
-    }
-    if (!blob || blob.type !== type) throw new Error('image_encode_failed')
-    if (blob.size <= TARGET_BYTES) break
-  }
-  if (!blob) throw new Error('image_encode_failed')
-  return {
-    blob,
-    width: canvas.width,
-    height: canvas.height,
-    previewUrl: URL.createObjectURL(blob),
   }
 }
 

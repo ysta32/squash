@@ -33,7 +33,14 @@ export async function uploadAttachment(args: {
     })
     .select()
     .single()
-  if (error) throw error
+  if (error) {
+    try {
+      await supabase.storage.from('screenshots').remove([path])
+    } catch {
+      throw error
+    }
+    throw error
+  }
   onProgress?.(1)
   return data
 }

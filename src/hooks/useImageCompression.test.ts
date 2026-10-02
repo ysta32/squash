@@ -7,6 +7,7 @@ import { uploadAttachment } from '../lib/upload'
 
 const storage = vi.hoisted(() => ({
   upload: vi.fn(),
+  remove: vi.fn(),
   insert: vi.fn(),
   single: vi.fn(),
   bucket: vi.fn(),
@@ -21,10 +22,11 @@ vi.mock('../lib/supabase', () => ({
 }))
 
 beforeEach(() => {
-  storage.bucket.mockReturnValue({ upload: storage.upload })
+  storage.bucket.mockReturnValue({ upload: storage.upload, remove: storage.remove })
   storage.table.mockReturnValue({ insert: storage.insert })
   storage.insert.mockReturnValue({ select: () => ({ single: storage.single }) })
   storage.upload.mockResolvedValue({ error: null })
+  storage.remove.mockResolvedValue({ error: null })
 })
 
 afterEach(() => {
@@ -48,12 +50,18 @@ describe('compressImage', () => {
     const close = vi.fn()
     vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width, height, close }))
     const drawImage = vi.fn()
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    const fillRect = vi.fn()
+    const context = {
       drawImage,
-    } as unknown as CanvasRenderingContext2D)
+      fillRect,
+      fillStyle: '',
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      context as unknown as CanvasRenderingContext2D,
+    )
     const createObjectURL = vi.fn().mockReturnValue('blob:preview')
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() })
-    return { close, drawImage, createObjectURL }
+    return { close, drawImage, fillRect, context, createObjectURL }
   }
 
   it('scales the long edge and reduces quality until the target is met', async () => {
@@ -75,18 +83,29 @@ describe('compressImage', () => {
   })
 
   it('falls back to JPEG when WebP returns PNG and does not upscale', async () => {
-    mockCanvas(400, 800)
+    const { close, drawImage, fillRect, context } = mockCanvas(400, 800)
     const toBlob = vi
       .spyOn(HTMLCanvasElement.prototype, 'toBlob')
-      .mockImplementation((callback, type) =>
+      .mockImplementation((callback, type) => {
+        expect(close).not.toHaveBeenCalled()
+        if (type === 'image/jpeg') {
+          expect(context.fillStyle).toBe('#fff')
+          expect(fillRect).toHaveBeenCalledExactlyOnceWith(0, 0, 400, 800)
+          expect(drawImage).toHaveBeenCalledTimes(2)
+          expect(fillRect.mock.invocationCallOrder[0]).toBeLessThan(
+            drawImage.mock.invocationCallOrder[1],
+          )
+          expect(drawImage).toHaveBeenLastCalledWith(expect.anything(), 0, 0, 400, 800)
+        }
         callback(
           new Blob(['encoded'], {
             type: type === 'image/webp' ? 'image/png' : type,
           }),
-        ),
-      )
+        )
+      })
     const result = await compressImage(new Blob(['image'], { type: 'image/png' }))
     expect(result.blob.type).toBe('image/jpeg')
+    expect(close).toHaveBeenCalledOnce()
     expect(result).toMatchObject({ width: 400, height: 800 })
     expect(toBlob.mock.calls.map((call) => call.slice(1))).toEqual([
       ['image/webp', 0.82],
@@ -228,6 +247,7 @@ describe('uploadAttachment', () => {
         size_bytes: blob.size,
       })
       expect(result).toBe(row)
+      expect(storage.remove).not.toHaveBeenCalled()
       expect(onProgress.mock.calls).toEqual([[0], [1]])
     },
   )
@@ -253,7 +273,13 @@ describe('uploadAttachment', () => {
         }),
       ).rejects.toBe(error)
       expect(onProgress.mock.calls).toEqual([[0]])
-      if (stage === 'upload') expect(storage.insert).not.toHaveBeenCalled()
+      if (stage === 'upload') {
+        expect(storage.insert).not.toHaveBeenCalled()
+        expect(storage.remove).not.toHaveBeenCalled()
+      } else {
+        expect(storage.bucket).toHaveBeenLastCalledWith('screenshots')
+        expect(storage.remove).toHaveBeenCalledExactlyOnceWith([storage.upload.mock.calls[0][0]])
+      }
     },
   )
 })
