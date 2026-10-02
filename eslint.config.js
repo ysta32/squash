@@ -30,6 +30,16 @@ export default defineConfig([
     },
   },
   {
+    // Frozen contract (PLAN.md): AuthProvider and useAuth live in the same module.
+    files: ['src/lib/auth.tsx'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true, allowExportNames: ['useAuth'] },
+      ],
+    },
+  },
+  {
     files: ['*.config.{js,ts}'],
     languageOptions: {
       globals: globals.node,
