@@ -86,7 +86,7 @@ export function InviteDialog({
         role="dialog"
         aria-modal="true"
         aria-label="Invite people"
-        className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--bg)] p-6 text-[var(--fg)] shadow-xl"
+        className="w-full max-w-md rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">

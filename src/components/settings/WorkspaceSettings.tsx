@@ -182,7 +182,7 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
             if (!busy) setConfirmDelete(false)
           }}
           aria-labelledby="delete-workspace-title"
-          className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg p-6 text-fg backdrop:bg-black/50"
+          className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg-elevated p-6 text-fg backdrop:bg-black/50"
         >
           <form
             onSubmit={(event) => {

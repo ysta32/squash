@@ -62,7 +62,7 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
       ref={rootRef}
       role="dialog"
       aria-label={`${verb} bug`}
-      className="absolute top-full right-0 z-30 mt-2 w-72 rounded-lg border border-border bg-bg p-3 shadow-lg"
+      className="absolute top-full right-0 z-30 mt-2 w-72 rounded-lg border border-border bg-bg-elevated p-3 shadow-lg"
     >
       <textarea
         autoFocus
