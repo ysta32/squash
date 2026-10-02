@@ -21,7 +21,12 @@ export function SeverityPicker({ value, onChange, size = 'md' }: SeverityPickerP
   }
 
   return (
-    <div role="radiogroup" aria-label="Severity" className="flex items-center gap-1" title="Severity (Alt+1–4)">
+    <div
+      role="radiogroup"
+      aria-label="Severity"
+      className="flex items-center gap-1"
+      title="Severity (Alt+1–4)"
+    >
       {SEVERITIES.map((s) => (
         <button
           key={s}
@@ -39,7 +44,9 @@ export function SeverityPicker({ value, onChange, size = 'md' }: SeverityPickerP
               'rounded-full transition-all',
               size === 'sm' ? 'h-2 w-2' : 'h-2.5 w-2.5',
               SEVERITY_COLOR[s],
-              value === s ? 'opacity-100 ring-2 ring-offset-1 ring-current/40' : 'opacity-35 hover:opacity-70',
+              value === s
+                ? 'opacity-100 ring-2 ring-offset-1 ring-current/40'
+                : 'opacity-35 hover:opacity-70',
             )}
           />
         </button>
