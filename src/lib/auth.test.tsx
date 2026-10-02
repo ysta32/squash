@@ -1,7 +1,7 @@
-import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const unsubscribe = vi.fn()
@@ -36,6 +36,8 @@ import AuthCallback from '../pages/AuthCallback'
 function wrapper({ children }: { children: ReactNode }) {
   return <AuthProvider>{children}</AuthProvider>
 }
+
+afterEach(cleanup)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -158,5 +160,14 @@ describe('AuthCallback', () => {
     renderCallback('/auth/callback?error_description=Link%20expired')
     expect(await screen.findByText('Link expired')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to sign in' })).toBeInTheDocument()
+  })
+
+  it('shows error_description from the hash fragment', async () => {
+    renderCallback(
+      '/auth/callback?next=%2Fapp#error=access_denied&error_description=Email%20link%20is%20invalid',
+    )
+    expect(await screen.findByText('Email link is invalid')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to sign in' })).toBeInTheDocument()
+    expect(screen.queryByText('app home')).not.toBeInTheDocument()
   })
 })

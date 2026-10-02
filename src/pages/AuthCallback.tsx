@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { safeNext } from '../lib/authRedirect'
 
@@ -10,7 +10,14 @@ export default function AuthCallback() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
-  const errorDescription = params.get('error_description')
+  const { hash } = useLocation()
+  // Supabase reports OAuth / magic-link failures in the query (PKCE) or the hash fragment.
+  const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
+  const errorDescription =
+    params.get('error_description') ??
+    hashParams.get('error_description') ??
+    params.get('error') ??
+    hashParams.get('error')
   const [timedOut, setTimedOut] = useState(false)
 
   useEffect(() => {

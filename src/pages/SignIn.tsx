@@ -43,6 +43,13 @@ export default function SignIn() {
     if (!loading && session) navigate(next, { replace: true })
   }, [loading, session, next, navigate])
 
+  useEffect(() => {
+    // After the OAuth redirect, returning via back/bfcache restores this page; un-stick the button.
+    const onPageShow = () => setGoogleBusy(false)
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
+
   async function handleGoogle() {
     setError(null)
     setGoogleBusy(true)
