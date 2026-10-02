@@ -73,6 +73,7 @@ describe('stale responses', () => {
         }),
         channel: () => channel,
         removeChannel: vi.fn(),
+        getChannels: () => [],
       },
     }))
     let uid = 'u1'
@@ -116,6 +117,7 @@ describe('stale responses', () => {
             : { select: () => ({ eq: () => ({ order: () => members }) }) },
         channel: () => channel,
         removeChannel: vi.fn(),
+        getChannels: () => [],
       },
     }))
     vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
@@ -165,6 +167,7 @@ describe('stale responses', () => {
         }),
         channel: () => channel,
         removeChannel: vi.fn(),
+        getChannels: () => [],
       },
     }))
     let uid = 'A'
@@ -220,6 +223,7 @@ describe('stale responses', () => {
             : { select: () => ({ eq: () => ({ order: () => members }) }) },
         channel: () => channel,
         removeChannel: vi.fn(),
+        getChannels: () => [],
       },
     }))
     return calls
@@ -315,6 +319,7 @@ describe('stale responses', () => {
         rpc: () => rpc.promise,
         channel: () => channel,
         removeChannel: vi.fn(),
+        getChannels: () => [],
       },
     }))
     let uid = 'u1'
@@ -378,6 +383,7 @@ describe('stale responses', () => {
             : { select: () => ({ eq: () => ({ order: () => members }) }) },
         channel: () => channel,
         removeChannel: vi.fn(),
+        getChannels: () => [],
       },
     }))
     vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
@@ -413,5 +419,99 @@ describe('stale responses', () => {
     expect(calls.length).toBe(2)
     expect(result.current.workspace?.id).toBe('B')
     expect(result.current.loading).toBe(false)
+  })
+})
+
+describe('shared realtime topics', () => {
+  /** Mimics supabase-js: `channel(topic)` returns the registered channel for an existing topic. */
+  function mockRegistry() {
+    interface FakeChannel {
+      topic: string
+      subscribed: boolean
+      on: () => FakeChannel
+      subscribe: () => FakeChannel
+    }
+    const registry: FakeChannel[] = []
+    const channel = vi.fn((topic: string) => {
+      const existing = registry.find((c) => c.topic === `realtime:${topic}`)
+      if (existing) return existing
+      const c: FakeChannel = {
+        topic: `realtime:${topic}`,
+        subscribed: false,
+        on: () => {
+          if (c.subscribed) throw new Error('cannot add listener after subscribe')
+          return c
+        },
+        subscribe: () => {
+          c.subscribed = true
+          return c
+        },
+      }
+      registry.push(c)
+      return c
+    })
+    const removeChannel = vi.fn((c: FakeChannel) => {
+      registry.splice(registry.indexOf(c), 1)
+      return Promise.resolve('ok')
+    })
+    return { registry, channel, removeChannel, getChannels: () => [...registry] }
+  }
+
+  it('two useWorkspaces instances for one user get independent channels', async () => {
+    vi.resetModules()
+    const rt = mockRegistry()
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: () => ({ select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) }),
+        channel: rt.channel,
+        removeChannel: rt.removeChannel,
+        getChannels: rt.getChannels,
+      },
+    }))
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
+    const { renderHook } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const first = renderHook(() => mod.useWorkspaces())
+    const second = renderHook(() => mod.useWorkspaces())
+    expect(rt.channel).toHaveBeenCalledTimes(2)
+    expect(rt.registry).toHaveLength(2)
+    const [a, b] = rt.registry
+    expect(a).not.toBe(b)
+    first.unmount()
+    expect(rt.removeChannel).toHaveBeenCalledTimes(1)
+    expect(rt.removeChannel).toHaveBeenCalledWith(a)
+    expect(rt.registry).toEqual([b])
+    expect(b.subscribed).toBe(true)
+    second.unmount()
+    expect(rt.registry).toEqual([])
+  })
+
+  it('two useWorkspace instances for one workspace get independent channels', async () => {
+    vi.resetModules()
+    const rt = mockRegistry()
+    const ok = (data: unknown) => Promise.resolve({ data, error: null })
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: (table: string) =>
+          table === 'workspaces'
+            ? { select: () => ({ eq: () => ({ maybeSingle: () => ok({ id: 'W', name: 'W' }) }) }) }
+            : { select: () => ({ eq: () => ({ order: () => ok([]) }) }) },
+        channel: rt.channel,
+        removeChannel: rt.removeChannel,
+        getChannels: rt.getChannels,
+      },
+    }))
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
+    const { renderHook } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const first = renderHook(() => mod.useWorkspace('W'))
+    const second = renderHook(() => mod.useWorkspace('W'))
+    expect(rt.registry).toHaveLength(2)
+    const [a, b] = rt.registry
+    first.unmount()
+    expect(rt.removeChannel).toHaveBeenCalledWith(a)
+    expect(rt.registry).toEqual([b])
+    second.unmount()
+    expect(rt.registry).toEqual([])
   })
 })

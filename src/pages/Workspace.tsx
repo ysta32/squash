@@ -83,8 +83,17 @@ export default function Workspace() {
     )
   }
 
-  const { bugs, loading, counts, fileBug, updateBug, resolveBug, reopenBug, getBugByNumber } =
-    useBugs(workspaceId, { onRemoteInsert })
+  const {
+    bugs,
+    loading,
+    counts,
+    fileBug,
+    updateBug,
+    resolveBug,
+    reopenBug,
+    retryUploads,
+    getBugByNumber,
+  } = useBugs(workspaceId, { onRemoteInsert })
 
   const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)
   /** Selection of an optimistic bug (no number yet, so it cannot live in the URL). */
@@ -308,6 +317,7 @@ export default function Workspace() {
         resolveRequest={resolveRequest}
         reopenRequest={reopenRequest}
         onToast={toast}
+        onRetryUploads={selected ? () => void retryUploads(selected.id) : undefined}
       />
     )
   } else if (notFound) {
