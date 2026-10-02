@@ -2,6 +2,8 @@
 
 **Hosted link placeholder:** https://squash.example.com
 
+**Source:** https://github.com/ysta32/squash
+
 **Demo GIF placeholder:** `docs/demo.gif` (recording to be added).
 
 Squash is a real-time bug tracker for small teams, built around quick capture and shared workspaces.
