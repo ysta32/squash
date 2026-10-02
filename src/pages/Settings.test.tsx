@@ -46,6 +46,8 @@ const mocks = vi.hoisted(() => {
     list: vi.fn(),
     remove: vi.fn(),
     rpc: vi.fn(),
+    ownedWorkspaces: vi.fn(),
+    workspaceMembers: vi.fn(),
   }
 })
 vi.mock('../lib/auth', () => ({
@@ -80,7 +82,11 @@ vi.mock('../hooks/useWorkspaces', () => ({
 }))
 vi.mock('../lib/supabase', () => ({
   supabase: {
-    from: () => ({ update: mocks.update }),
+    from: (table: string) => ({
+      update: mocks.update,
+      select: () =>
+        table === 'workspaces' ? { eq: mocks.ownedWorkspaces } : { in: mocks.workspaceMembers },
+    }),
     storage: { from: () => ({ list: mocks.list, remove: mocks.remove }) },
     rpc: mocks.rpc,
   },
@@ -110,6 +116,11 @@ beforeEach(() => {
   mocks.list.mockResolvedValue({ data: [], error: null })
   mocks.remove.mockResolvedValue({ error: null })
   mocks.rpc.mockResolvedValue({ error: null })
+  mocks.ownedWorkspaces.mockResolvedValue({ data: [{ id: 'ws' }], error: null })
+  mocks.workspaceMembers.mockResolvedValue({
+    data: [{ workspace_id: 'ws', user_id: 'self' }],
+    error: null,
+  })
   mocks.signOut.mockResolvedValue(undefined)
   mocks.deleteWorkspace.mockResolvedValue(undefined)
   mocks.refreshProfile.mockResolvedValue(undefined)
@@ -275,7 +286,31 @@ describe('Settings', () => {
     expect(mocks.deleteWorkspace).not.toHaveBeenCalled()
   })
 
+  it('removes screenshots of solo-owned workspaces before deleting the account', async () => {
+    mocks.list.mockResolvedValue({ data: [{ name: 'shot.png', id: 'file' }], error: null })
+    mocks.rpc.mockImplementation(async () => {
+      expect(mocks.remove).toHaveBeenCalledWith(['ws/shot.png'])
+      return { error: null }
+    })
+    show('account')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete account' }),
+    )
+    await screen.findByText('Home')
+    expect(mocks.ownedWorkspaces).toHaveBeenCalledWith('owner_id', 'self')
+    expect(mocks.workspaceMembers).toHaveBeenCalledWith('workspace_id', ['ws'])
+    expect(mocks.rpc).toHaveBeenCalledWith('delete_account')
+  })
+
   it('offers ownership transfer after the RPC rejects account deletion, then retries', async () => {
+    mocks.workspaceMembers.mockResolvedValueOnce({
+      data: [
+        { workspace_id: 'ws', user_id: 'self' },
+        { workspace_id: 'ws', user_id: 'other' },
+      ],
+      error: null,
+    })
     mocks.rpc
       .mockResolvedValueOnce({ error: { message: 'transfer_ownership_required' } })
       .mockResolvedValue({ error: null })
@@ -294,6 +329,8 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry deleting account' }))
     await screen.findByText('Home')
     expect(mocks.rpc).toHaveBeenCalledTimes(2)
+    // First attempt saw a shared workspace, so no screenshots were touched then.
+    expect(mocks.list).toHaveBeenCalledTimes(1)
     expect(mocks.signOut).toHaveBeenCalledOnce()
   })
 })
