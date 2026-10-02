@@ -6,6 +6,7 @@ import type { Bug, BugWithMeta, Workspace as WorkspaceRow, WorkspaceMember } fro
 import { useRef, type ReactNode } from 'react'
 import type * as UseBugsModule from '../hooks/useBugs'
 import { useDismiss } from '../hooks/useDismiss'
+import type * as ProfileMenuModule from '../components/ProfileMenu'
 import Workspace from './Workspace'
 
 const NOW = new Date().toISOString()
@@ -99,15 +100,21 @@ vi.mock('../hooks/usePresence', () => ({
   usePresence: () => ({ online: [], viewers: () => [] }),
 }))
 vi.mock('../hooks/useRealtimeStatus', () => ({ useRealtimeStatus: () => 'connected' }))
-vi.mock('../components/Header', () => ({
-  Header: ({ onInvite }: { onInvite: () => void }) => (
-    <header>
-      <button type="button" onClick={onInvite}>
-        Invite
-      </button>
-    </header>
-  ),
-}))
+vi.mock('../components/Header', async () => {
+  const { ProfileMenu } = await vi.importActual<typeof ProfileMenuModule>(
+    '../components/ProfileMenu',
+  )
+  return {
+    Header: ({ onInvite }: { onInvite: () => void }) => (
+      <header>
+        <button type="button" onClick={onInvite}>
+          Invite
+        </button>
+        <ProfileMenu workspaceId="ws" />
+      </header>
+    ),
+  }
+})
 vi.mock('../components/CaptureBar', () => ({
   CaptureBar: ({ focusRef }: { focusRef?: { current: HTMLTextAreaElement | null } }) => (
     <textarea
@@ -247,6 +254,21 @@ describe('Workspace', () => {
     } finally {
       overlay.remove()
     }
+    press('j')
+    expect(path()).toBe('/app/ws/bug/1')
+  })
+
+  it('suspends navigation shortcuts while the profile menu is open', () => {
+    show('/app/ws/bug/2')
+    const toggle = screen.getByRole('button', { name: 'Profile menu' })
+    fireEvent.click(toggle)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    toggle.blur()
+    press('j')
+    expect(path()).toBe('/app/ws/bug/2')
+    fireEvent.click(toggle)
+    expect(screen.queryByRole('menu')).toBeNull()
+    toggle.blur()
     press('j')
     expect(path()).toBe('/app/ws/bug/1')
   })

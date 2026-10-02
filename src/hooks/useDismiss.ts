@@ -1,11 +1,16 @@
 import { useEffect, type RefObject } from 'react'
+import { useOverlayOpen } from './useKeyboard'
 
-/** Calls onClose on outside pointerdown or Escape while `active`. */
+/**
+ * Calls onClose on outside pointerdown or Escape while `active`. An active dismissable
+ * overlay also pauses global keyboard shortcuts (see useOverlayOpen).
+ */
 export function useDismiss(
   ref: RefObject<HTMLElement | null>,
   onClose: () => void,
   active = true,
 ): void {
+  useOverlayOpen(active)
   useEffect(() => {
     if (!active) return
     const onDown = (e: PointerEvent) => {
