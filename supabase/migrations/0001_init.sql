@@ -180,6 +180,16 @@ create table if not exists public.bug_events (
 );
 create index if not exists bug_events_bug_created_idx on public.bug_events (bug_id, created_at);
 
+-- Append-only filing log for the 30-bugs-per-minute rate limit. Kept apart from
+-- bugs so deleting a workspace (which cascades its bugs) cannot reset the limit.
+-- No FKs, no client access (RLS on, no policies, no grants); written and pruned
+-- only by the SECURITY DEFINER bugs_rate_limit trigger.
+create table if not exists public.bug_filings (
+  user_id uuid not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists bug_filings_user_created_idx on public.bug_filings (user_id, created_at);
+
 -- -----------------------------------------------------------------------------
 -- Helpers
 -- -----------------------------------------------------------------------------
@@ -442,10 +452,14 @@ set search_path = public
 as $$
 begin
   perform pg_advisory_xact_lock(hashtext('squash:bugs:' || new.filed_by::text));
-  if (select count(*) from public.bugs b
-      where b.filed_by = new.filed_by and b.created_at > now() - interval '60 seconds') >= 30 then
+  delete from public.bug_filings f
+  where f.user_id = new.filed_by and f.created_at < now() - interval '1 hour';
+  if (select count(*) from public.bug_filings f
+      where f.user_id = new.filed_by and f.created_at > now() - interval '60 seconds') >= 30 then
     raise exception using message = 'rate_limited', errcode = 'P0001';
   end if;
+  -- Rolled back together with the bug if the insert fails later (e.g. RLS check).
+  insert into public.bug_filings (user_id, created_at) values (new.filed_by, now());
   return new;
 end;
 $$;
@@ -567,6 +581,8 @@ begin
   if char_length(v_name) < 1 or char_length(v_name) > 60 then
     raise exception using message = 'invalid_name', errcode = 'P0001';
   end if;
+  -- Lock order everywhere: user -> owner -> members.
+  perform pg_advisory_xact_lock(hashtext('squash:user:' || v_uid::text));
   perform pg_advisory_xact_lock(hashtext('squash:owner:' || v_uid::text));
   if (select count(*) from public.workspaces w where w.owner_id = v_uid) >= 5 then
     raise exception using message = 'workspace_limit', errcode = 'P0001';
@@ -594,6 +610,7 @@ begin
   if v_uid is null then
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
+  perform pg_advisory_xact_lock(hashtext('squash:user:' || v_uid::text));
   select w.* into v_ws from public.workspaces w where w.invite_code = v_code;
   if not found then
     raise exception using message = 'invalid_code', errcode = 'P0001';
@@ -634,12 +651,13 @@ set search_path = public
 as $$
 declare
   v_code text;
+  v_owner uuid;
 begin
   if auth.uid() is null then
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
-  if not exists (select 1 from public.workspaces w
-                 where w.id = p_workspace_id and w.owner_id = auth.uid()) then
+  select w.owner_id into v_owner from public.workspaces w where w.id = p_workspace_id for update;
+  if v_owner is null or v_owner <> auth.uid() then
     raise exception using message = 'not_owner', errcode = 'P0001';
   end if;
   v_code := public.gen_invite_code();
@@ -662,7 +680,7 @@ begin
   if auth.uid() is null then
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
-  select w.owner_id into v_owner from public.workspaces w where w.id = p_workspace_id;
+  select w.owner_id into v_owner from public.workspaces w where w.id = p_workspace_id for update;
   if v_owner is null or v_owner <> auth.uid() then
     raise exception using message = 'not_owner', errcode = 'P0001';
   end if;
@@ -724,12 +742,14 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_owner uuid;
 begin
   if auth.uid() is null then
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
-  if not exists (select 1 from public.workspaces w
-                 where w.id = p_workspace_id and w.owner_id = auth.uid()) then
+  select w.owner_id into v_owner from public.workspaces w where w.id = p_workspace_id for update;
+  if v_owner is null or v_owner <> auth.uid() then
     raise exception using message = 'not_owner', errcode = 'P0001';
   end if;
   perform public.purge_workspace_storage_rows(p_workspace_id);
@@ -756,7 +776,15 @@ begin
   if v_uid is null then
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
+  -- Serialize against this user's create_workspace/join_workspace and against
+  -- ownership transfers to them, then lock each owned workspace's membership so
+  -- nobody can join while it is checked and deleted. Checks run after locking
+  -- (read committed: each statement sees rows committed before it started).
+  perform pg_advisory_xact_lock(hashtext('squash:user:' || v_uid::text));
   perform pg_advisory_xact_lock(hashtext('squash:owner:' || v_uid::text));
+  for v_ws_id in select w.id from public.workspaces w where w.owner_id = v_uid order by w.id loop
+    perform pg_advisory_xact_lock(hashtext('squash:members:' || v_ws_id::text));
+  end loop;
   if exists (
     select 1 from public.workspaces w
     where w.owner_id = v_uid
@@ -818,6 +846,8 @@ alter table public.comments enable row level security;
 alter table public.comments force row level security;
 alter table public.bug_events enable row level security;
 alter table public.bug_events force row level security;
+alter table public.bug_filings enable row level security;
+alter table public.bug_filings force row level security;
 
 -- profiles: self, or anyone sharing a workspace; update own row only.
 drop policy if exists profiles_select on public.profiles;
@@ -940,7 +970,8 @@ create policy bug_events_select on public.bug_events
 -- Table privileges (defense in depth on top of RLS; RLS does not cover TRUNCATE)
 -- -----------------------------------------------------------------------------
 revoke all on table public.profiles, public.workspaces, public.workspace_members, public.bugs,
-  public.bug_attachments, public.comments, public.bug_events from anon, authenticated;
+  public.bug_attachments, public.comments, public.bug_events, public.bug_filings
+  from anon, authenticated;
 grant select, update on table public.profiles to authenticated;
 grant select, update on table public.workspaces to authenticated;
 grant select on table public.workspace_members to authenticated;
@@ -990,6 +1021,13 @@ create policy screenshots_insert_bug_path on storage.objects
           and b.id::text = split_part(objects.name, '/', 2)
           and public.is_member(b.workspace_id)
       )
+      -- Best-effort cap of 10 files per bug folder (policies cannot lock; the
+      -- attachments_limit trigger on bug_attachments is the authoritative cap).
+      and (
+        select count(*) from storage.objects o
+        where o.bucket_id = 'screenshots'
+          and o.name like split_part(objects.name, '/', 1) || '/' || split_part(objects.name, '/', 2) || '/%'
+      ) < 10
     )
   );
 
