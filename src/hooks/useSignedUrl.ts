@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase'
 const TTL_SECONDS = 3600
 /** Refresh a minute before the signed URL actually expires. */
 const SAFETY_MS = 60_000
+/** Signing attempts per load (initial + retries) and the first backoff delay. */
+export const MAX_ATTEMPTS = 3
+const RETRY_BASE_MS = 1000
 
 interface CacheEntry {
   url: string
@@ -53,18 +56,47 @@ export function useSignedUrl(storagePath: string | null): string | null {
     if (!storagePath) return
     let active = true
     let timer: ReturnType<typeof setTimeout> | undefined
-    getSignedUrl(storagePath).then(
-      (entry) => {
-        if (!active) return
-        setResolved({ path: storagePath, url: entry.url })
-        timer = setTimeout(() => setRefreshTick((t) => t + 1), Math.max(0, entry.exp - Date.now()))
-      },
-      () => {
-        if (active) setResolved({ path: storagePath, url: null })
-      },
-    )
+    let attempts = 0
+    let gaveUp = false
+
+    const attempt = () => {
+      attempts++
+      getSignedUrl(storagePath).then(
+        (entry) => {
+          if (!active) return
+          attempts = 0
+          setResolved({ path: storagePath, url: entry.url })
+          timer = setTimeout(
+            () => setRefreshTick((t) => t + 1),
+            Math.max(0, entry.exp - Date.now()),
+          )
+        },
+        (err: unknown) => {
+          if (!active) return
+          if (attempts < MAX_ATTEMPTS) {
+            timer = setTimeout(attempt, RETRY_BASE_MS * 2 ** (attempts - 1))
+            return
+          }
+          console.error('Could not sign screenshot URL', err)
+          gaveUp = true
+          setResolved({ path: storagePath, url: null })
+        },
+      )
+    }
+
+    // After exhausting retries, try again once the browser is back online.
+    const onOnline = () => {
+      if (!active || !gaveUp) return
+      gaveUp = false
+      attempts = 0
+      attempt()
+    }
+    window.addEventListener('online', onOnline)
+    attempt()
+
     return () => {
       active = false
+      window.removeEventListener('online', onOnline)
       if (timer !== undefined) clearTimeout(timer)
     }
   }, [storagePath, refreshTick])

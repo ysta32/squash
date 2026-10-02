@@ -80,37 +80,58 @@ export function useBug(bugId: string | null): {
           apply(bugId, (s) => ({ ...s, events: mergeById(s.events, [payload.new]) }))
         },
       )
-    channel.subscribe()
+    let latest = 0
+    const load = () => {
+      const seq = ++latest
+      void Promise.all([
+        supabase
+          .from('comments')
+          .select('*')
+          .eq('bug_id', bugId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('bug_events')
+          .select('*')
+          .eq('bug_id', bugId)
+          .order('created_at', { ascending: true }),
+      ]).then(
+        ([c, e]) => {
+          if (!active || seq !== latest) return
+          if (c.error) console.error('Failed to load comments', c.error)
+          if (e.error) console.error('Failed to load bug history', e.error)
+          apply(bugId, (s) => ({
+            ...s,
+            comments: mergeById(s.comments, c.data ?? []),
+            events: mergeById(s.events, e.data ?? []),
+            loaded: true,
+          }))
+        },
+        (err: unknown) => {
+          if (!active || seq !== latest) return
+          console.error('Failed to load bug thread', err)
+          apply(bugId, (s) => ({ ...s, loaded: true }))
+        },
+      )
+    }
 
-    void Promise.all([
-      supabase
-        .from('comments')
-        .select('*')
-        .eq('bug_id', bugId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('bug_events')
-        .select('*')
-        .eq('bug_id', bugId)
-        .order('created_at', { ascending: true }),
-    ]).then(
-      ([c, e]) => {
-        if (!active) return
-        if (c.error) console.error('Failed to load comments', c.error)
-        if (e.error) console.error('Failed to load bug history', e.error)
-        apply(bugId, (s) => ({
-          ...s,
-          comments: mergeById(s.comments, c.data ?? []),
-          events: mergeById(s.events, e.data ?? []),
-          loaded: true,
-        }))
-      },
-      (err: unknown) => {
-        if (!active) return
-        console.error('Failed to load bug thread', err)
-        apply(bugId, (s) => ({ ...s, loaded: true }))
-      },
-    )
+    // Fetch on every (re)SUBSCRIBED so changes missed while disconnected are merged in. If the
+    // channel never connects, fall back to a single plain fetch so the thread still renders.
+    let everSubscribed = false
+    let fallbackDone = false
+    channel.subscribe((status) => {
+      if (!active) return
+      if (status === 'SUBSCRIBED') {
+        everSubscribed = true
+        load()
+      } else if (
+        (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') &&
+        !everSubscribed &&
+        !fallbackDone
+      ) {
+        fallbackDone = true
+        load()
+      }
+    })
 
     return () => {
       active = false

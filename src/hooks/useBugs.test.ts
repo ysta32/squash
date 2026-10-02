@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta } from '../lib/types'
-import { countBugs, filterBugs, useBugs } from './useBugs'
+import { uploadAttachment } from '../lib/upload'
+import { applySnapshot, countBugs, filterBugs, resetPendingUploads, useBugs } from './useBugs'
 
 type Result = { data: unknown; error: { message: string } | null }
 
@@ -12,9 +13,15 @@ const h = vi.hoisted(() => {
     inserted: [] as unknown[],
     resolveInsert: null as null | ((r: Result) => void),
     deferInsert: false,
+    selectCalls: 0,
+    autoSubscribe: true,
+    updateResult: { error: null } as { error: { message: string } | null },
+    resolveUpdate: null as null | ((r: { error: { message: string } | null }) => void),
+    deferUpdate: false,
     channels: [] as {
       topic: string
       handlers: { filter: { event: string; table: string }; cb: (p: unknown) => void }[]
+      status: ((s: string) => void) | null
     }[],
   }
   return { state }
@@ -27,7 +34,10 @@ vi.mock('../lib/supabase', () => {
       select: () => builder,
       eq: () => builder,
       order: () => builder,
-      limit: () => Promise.resolve(state.selectResult),
+      limit: () => {
+        state.selectCalls++
+        return Promise.resolve(state.selectResult)
+      },
       maybeSingle: () => Promise.resolve({ data: null, error: null }),
       insert: (row: unknown) => {
         state.inserted.push({ table, row })
@@ -38,11 +48,28 @@ vi.mock('../lib/supabase', () => {
                 ? new Promise<Result>((resolve) => {
                     state.resolveInsert = resolve
                   })
-                : Promise.resolve(state.insertResult),
+                : Promise.resolve(
+                    state.insertResult.data
+                      ? {
+                          data: {
+                            ...(state.insertResult.data as object),
+                            id: (row as { id: string }).id,
+                          },
+                          error: null,
+                        }
+                      : state.insertResult,
+                  ),
           }),
         }
       },
-      update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      update: () => ({
+        eq: () =>
+          state.deferUpdate
+            ? new Promise<{ error: { message: string } | null }>((resolve) => {
+                state.resolveUpdate = resolve
+              })
+            : Promise.resolve(state.updateResult),
+      }),
     }
     return builder
   }
@@ -56,6 +83,7 @@ vi.mock('../lib/supabase', () => {
       const entry = {
         topic,
         handlers: [] as { filter: { event: string; table: string }; cb: (p: unknown) => void }[],
+        status: null as ((s: string) => void) | null,
       }
       state.channels.push(entry)
       const ch = {
@@ -63,7 +91,11 @@ vi.mock('../lib/supabase', () => {
           entry.handlers.push({ filter, cb })
           return ch
         },
-        subscribe: () => ch,
+        subscribe: (cb: (s: string) => void) => {
+          entry.status = cb
+          if (state.autoSubscribe) queueMicrotask(() => cb('SUBSCRIBED'))
+          return ch
+        },
       }
       return ch
     },
@@ -182,6 +214,12 @@ describe('useBugs', () => {
     h.state.deferInsert = false
     h.state.resolveInsert = null
     h.state.channels = []
+    h.state.selectCalls = 0
+    h.state.autoSubscribe = true
+    h.state.updateResult = { error: null }
+    h.state.deferUpdate = false
+    h.state.resolveUpdate = null
+    resetPendingUploads()
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
   })
@@ -279,5 +317,235 @@ describe('useBugs', () => {
     expect(onRemoteInsert).toHaveBeenCalledTimes(1)
     expect(onRemoteInsert.mock.calls[0][0].id).toBe('r1')
     expect(ids(result.current.bugs)).toEqual(['r2', 'r1'])
+  })
+})
+
+function handler(table: string, event: string) {
+  const ch = h.state.channels.find((c) => c.topic === 'ws:ws1:bugs')
+  const found = ch?.handlers.find((x) => x.filter.table === table && x.filter.event === event)
+  if (!found) throw new Error(`no handler for ${table} ${event}`)
+  return found.cb
+}
+
+const att = (id: string, bugId: string) => ({
+  id,
+  bug_id: bugId,
+  storage_path: `ws1/${bugId}/${id}.webp`,
+  width: 1,
+  height: 1,
+  size_bytes: 1,
+  created_at: '2026-01-01T00:00:00Z',
+})
+
+describe('applySnapshot', () => {
+  const none = { truncated: false, isRecent: () => false }
+
+  it('replaces attachments with the snapshot and drops vanished non-optimistic bugs', () => {
+    const current = [
+      bug({ id: 'a', attachments: [att('old', 'a')] }),
+      bug({ id: 'gone' }),
+      bug({ id: 'opt', optimistic: true }),
+    ]
+    const next = applySnapshot(current, [bug({ id: 'a', attachments: [att('new', 'a')] })], none)
+    expect(ids(next).sort()).toEqual(['a', 'opt'])
+    expect(next.find((b) => b.id === 'a')?.attachments.map((x) => x.id)).toEqual(['new'])
+  })
+
+  it('keeps changes seen after the fetch started and rows outside a truncated window', () => {
+    const current = [
+      bug({ id: 'a', attachments: [att('live', 'a'), att('deleted', 'a')] }),
+      bug({ id: 'fresh', created_at: '2026-03-01T00:00:00Z' }),
+      bug({ id: 'ancient', created_at: '2020-01-01T00:00:00Z' }),
+    ]
+    const recent = new Set(['att:live', 'bug:fresh', 'del:deleted'])
+    const next = applySnapshot(current, [bug({ id: 'a', attachments: [att('deleted', 'a')] })], {
+      truncated: true,
+      isRecent: (k) => recent.has(k),
+    })
+    expect(ids(next)).toEqual(['fresh', 'a', 'ancient'])
+    expect(next.find((b) => b.id === 'a')?.attachments.map((x) => x.id)).toEqual(['live'])
+  })
+
+  it('never moves a row backwards in time', () => {
+    const current = [bug({ id: 'a', title: 'New', updated_at: '2026-02-01T00:00:00Z' })]
+    const next = applySnapshot(
+      current,
+      [bug({ id: 'a', title: 'Old', updated_at: '2026-01-01T00:00:00Z' })],
+      none,
+    )
+    expect(next[0].title).toBe('New')
+  })
+})
+
+describe('useBugs sync', () => {
+  beforeEach(() => {
+    h.state.selectResult = { data: [], error: null }
+    h.state.insertResult = { data: null, error: null }
+    h.state.inserted = []
+    h.state.deferInsert = false
+    h.state.resolveInsert = null
+    h.state.channels = []
+    h.state.selectCalls = 0
+    h.state.autoSubscribe = true
+    h.state.updateResult = { error: null }
+    h.state.deferUpdate = false
+    h.state.resolveUpdate = null
+    resetPendingUploads()
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('fetches only once subscribed, and again on every re-subscribe', async () => {
+    h.state.autoSubscribe = false
+    h.state.selectResult = { data: [{ ...bug({ id: 'x' }), bug_attachments: [] }], error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await act(async () => {})
+    expect(h.state.selectCalls).toBe(0)
+    expect(result.current.loading).toBe(true)
+
+    const status = h.state.channels.find((c) => c.topic === 'ws:ws1:bugs')?.status
+    await act(async () => status?.('SUBSCRIBED'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(ids(result.current.bugs)).toEqual(['x'])
+
+    h.state.selectResult = { data: [{ ...bug({ id: 'y' }), bug_attachments: [] }], error: null }
+    await act(async () => status?.('CHANNEL_ERROR'))
+    await act(async () => status?.('SUBSCRIBED'))
+    await waitFor(() => expect(ids(result.current.bugs)).toEqual(['y']))
+    expect(h.state.selectCalls).toBe(2)
+  })
+
+  it('does not let the insert response overwrite a newer realtime UPDATE', async () => {
+    h.state.deferInsert = true
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    let filing: Promise<void> = Promise.resolve()
+    act(() => {
+      filing = result.current.fileBug({
+        description: 'Original',
+        transcript: null,
+        severity: 'low',
+        files: [],
+      })
+    })
+    await waitFor(() => expect(result.current.bugs).toHaveLength(1))
+    const id = result.current.bugs[0].id
+    act(() => {
+      handler(
+        'bugs',
+        'UPDATE',
+      )({
+        new: bug({ id, number: 4, title: 'Edited remotely', updated_at: '2026-05-01T00:00:00Z' }),
+      })
+    })
+    await act(async () => {
+      h.state.resolveInsert?.({
+        data: bug({ id, number: 4, title: 'Original', updated_at: '2026-04-01T00:00:00Z' }),
+        error: null,
+      })
+      await filing
+    })
+    expect(result.current.bugs[0].title).toBe('Edited remotely')
+    expect(result.current.bugs[0].optimistic).toBe(false)
+  })
+
+  it('reverts a failed update unless a newer server row arrived meanwhile', async () => {
+    h.state.selectResult = {
+      data: [
+        { ...bug({ id: 'a', title: 'A' }), bug_attachments: [] },
+        {
+          ...bug({ id: 'b', title: 'B', created_at: '2025-12-01T00:00:00Z' }),
+          bug_attachments: [],
+        },
+      ],
+      error: null,
+    }
+    h.state.updateResult = { error: { message: 'boom' } }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await expect(result.current.updateBug('a', { title: 'A2' })).rejects.toThrow('boom')
+    })
+    expect(result.current.bugs.find((b) => b.id === 'a')?.title).toBe('A')
+
+    h.state.deferUpdate = true
+    let pending: Promise<void> = Promise.resolve()
+    act(() => {
+      pending = result.current.updateBug('b', { title: 'B2' })
+    })
+    expect(result.current.bugs.find((b) => b.id === 'b')?.title).toBe('B2')
+    act(() => {
+      handler(
+        'bugs',
+        'UPDATE',
+      )({
+        new: bug({
+          id: 'b',
+          title: 'B server',
+          created_at: '2025-12-01T00:00:00Z',
+          updated_at: '2026-06-01T00:00:00Z',
+        }),
+      })
+    })
+    await act(async () => {
+      h.state.resolveUpdate?.({ error: { message: 'boom' } })
+      await expect(pending).rejects.toThrow('boom')
+    })
+    expect(result.current.bugs.find((b) => b.id === 'b')?.title).toBe('B server')
+  })
+
+  it('concurrent retryUploads never upload the same file twice', async () => {
+    const upload = vi.mocked(uploadAttachment)
+    upload.mockRejectedValueOnce(new Error('network down'))
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.fileBug({
+        description: 'With screenshot',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    await waitFor(() => expect(result.current.bugs[0].pending?.[0].error).toBe('network down'))
+    const id = result.current.bugs[0].id
+    expect(upload).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await Promise.all([result.current.retryUploads(id), result.current.retryUploads(id)])
+    })
+    expect(upload).toHaveBeenCalledTimes(2)
+    expect(result.current.bugs).toHaveLength(1)
+    expect(result.current.bugs[0].pending).toBeUndefined()
+    expect(result.current.bugs[0].attachments).toHaveLength(1)
+  })
+
+  it('keeps failed uploads across a workspace switch', async () => {
+    vi.mocked(uploadAttachment).mockRejectedValueOnce(new Error('network down'))
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const { result, rerender } = renderHook(({ ws }) => useBugs(ws), {
+      initialProps: { ws: 'ws1' },
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.fileBug({
+        description: 'x',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    await waitFor(() => expect(result.current.bugs[0].pending?.[0].error).toBe('network down'))
+    const id = result.current.bugs[0].id
+    rerender({ ws: 'ws2' })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    h.state.selectResult = { data: [{ ...bug({ id }), bug_attachments: [] }], error: null }
+    rerender({ ws: 'ws1' })
+    await waitFor(() => expect(result.current.bugs[0]?.pending?.[0].error).toBe('network down'))
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Database } from '../lib/database.types'
 import type { Bug, BugAttachment, BugWithMeta, PendingUpload, Severity } from '../lib/types'
@@ -133,26 +133,6 @@ function mergeAttachments(a: BugAttachment[], b: BugAttachment[]): BugAttachment
   return extra.length ? sortAttachments([...a, ...extra]) : a
 }
 
-/** Merge a fetched snapshot into state by id; local-only rows (optimistic, realtime) are kept. */
-export function mergeSnapshot(current: BugWithMeta[], fetched: BugWithMeta[]): BugWithMeta[] {
-  const byId = new Map(current.map((b) => [b.id, b]))
-  const out: BugWithMeta[] = []
-  const seen = new Set<string>()
-  for (const f of fetched) {
-    seen.add(f.id)
-    const existing = byId.get(f.id)
-    if (!existing) {
-      out.push(f)
-      continue
-    }
-    const { attachments, ...row } = f
-    const merged = applyServerRow(existing, row)
-    out.push({ ...merged, attachments: mergeAttachments(attachments, existing.attachments) })
-  }
-  for (const b of current) if (!seen.has(b.id)) out.push(b)
-  return sortBugs(out)
-}
-
 function upsertRow(bugs: BugWithMeta[], row: BugRow): BugWithMeta[] {
   const idx = bugs.findIndex((b) => b.id === row.id)
   if (idx === -1) return sortBugs([...bugs, applyServerRow(undefined, row)])
@@ -178,23 +158,140 @@ function mapBug(
   return changed ? next : bugs
 }
 
-function patchPending(
-  bug: BugWithMeta,
-  localId: string,
-  patch: Partial<PendingUpload> | null,
-): BugWithMeta {
-  if (!bug.pending) return bug
-  const pending =
-    patch === null
-      ? bug.pending.filter((p) => p.localId !== localId)
-      : bug.pending.map((p) => (p.localId === localId ? { ...p, ...patch } : p))
-  return { ...bug, pending: pending.length ? pending : undefined }
+/**
+ * Keys of rows/attachments changed locally or via realtime after the latest list fetch started
+ * (`bug:<id>`, `att:<id>`, `del:<attachmentId>`); a snapshot cannot know about those yet.
+ */
+export interface SnapshotOptions {
+  truncated: boolean
+  isRecent: (key: string) => boolean
 }
 
-interface QueuedFile {
+function snapshotAttachments(
+  snapshot: BugAttachment[],
+  local: BugAttachment[],
+  isRecent: (key: string) => boolean,
+): BugAttachment[] {
+  const kept = snapshot.filter((a) => !isRecent(`del:${a.id}`))
+  const ids = new Set(kept.map((a) => a.id))
+  const extra = local.filter((a) => !ids.has(a.id) && isRecent(`att:${a.id}`))
+  return sortAttachments([...kept, ...extra])
+}
+
+/**
+ * Applies an authoritative list snapshot. Rows never go backwards (updated_at), attachments are
+ * the snapshot's, and bugs missing from it are dropped unless optimistic, changed after the fetch
+ * started, or older than the window of a truncated snapshot.
+ */
+export function applySnapshot(
+  current: BugWithMeta[],
+  fetched: BugWithMeta[],
+  opts: SnapshotOptions,
+): BugWithMeta[] {
+  const byId = new Map(current.map((b) => [b.id, b]))
+  const fetchedIds = new Set(fetched.map((f) => f.id))
+  const oldest = fetched.reduce<string | null>(
+    (min, f) => (min === null || f.created_at < min ? f.created_at : min),
+    null,
+  )
+  const out: BugWithMeta[] = []
+  for (const f of fetched) {
+    const existing = byId.get(f.id)
+    const base = existing ? applyServerRow(existing, f) : f
+    out.push({
+      ...base,
+      attachments: snapshotAttachments(f.attachments, existing?.attachments ?? [], opts.isRecent),
+    })
+  }
+  for (const b of current) {
+    if (fetchedIds.has(b.id)) continue
+    const olderThanWindow = opts.truncated && oldest !== null && b.created_at < oldest
+    if (b.optimistic || opts.isRecent(`bug:${b.id}`) || olderThanWindow) out.push(b)
+  }
+  return sortBugs(out)
+}
+
+/** Non-authoritative merge of individually fetched rows (e.g. a deep-linked bug). */
+function mergeRows(current: BugWithMeta[], rows: BugWithMeta[]): BugWithMeta[] {
+  let next = current
+  for (const r of rows) {
+    const existing = next.find((b) => b.id === r.id)
+    if (!existing) {
+      next = sortBugs([...next, r])
+      continue
+    }
+    next = mapBug(next, r.id, (bug) => ({
+      ...applyServerRow(bug, r),
+      attachments: mergeAttachments(r.attachments, bug.attachments),
+    }))
+  }
+  return next
+}
+
+// ---------------------------------------------------------------------------------------------
+// Pending uploads live at module level (per workspace) so failed uploads, with their File for
+// retry, survive workspace switches and remounts.
+
+interface PendingFile extends PendingUpload {
   file: File
-  previewUrl: string
   status: 'queued' | 'uploading' | 'failed'
+}
+
+type PendingByBug = Readonly<Record<string, PendingUpload[]>>
+
+const pendingFiles = new Map<string, Map<string, PendingFile[]>>()
+const pendingSnapshots = new Map<string, PendingByBug>()
+const pendingListeners = new Set<() => void>()
+const NO_PENDING: PendingByBug = {}
+
+function publishPending(ws: string): void {
+  const snapshot: Record<string, PendingUpload[]> = {}
+  for (const [bugId, files] of pendingFiles.get(ws) ?? []) {
+    snapshot[bugId] = files.map(({ localId, previewUrl, progress, error }) =>
+      error === undefined
+        ? { localId, previewUrl, progress }
+        : { localId, previewUrl, progress, error },
+    )
+  }
+  if (Object.keys(snapshot).length) pendingSnapshots.set(ws, snapshot)
+  else pendingSnapshots.delete(ws)
+  for (const listener of pendingListeners) listener()
+}
+
+function subscribePending(listener: () => void): () => void {
+  pendingListeners.add(listener)
+  return () => {
+    pendingListeners.delete(listener)
+  }
+}
+
+function setPending(ws: string, bugId: string, files: PendingFile[]): void {
+  let byBug = pendingFiles.get(ws)
+  if (!byBug) {
+    byBug = new Map()
+    pendingFiles.set(ws, byBug)
+  }
+  byBug.set(bugId, files)
+  publishPending(ws)
+}
+
+/** Removes one pending file (or all of a bug's when `localId` is omitted). */
+function removePending(ws: string, bugId: string, localId?: string): void {
+  const byBug = pendingFiles.get(ws)
+  const files = byBug?.get(bugId)
+  if (!byBug || !files) return
+  const rest = localId === undefined ? [] : files.filter((f) => f.localId !== localId)
+  if (rest.length) byBug.set(bugId, rest)
+  else byBug.delete(bugId)
+  if (byBug.size === 0) pendingFiles.delete(ws)
+  publishPending(ws)
+}
+
+/** Test helper: drop all pending-upload state. */
+export function resetPendingUploads(): void {
+  const workspaces = [...pendingFiles.keys()]
+  pendingFiles.clear()
+  for (const ws of workspaces) publishPending(ws)
 }
 
 interface ListState {
@@ -215,14 +312,27 @@ export function useBugs(
   const selfIdRef = useRef<string | null>(null)
   /** Ids of bugs filed from this hook instance (never announced as remote inserts). */
   const localIdsRef = useRef(new Set<string>())
-  /** Files awaiting upload, per bug id → local upload id. */
-  const queueRef = useRef(new Map<string, Map<string, QueuedFile>>())
+  /** Changes seen since the latest list fetch started (see SnapshotOptions.isRecent). */
+  const touchedRef = useRef(new Set<string>())
   const onRemoteInsertRef = useRef(opts?.onRemoteInsert)
   const bugsRef = useRef<BugWithMeta[]>(EMPTY)
 
+  const pendingByBug = useSyncExternalStore(
+    subscribePending,
+    () => pendingSnapshots.get(workspaceId) ?? NO_PENDING,
+    () => NO_PENDING,
+  )
+
   const current = state.workspaceId === workspaceId
-  const bugs = current ? state.bugs : EMPTY
+  const listBugs = current ? state.bugs : EMPTY
   const loading = !(current && state.loaded)
+  const bugs = useMemo(() => {
+    if (pendingByBug === NO_PENDING) return listBugs
+    return listBugs.map((b) => {
+      const pending = pendingByBug[b.id]
+      return pending ? { ...b, pending } : b
+    })
+  }, [listBugs, pendingByBug])
 
   useEffect(() => {
     onRemoteInsertRef.current = opts?.onRemoteInsert
@@ -257,25 +367,41 @@ export function useBugs(
   useEffect(() => {
     liveWsRef.current = workspaceId
     let active = true
+    let latest = 0
+    const touched = touchedRef.current
 
     const load = async () => {
-      const { data, error } = await supabase
-        .from('bugs')
-        .select('*, bug_attachments(*)')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false })
-        .limit(FETCH_LIMIT)
-      if (!active) return
-      if (error) {
-        console.error('Failed to load bugs', error)
+      const seq = ++latest
+      touched.clear()
+      let fetched: BugWithMeta[]
+      try {
+        const { data, error } = await supabase
+          .from('bugs')
+          .select('*, bug_attachments(*)')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false })
+          .limit(FETCH_LIMIT)
+        if (error) throw error
+        fetched = (data ?? []).map(toBugWithMeta)
+      } catch (err) {
+        if (!active || seq !== latest) return
+        console.error('Failed to load bugs', err)
         mutate(workspaceId, (b) => b, true)
         return
       }
-      const fetched = (data ?? []).map(toBugWithMeta)
-      mutate(workspaceId, (b) => mergeSnapshot(b, fetched), true)
+      if (!active || seq !== latest) return
+      const recent = new Set(touched)
+      mutate(
+        workspaceId,
+        (b) =>
+          applySnapshot(b, fetched, {
+            truncated: fetched.length >= FETCH_LIMIT,
+            isRecent: (key) => recent.has(key),
+          }),
+        true,
+      )
     }
 
-    let subscribedOnce = false
     const channel = openChannel(`ws:${workspaceId}:bugs`)
       .on<BugRow>(
         'postgres_changes',
@@ -288,6 +414,7 @@ export function useBugs(
         (payload) => {
           if (!active) return
           const row = payload.new
+          touched.add(`bug:${row.id}`)
           mutate(workspaceId, (b) => upsertRow(b, row))
           const mine = localIdsRef.current.has(row.id) || row.filed_by === selfIdRef.current
           if (!mine) onRemoteInsertRef.current?.(row)
@@ -304,6 +431,7 @@ export function useBugs(
         (payload) => {
           if (!active) return
           const row = payload.new
+          touched.add(`bug:${row.id}`)
           mutate(workspaceId, (b) => upsertRow(b, row))
         },
       )
@@ -313,6 +441,7 @@ export function useBugs(
         (payload) => {
           if (!active) return
           const att = payload.new
+          touched.add(`att:${att.id}`)
           mutate(workspaceId, (b) =>
             mapBug(b, att.bug_id, (bug) => {
               const attachments = mergeAttachments(bug.attachments, [att])
@@ -328,6 +457,7 @@ export function useBugs(
           if (!active) return
           const removedId = payload.old.id
           if (!removedId) return
+          touched.add(`del:${removedId}`)
           mutate(workspaceId, (b) => {
             const holder = b.find((bug) => bug.attachments.some((a) => a.id === removedId))
             if (!holder) return b
@@ -339,14 +469,24 @@ export function useBugs(
         },
       )
 
+    // Fetch on every (re)SUBSCRIBED: the first is the initial load, later ones close the gap left
+    // by a reconnect. If realtime never connects, fall back to one plain fetch so the list loads.
+    let everSubscribed = false
+    let fallbackDone = false
     channel.subscribe((status) => {
-      if (!active || status !== 'SUBSCRIBED') return
-      // The first SUBSCRIBED races the initial fetch below; later ones follow a reconnect and
-      // may have missed changes, so refetch and merge.
-      if (subscribedOnce) void load()
-      subscribedOnce = true
+      if (!active) return
+      if (status === 'SUBSCRIBED') {
+        everSubscribed = true
+        void load()
+      } else if (
+        (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') &&
+        !everSubscribed &&
+        !fallbackDone
+      ) {
+        fallbackDone = true
+        void load()
+      }
     })
-    void load()
 
     return () => {
       active = false
@@ -356,17 +496,18 @@ export function useBugs(
   }, [workspaceId, mutate])
 
   const runUploads = useCallback(
-    async (ws: string, bugId: string, onlyFailed: boolean) => {
-      const queue = queueRef.current.get(bugId)
-      if (!queue) return
-      const targets = [...queue.entries()].filter(([, q]) =>
-        onlyFailed ? q.status === 'failed' : q.status === 'queued',
-      )
-      for (const [localId, item] of targets) {
+    async (ws: string, bugId: string, from: 'queued' | 'failed') => {
+      // Claim synchronously (before any await) so concurrent callers never take the same file.
+      const claimed = (pendingFiles.get(ws)?.get(bugId) ?? []).filter((f) => f.status === from)
+      if (claimed.length === 0) return
+      for (const item of claimed) {
         item.status = 'uploading'
-        mutate(ws, (b) =>
-          mapBug(b, bugId, (bug) => patchPending(bug, localId, { progress: 0, error: undefined })),
-        )
+        item.progress = 0
+        item.error = undefined
+      }
+      publishPending(ws)
+
+      for (const item of claimed) {
         try {
           const image = await compressImage(item.file)
           let attachment: BugAttachment
@@ -375,29 +516,27 @@ export function useBugs(
               workspaceId: ws,
               bugId,
               image,
-              onProgress: (p) =>
-                mutate(ws, (b) =>
-                  mapBug(b, bugId, (bug) => patchPending(bug, localId, { progress: p })),
-                ),
+              onProgress: (p) => {
+                item.progress = p
+                publishPending(ws)
+              },
             })
           } finally {
             if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
           }
-          queue.delete(localId)
-          if (queue.size === 0) queueRef.current.delete(bugId)
+          touchedRef.current.add(`att:${attachment.id}`)
           mutate(ws, (b) =>
-            mapBug(b, bugId, (bug) => ({
-              ...patchPending(bug, localId, null),
-              attachments: mergeAttachments(bug.attachments, [attachment]),
-            })),
+            mapBug(b, bugId, (bug) => {
+              const attachments = mergeAttachments(bug.attachments, [attachment])
+              return attachments === bug.attachments ? bug : { ...bug, attachments }
+            }),
           )
+          removePending(ws, bugId, item.localId)
           URL.revokeObjectURL(item.previewUrl)
         } catch (err) {
           item.status = 'failed'
-          const message = friendlyError(err, 'Upload failed.')
-          mutate(ws, (b) =>
-            mapBug(b, bugId, (bug) => patchPending(bug, localId, { error: message })),
-          )
+          item.error = friendlyError(err, 'Upload failed.')
+          publishPending(ws)
         }
       }
     },
@@ -416,15 +555,16 @@ export function useBugs(
       const description = input.description.trim()
       const transcript = input.transcript?.trim() ? input.transcript.trim() : null
 
-      const queue = new Map<string, QueuedFile>()
-      const pending: PendingUpload[] = input.files.map((file) => {
-        const localId = randomId()
-        const previewUrl = URL.createObjectURL(file)
-        queue.set(localId, { file, previewUrl, status: 'queued' })
-        return { localId, previewUrl, progress: 0 }
-      })
-      if (queue.size) queueRef.current.set(id, queue)
+      const files: PendingFile[] = input.files.map((file) => ({
+        localId: randomId(),
+        previewUrl: URL.createObjectURL(file),
+        progress: 0,
+        file,
+        status: 'queued',
+      }))
       localIdsRef.current.add(id)
+      touchedRef.current.add(`bug:${id}`)
+      if (files.length) setPending(ws, id, files)
 
       const optimistic: BugWithMeta = {
         id,
@@ -442,7 +582,6 @@ export function useBugs(
         resolution_note: null,
         updated_at: now,
         attachments: [],
-        pending: pending.length ? pending : undefined,
         optimistic: true,
       }
       mutate(ws, (b) => [optimistic, ...b.filter((x) => x.id !== id)])
@@ -471,15 +610,17 @@ export function useBugs(
 
       if (!inserted) {
         mutate(ws, (b) => b.filter((x) => x.id !== id))
-        queueRef.current.delete(id)
+        removePending(ws, id)
         localIdsRef.current.delete(id)
-        for (const p of pending) URL.revokeObjectURL(p.previewUrl)
+        for (const f of files) URL.revokeObjectURL(f.previewUrl)
         throw new Error(friendlyError(failure, 'Could not file the bug. Try again.'))
       }
 
       const row = inserted
-      mutate(ws, (b) => mapBug(b, id, (bug) => ({ ...bug, ...row, optimistic: false })))
-      if (queue.size) void runUploads(ws, id, false)
+      touchedRef.current.add(`bug:${id}`)
+      // Same path as realtime rows: a newer UPDATE already applied is not overwritten.
+      mutate(ws, (b) => upsertRow(b, row))
+      if (files.length) void runUploads(ws, id, 'queued')
     },
     [workspaceId, mutate, runUploads],
   )
@@ -492,24 +633,27 @@ export function useBugs(
     ) => {
       const ws = workspaceId
       const before = bugsRef.current.find((b) => b.id === id)
-      const keys = Object.keys(optimisticPatch) as (keyof BugWithMeta)[]
       mutate(ws, (b) => mapBug(b, id, (bug) => ({ ...bug, ...optimisticPatch })))
-      const { error } = await supabase.from('bugs').update(dbPatch).eq('id', id)
-      if (!error) return
+      let failure: unknown
+      try {
+        const { error } = await supabase.from('bugs').update(dbPatch).eq('id', id)
+        failure = error
+      } catch (err) {
+        failure = err
+      }
+      if (!failure) return
       if (before) {
-        // Revert only fields that still hold our optimistic value (a newer remote change wins).
+        const revert: Partial<BugWithMeta> = Object.fromEntries(
+          Object.keys(optimisticPatch).map((k) => [k, before[k as keyof BugWithMeta]]),
+        )
+        // Revert only if no newer server row has been applied since the optimistic patch.
         mutate(ws, (b) =>
-          mapBug(b, id, (bug) => {
-            const reverted: BugWithMeta = { ...bug }
-            const target = reverted as unknown as Record<string, unknown>
-            for (const k of keys) {
-              if (bug[k] === optimisticPatch[k]) target[k] = before[k]
-            }
-            return reverted
-          }),
+          mapBug(b, id, (bug) =>
+            bug.updated_at === before.updated_at ? { ...bug, ...revert } : bug,
+          ),
         )
       }
-      throw new Error(friendlyError(error, 'Could not save changes.'))
+      throw new Error(friendlyError(failure, 'Could not save changes.'))
     },
     [workspaceId, mutate],
   )
@@ -549,7 +693,7 @@ export function useBugs(
   )
 
   const retryUploads = useCallback(
-    (bugId: string) => runUploads(workspaceId, bugId, true),
+    (bugId: string) => runUploads(workspaceId, bugId, 'failed'),
     [workspaceId, runUploads],
   )
 
@@ -567,7 +711,7 @@ export function useBugs(
       if (error) throw new Error(friendlyError(error, 'Could not load that bug.'))
       if (!data) return null
       const bug = toBugWithMeta(data)
-      mutate(ws, (b) => mergeSnapshot(b, [bug]))
+      mutate(ws, (b) => mergeRows(b, [bug]))
       return bug
     },
     [workspaceId, mutate],
