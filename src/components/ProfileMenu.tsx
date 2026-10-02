@@ -7,6 +7,7 @@ import { Avatar } from './Avatar'
 export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
   const { profile, signOut } = useAuth()
   const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
   useDismiss(ref, close, open)
@@ -44,13 +45,20 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
             type="button"
             role="menuitem"
             onClick={() => {
-              setOpen(false)
-              void signOut()
+              setError(null)
+              signOut().catch((e: unknown) =>
+                setError(e instanceof Error ? e.message : 'Could not sign out'),
+              )
             }}
             className="block w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             Sign out
           </button>
+          {error && (
+            <p role="alert" className="px-2 py-1 text-xs text-red-500">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </div>

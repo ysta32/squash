@@ -17,20 +17,31 @@ export interface StatsPopoverProps {
 }
 
 export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
-  const [rows, setRows] = useState<StatRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{
+    workspaceId: string
+    rows: StatRow[] | null
+    error: string | null
+  } | null>(null)
+  const current = result && result.workspaceId === workspaceId ? result : null
+  const rows = current?.rows ?? null
+  const error = current?.error ?? null
 
   useEffect(() => {
-    let cancelled = false
+    let stale = false
     void supabase
       .rpc('workspace_stats', { p_workspace_id: workspaceId })
       .then(({ data, error: err }) => {
-        if (cancelled) return
-        if (err) setError(err.message)
-        else setRows([...(data ?? [])].sort((a, b) => b.filed_total - a.filed_total))
+        if (stale) return
+        if (err) setResult({ workspaceId, rows: null, error: err.message })
+        else
+          setResult({
+            workspaceId,
+            rows: [...(data ?? [])].sort((a, b) => b.filed_total - a.filed_total),
+            error: null,
+          })
       })
     return () => {
-      cancelled = true
+      stale = true
     }
   }, [workspaceId])
 
