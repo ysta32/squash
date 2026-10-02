@@ -315,8 +315,9 @@ let syncSeq = 0
 /** Announces a finished upload to every mounted useBugs instance. */
 function publishCompleted(ws: string, attachment: BugAttachment): void {
   const seq = ++syncSeq
-  // Every in-flight fetch started before `seq`, so any of them may miss this attachment.
-  if (fetchesInFlight.get(ws)?.size) {
+  // Every in-flight fetch started before `seq`, so any of them may miss this attachment. With no
+  // hook mounted for the workspace, nothing will apply those fetches, so nothing is retained.
+  if ((mountedHooks.get(ws) ?? 0) > 0 && fetchesInFlight.get(ws)?.size) {
     let byBug = retainedCompleted.get(ws)
     if (!byBug) {
       byBug = new Map()

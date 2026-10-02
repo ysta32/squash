@@ -406,6 +406,8 @@ describe('useBugs sync', () => {
     h.state.updateResult = { error: null }
     h.state.deferUpdate = false
     h.state.resolveUpdate = null
+    h.state.deferSelect = false
+    h.state.resolveSelect = null
     resetPendingUploads()
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
@@ -811,6 +813,41 @@ describe('useBugs sync', () => {
     first.unmount()
     expect(retainedUploadCount('ws1')).toBe(1)
     second.unmount()
+    expect(retainedUploadCount('ws1')).toBe(0)
+  })
+
+  it('retains nothing for an upload completing after the last hook unmounted', async () => {
+    let finish: (a: ReturnType<typeof att>) => void = () => {}
+    vi.mocked(uploadAttachment).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const first = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    await act(async () => {
+      await first.result.current.fileBug({
+        description: 'x',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    const id = first.result.current.bugs[0].id
+    await waitFor(() => expect(vi.mocked(uploadAttachment)).toHaveBeenCalledTimes(1))
+
+    // A stalled fetch stays registered after its hook unmounts.
+    h.state.deferSelect = true
+    const second = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(h.state.resolveSelect).not.toBeNull())
+    first.unmount()
+    second.unmount()
+
+    await act(async () => {
+      finish(att('orphan', id))
+    })
     expect(retainedUploadCount('ws1')).toBe(0)
   })
 })
