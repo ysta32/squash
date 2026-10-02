@@ -1,0 +1,103 @@
+export type Severity = 'low' | 'medium' | 'high' | 'critical'
+export type BugStatus = 'open' | 'resolved'
+export type MemberRole = 'owner' | 'member'
+export type EventType = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented'
+
+export interface Profile {
+  id: string
+  display_name: string
+  avatar_url: string | null
+  avatar_color: string
+  created_at: string
+}
+
+export interface Workspace {
+  id: string
+  name: string
+  invite_code: string
+  owner_id: string
+  created_at: string
+}
+
+export interface WorkspaceMember {
+  workspace_id: string
+  user_id: string
+  role: MemberRole
+  joined_at: string
+  profile: Profile
+}
+
+export interface Bug {
+  id: string
+  workspace_id: string
+  number: number
+  title: string
+  description: string
+  transcript: string | null
+  severity: Severity
+  status: BugStatus
+  filed_by: string
+  created_at: string
+  resolved_by: string | null
+  resolved_at: string | null
+  resolution_note: string | null
+  updated_at: string
+}
+
+export interface BugAttachment {
+  id: string
+  bug_id: string
+  storage_path: string
+  width: number
+  height: number
+  size_bytes: number
+  created_at: string
+}
+
+export interface Comment {
+  id: string
+  bug_id: string
+  author_id: string
+  body: string
+  created_at: string
+}
+
+export interface BugEvent {
+  id: string
+  bug_id: string
+  actor_id: string
+  type: EventType
+  note: string | null
+  created_at: string
+}
+
+/** Client-side pending upload state attached to an optimistic bug. */
+export interface PendingUpload {
+  localId: string
+  previewUrl: string
+  progress: number
+  error?: string
+}
+
+export type BugWithMeta = Bug & {
+  attachments: BugAttachment[]
+  pending?: PendingUpload[]
+  optimistic?: boolean
+}
+
+export const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']
+
+export const SEVERITY_LABEL: Record<Severity, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
+}
+
+/** Tailwind background class for the severity dot/badge. */
+export const SEVERITY_COLOR: Record<Severity, string> = {
+  low: 'bg-zinc-400',
+  medium: 'bg-blue-500',
+  high: 'bg-amber-500',
+  critical: 'bg-red-500',
+}
