@@ -201,6 +201,79 @@ describe('BugDetail', () => {
     expect(onUpdate).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the title draft when the save fails, clears it after success', async () => {
+    const onUpdate = vi
+      .fn<(id: string, patch: object) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Could not save changes.'))
+      .mockResolvedValueOnce()
+    const onToast = vi.fn()
+    setup(makeBug(), { onUpdate, onToast })
+    const input = screen.getByLabelText('Title') as HTMLInputElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'Retitled' } })
+    fireEvent.blur(input)
+    await act(async () => {})
+    expect(onUpdate).toHaveBeenCalledWith('b1', { title: 'Retitled' })
+    expect(input.value).toBe('Retitled')
+    expect(screen.getByRole('alert').textContent).toContain('Could not save changes.')
+    expect(onToast).toHaveBeenCalledWith('Could not save changes.')
+
+    input.focus()
+    fireEvent.blur(input)
+    await act(async () => {})
+    expect(onUpdate).toHaveBeenCalledTimes(2)
+    // Draft cleared: the input shows the prop title again (parent hasn't updated it in this test).
+    expect(input.value).toBe('Login button broken')
+  })
+
+  it('keeps the description draft when the save fails', async () => {
+    const onUpdate = vi.fn().mockRejectedValue(new Error('nope'))
+    setup(makeBug(), { onUpdate })
+    const box = screen.getByLabelText('Description') as HTMLTextAreaElement
+    box.focus()
+    fireEvent.change(box, { target: { value: 'More detail' } })
+    fireEvent.blur(box)
+    await act(async () => {})
+    expect(onUpdate).toHaveBeenCalledWith('b1', { description: 'More detail' })
+    expect(box.value).toBe('More detail')
+  })
+
+  it('Esc cancels title and description edits without saving', async () => {
+    const { onUpdate } = setup(makeBug())
+    const input = screen.getByLabelText('Title') as HTMLInputElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'Discard me' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(document.activeElement).not.toBe(input)
+    expect(input.value).toBe('Login button broken')
+
+    const box = screen.getByLabelText('Description') as HTMLTextAreaElement
+    box.focus()
+    fireEvent.change(box, { target: { value: 'Discard me too' } })
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(box.value).toBe('Clicking login does nothing')
+
+    // A later normal edit still saves.
+    input.focus()
+    fireEvent.change(input, { target: { value: 'Kept' } })
+    fireEvent.blur(input)
+    await act(async () => {})
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    expect(onUpdate).toHaveBeenCalledWith('b1', { title: 'Kept' })
+  })
+
+  it('closes an open popover when the selected bug changes', () => {
+    const { rerender, onUpdate, onResolve, onReopen, onBack } = setup(makeBug())
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+    expect(screen.getByRole('dialog', { name: 'Resolve bug' })).toBeTruthy()
+    const props = { members, selfId: 'u1', onUpdate, onResolve, onReopen, onBack }
+    rerender(<BugDetail {...props} bug={makeBug({ id: 'b2', number: 43 })} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    // Returning to the first bug does not resurrect the old popover.
+    rerender(<BugDetail {...props} bug={makeBug()} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('updates severity from the inline dots', async () => {
     const { onUpdate } = setup(makeBug())
     fireEvent.click(screen.getByRole('button', { name: 'Severity: Critical' }))
@@ -286,6 +359,27 @@ describe('BugDetail', () => {
     })
     expect(addComment).toHaveBeenCalledWith('hello')
     expect((box as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('keeps text typed while a comment is posting', async () => {
+    let finish: () => void = () => {}
+    addComment.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    setup(makeBug())
+    const box = screen.getByLabelText('Comment') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: 'first' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(box.disabled).toBe(false)
+    fireEvent.change(box, { target: { value: 'first second' } })
+    await act(async () => {
+      finish()
+    })
+    expect(addComment).toHaveBeenCalledWith('first')
+    expect(box.value).toBe('second')
   })
 
   it('mobile back button calls onBack', () => {

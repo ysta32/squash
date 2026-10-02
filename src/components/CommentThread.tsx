@@ -21,13 +21,18 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
   const byId = new Map(members.map((m) => [m.user_id, m.profile]))
 
   async function send() {
-    const body = draft.trim()
+    const submitted = draft
+    const body = submitted.trim()
     if (!body || sending || !bugId) return
     setSending(true)
     setError(null)
     try {
       await addComment(body)
-      setDraft('')
+      // The textarea stays editable while posting: drop only the text that was sent and keep
+      // anything typed after it. If the sent text was itself edited meanwhile, keep everything.
+      setDraft((cur) =>
+        cur.startsWith(submitted) ? cur.slice(submitted.length).replace(/^\s+/, '') : cur,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not post comment.')
     } finally {

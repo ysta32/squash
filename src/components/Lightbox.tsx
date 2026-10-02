@@ -54,7 +54,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
       onClick={onClose}
     >
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white tabular-nums">
+      <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white tabular-nums">
         {safeIndex + 1} / {count}
       </div>
       <button
@@ -64,7 +64,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
           e.stopPropagation()
           onClose()
         }}
-        className="absolute top-3 right-3 rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
+        className="absolute top-3 right-3 z-10 rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
       >
         <X className="h-5 w-5" />
       </button>

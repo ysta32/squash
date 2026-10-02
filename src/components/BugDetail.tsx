@@ -40,6 +40,14 @@ export function BugDetail(props: BugDetailProps) {
   const [popover, setPopover] = useState<PopoverState>(null)
   const [seenResolve, setSeenResolve] = useState(resolveRequest)
   const [seenReopen, setSeenReopen] = useState(reopenRequest)
+  const [seenBugId, setSeenBugId] = useState(bug?.id ?? null)
+
+  // A popover belongs to one bug: switching bugs (or deselecting) closes it.
+  const bugId = bug?.id ?? null
+  if (bugId !== seenBugId) {
+    setSeenBugId(bugId)
+    setPopover(null)
+  }
 
   // Open the matching popover when a request counter changes (initial value is ignored).
   if (resolveRequest !== seenResolve) {
@@ -104,6 +112,8 @@ function BugBody({
   const [signed, setSigned] = useState<Record<string, string>>({})
   const [lightboxKey, setLightboxKey] = useState<string | null>(null)
   const descRef = useRef<HTMLTextAreaElement>(null)
+  /** Set by Esc so the blur that follows discards the draft instead of saving it. */
+  const cancelRef = useRef(false)
 
   const profiles = new Map(members.map((m) => [m.user_id, m.profile]))
   const filer = profiles.get(bug.filed_by) ?? null
@@ -119,29 +129,54 @@ function BugBody({
     el.style.height = `${el.scrollHeight}px`
   }, [description])
 
-  function run(action: () => void | Promise<void>) {
+  function run(action: () => void | Promise<void>, onSuccess?: () => void) {
     setError(null)
     Promise.resolve()
       .then(action)
-      .catch((err: unknown) => {
+      .then(onSuccess, (err: unknown) => {
         const msg = err instanceof Error ? err.message : 'Something went wrong.'
         setError(msg)
         onToast?.(msg)
       })
   }
 
+  // Drafts survive a failed save (so nothing typed is lost) and are cleared only once the update
+  // resolves — and only if the user hasn't kept typing since the save was sent.
   function saveTitle() {
-    if (titleDraft === null) return
-    const next = titleDraft.trim()
-    setTitleDraft(null)
-    if (next && next !== bug.title) run(() => onUpdate(bug.id, { title: next }))
+    const draft = titleDraft
+    if (draft === null) return
+    if (cancelRef.current) {
+      cancelRef.current = false
+      setTitleDraft(null)
+      return
+    }
+    const next = draft.trim()
+    if (!next || next === bug.title) {
+      setTitleDraft(null)
+      return
+    }
+    run(
+      () => onUpdate(bug.id, { title: next }),
+      () => setTitleDraft((d) => (d === draft ? null : d)),
+    )
   }
 
   function saveDescription() {
-    if (descDraft === null) return
-    const next = descDraft
-    setDescDraft(null)
-    if (next !== bug.description) run(() => onUpdate(bug.id, { description: next }))
+    const draft = descDraft
+    if (draft === null) return
+    if (cancelRef.current) {
+      cancelRef.current = false
+      setDescDraft(null)
+      return
+    }
+    if (draft === bug.description) {
+      setDescDraft(null)
+      return
+    }
+    run(
+      () => onUpdate(bug.id, { description: draft }),
+      () => setDescDraft((d) => (d === draft ? null : d)),
+    )
   }
 
   function setSeverity(severity: Severity) {
@@ -242,8 +277,11 @@ function BugBody({
               e.preventDefault()
               e.currentTarget.blur()
             } else if (e.key === 'Escape') {
+              e.preventDefault()
+              cancelRef.current = true
               setTitleDraft(null)
               e.currentTarget.blur()
+              cancelRef.current = false
             }
           }}
           className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none"
@@ -304,6 +342,15 @@ function BugBody({
           placeholder="Add a description…"
           onChange={(e) => setDescDraft(e.target.value)}
           onBlur={saveDescription}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              cancelRef.current = true
+              setDescDraft(null)
+              e.currentTarget.blur()
+              cancelRef.current = false
+            }
+          }}
           className="w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted"
         />
         {bug.transcript !== null && (
