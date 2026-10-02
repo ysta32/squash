@@ -1,6 +1,6 @@
 # Squash
 
-**Hosted link placeholder:** https://squash.example.com
+**Live:** https://squash-livid.vercel.app
 
 **Source:** https://github.com/ysta32/squash
 
