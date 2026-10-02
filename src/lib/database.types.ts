@@ -160,26 +160,13 @@ export type Database = {
           resolution_note?: string | null
           updated_at?: string
         }
+        /** filed_by / resolved_by have no FK: attribution survives account deletion. */
         Relationships: [
           {
             foreignKeyName: 'bugs_workspace_id_fkey'
             columns: ['workspace_id']
             isOneToOne: false
             referencedRelation: 'workspaces'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'bugs_filed_by_fkey'
-            columns: ['filed_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'bugs_resolved_by_fkey'
-            columns: ['resolved_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -252,13 +239,6 @@ export type Database = {
             referencedRelation: 'bugs'
             referencedColumns: ['id']
           },
-          {
-            foreignKeyName: 'comments_author_id_fkey'
-            columns: ['author_id']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['id']
-          },
         ]
       }
       bug_events: {
@@ -293,13 +273,6 @@ export type Database = {
             columns: ['bug_id']
             isOneToOne: false
             referencedRelation: 'bugs'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'bug_events_actor_id_fkey'
-            columns: ['actor_id']
-            isOneToOne: false
-            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
