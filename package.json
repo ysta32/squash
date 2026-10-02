@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gen:icons": "node scripts/gen-icons.mjs",
+    "gen:og": "node scripts/gen-og.mjs",
     "test": "vitest run"
   },
   "dependencies": {
