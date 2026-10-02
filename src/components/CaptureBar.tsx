@@ -34,12 +34,23 @@ function isCoarsePointer(): boolean {
 }
 
 export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: CaptureBarProps) {
-  const [value, setValue] = useState('')
+  const [value, setValueState] = useState('')
   const [interim, setInterim] = useState('')
-  const [transcript, setTranscript] = useState<string | null>(null)
+  const valueRef = useRef('')
+  const transcriptRef = useRef<string | null>(null)
+  const submittingRef = useRef(false)
+  const finalWaiter = useRef<(() => void) | null>(null)
+  const setValue = (v: string) => {
+    valueRef.current = v
+    setValueState(v)
+  }
+  const setTranscript = (t: string | null) => {
+    transcriptRef.current = t
+  }
   const [severity, setSeverity] = useState<Severity>('medium')
   const [chips, setChips] = useState<Chip[]>([])
   const innerRef = useRef<HTMLTextAreaElement | null>(null)
+  const mirrorRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const chipsRef = useRef<Chip[]>(chips)
@@ -58,8 +69,10 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
       const t = text.trim()
       if (!t) return
       setInterim('')
-      setValue((v) => (v && !/\s$/.test(v) ? `${v} ${t}` : `${v}${t}`))
-      setTranscript((prev) => (prev ? `${prev} ${t}` : t))
+      const v = valueRef.current
+      setValue(v && !/\s$/.test(v) ? `${v} ${t}` : `${v}${t}`)
+      setTranscript(transcriptRef.current ? `${transcriptRef.current} ${t}` : t)
+      finalWaiter.current?.()
     },
     onInterim: setInterim,
   })
@@ -68,8 +81,9 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
     const el = innerRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_PX)}px`
-  }, [value])
+    const needed = Math.max(el.scrollHeight, mirrorRef.current?.scrollHeight ?? 0)
+    el.style.height = `${Math.min(needed, MAX_TEXTAREA_PX)}px`
+  }, [value, interim])
 
   useEffect(() => {
     chipsRef.current = chips
@@ -121,25 +135,64 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
     e.target.value = ''
   }
 
+  const flushSpeech = (): Promise<void> =>
+    new Promise((resolve) => {
+      const done = () => {
+        finalWaiter.current = null
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(done, 300)
+      finalWaiter.current = done
+      speech.stop()
+    })
+
   const submit = async () => {
-    const description = value.trim()
-    if (!description) return
-    const files = chips.map((c) => c.file)
-    const snapshot = { value, transcript, severity, chips }
-    setValue('')
+    if (submittingRef.current) return
+    submittingRef.current = true
+    try {
+      await runSubmit()
+    } finally {
+      submittingRef.current = false
+    }
+  }
+
+  const runSubmit = async () => {
+    if (speech.listening) await flushSpeech()
     setInterim('')
+    const description = valueRef.current.trim()
+    if (!description) return
+    const snapshot = {
+      value: valueRef.current,
+      transcript: transcriptRef.current,
+      severity,
+      chips: chipsRef.current,
+    }
+    const files = snapshot.chips.map((c) => c.file)
+    setValue('')
     setTranscript(null)
     setSeverity('medium')
     setChips([])
-    if (speech.listening) speech.stop()
     try {
-      await onSubmit({ description, transcript: snapshot.transcript, severity: snapshot.severity, files })
+      await onSubmit({
+        description,
+        transcript: snapshot.transcript,
+        severity: snapshot.severity,
+        files,
+      })
       snapshot.chips.forEach((c) => URL.revokeObjectURL(c.previewUrl))
     } catch (err) {
-      setValue(snapshot.value)
-      setTranscript(snapshot.transcript)
+      const current = valueRef.current
+      setValue(current.trim() === '' ? snapshot.value : `${snapshot.value.trimEnd()}\n\n${current}`)
+      if (snapshot.transcript) {
+        setTranscript(
+          transcriptRef.current
+            ? `${snapshot.transcript} ${transcriptRef.current}`
+            : snapshot.transcript,
+        )
+      }
       setSeverity(snapshot.severity)
-      setChips(snapshot.chips)
+      setChips((prev) => [...snapshot.chips, ...prev])
       onToast?.(err instanceof Error ? err.message : 'Could not file bug')
     }
   }
@@ -167,6 +220,7 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
     >
       <div className="relative">
         <div
+          ref={mirrorRef}
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-1 py-1 text-sm leading-6"
         >
@@ -182,7 +236,7 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
           ref={setTextarea}
           value={value}
           rows={1}
-          placeholder="Describe the bug…"
+          placeholder={interim ? '' : 'Describe the bug…'}
           onChange={(e) => setValue(e.target.value)}
           className="relative block w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-[var(--fg)] outline-none placeholder:text-[var(--muted)]"
         />
@@ -211,7 +265,15 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
         >
           <Paperclip size={16} />
         </button>
-        <input ref={fileInputRef} type="file" accept="image/*" multiple hidden data-testid="file-input" onChange={onPick} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          data-testid="file-input"
+          onChange={onPick}
+        />
         {coarse && (
           <>
             <button
@@ -249,7 +311,10 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
               <Mic size={16} />
             </button>
             {speech.listening && (
-              <span data-testid="recording-dot" className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+              <span
+                data-testid="recording-dot"
+                className="h-2 w-2 animate-pulse rounded-full bg-red-500"
+              />
             )}
           </span>
         ) : (

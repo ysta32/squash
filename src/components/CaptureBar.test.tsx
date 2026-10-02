@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { CaptureBar } from './CaptureBar'
 
 const speechState = vi.hoisted(() => ({
@@ -7,6 +7,7 @@ const speechState = vi.hoisted(() => ({
   listening: false,
   onFinal: (_t: string) => {},
   onInterim: (_t: string) => {},
+  stop: vi.fn(),
 }))
 
 vi.mock('../hooks/useSpeech', () => ({
@@ -17,7 +18,7 @@ vi.mock('../hooks/useSpeech', () => ({
       supported: speechState.supported,
       listening: speechState.listening,
       start: () => {},
-      stop: () => {},
+      stop: speechState.stop,
       toggle: () => {},
       error: null,
     }
@@ -28,13 +29,18 @@ vi.mock('../hooks/usePasteImage', () => ({ usePasteImage: () => {} }))
 
 function setup(onSubmit = vi.fn().mockResolvedValue(undefined), onToast = vi.fn()) {
   render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} onToast={onToast} />)
-  return { onSubmit, onToast, box: screen.getByPlaceholderText('Describe the bug…') as HTMLTextAreaElement }
+  return {
+    onSubmit,
+    onToast,
+    box: screen.getByPlaceholderText('Describe the bug…') as HTMLTextAreaElement,
+  }
 }
 
 describe('CaptureBar', () => {
   beforeEach(() => {
     speechState.supported = true
     speechState.listening = false
+    speechState.stop = vi.fn()
     URL.createObjectURL = vi.fn(() => 'blob:x')
     URL.revokeObjectURL = vi.fn()
   })
@@ -67,6 +73,43 @@ describe('CaptureBar', () => {
     fireEvent.keyDown(box, { key: 'Enter' })
     await waitFor(() => expect(box.value).toBe('keep me'))
     expect(onToast).toHaveBeenCalledWith('boom')
+  })
+
+  it('keeps a newer draft and prepends the failed text when submit rejects', async () => {
+    let reject: (e: Error) => void = () => {}
+    const { box } = setup(vi.fn(() => new Promise<void>((_, r) => (reject = r))))
+    fireEvent.change(box, { target: { value: 'first' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.change(box, { target: { value: 'second' } })
+    await act(async () => reject(new Error('boom')))
+    expect(box.value).toBe('first\n\nsecond')
+  })
+
+  it('flushes late final speech into the submitted bug', async () => {
+    speechState.listening = true
+    const { onSubmit, box } = setup()
+    fireEvent.change(box, { target: { value: 'hello' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(speechState.stop).toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+    await act(async () => speechState.onFinal('world'))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      description: 'hello world',
+      transcript: 'world',
+    })
+    expect(box.value).toBe('')
+  })
+
+  it('ignores a second Enter while a submit is in flight', async () => {
+    speechState.listening = true
+    const { onSubmit, box } = setup()
+    fireEvent.change(box, { target: { value: 'once' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true })
+    await act(async () => speechState.onFinal(''))
+    await act(async () => new Promise((r) => setTimeout(r, 350)))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it('Alt+digit changes severity', () => {
