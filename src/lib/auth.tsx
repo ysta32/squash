@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { authCallbackUrl } from './authRedirect'
@@ -33,16 +33,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
   const [profileState, setProfileState] = useState<ProfileState | null>(null)
+  // Id of the currently signed-in user, updated synchronously with session changes so async
+  // profile results can be checked against it. genRef increments per profile request; only
+  // the latest request for the current user may write profileState.
+  const userIdRef = useRef<string | null>(null)
+  const genRef = useRef(0)
 
   useEffect(() => {
     let active = true
+    const applySession = (next: Session | null) => {
+      userIdRef.current = next?.user.id ?? null
+      setSession(next)
+      setSessionReady(true)
+    }
     supabase.auth
       .getSession()
       .then(({ data, error }) => {
         if (!active) return
         if (error) console.error('getSession failed', error)
-        setSession(data.session)
-        setSessionReady(true)
+        applySession(data.session)
       })
       .catch((err: unknown) => {
         if (!active) return
@@ -53,8 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // profile loading is driven by the effect on userId below.
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       if (!active) return
-      setSession(next)
-      setSessionReady(true)
+      applySession(next)
     })
     return () => {
       active = false
@@ -67,18 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!userId) return
-    let active = true
+    const gen = ++genRef.current
+    const isLatest = () => genRef.current === gen && userIdRef.current === userId
     fetchProfile(userId)
       .then((profile) => {
-        if (active) setProfileState({ userId, profile })
+        if (isLatest()) setProfileState({ userId, profile })
       })
       .catch((err: unknown) => {
         console.error('Failed to load profile', err)
-        if (active) setProfileState({ userId, profile: null })
+        if (isLatest()) setProfileState({ userId, profile: null })
       })
-    return () => {
-      active = false
-    }
   }, [userId])
 
   const profile = userId && profileState?.userId === userId ? profileState.profile : null
@@ -86,10 +92,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loading = !sessionReady || !profileLoaded
 
   const refreshProfile = useCallback(async () => {
-    if (!userId) return
-    const next = await fetchProfile(userId)
-    setProfileState({ userId, profile: next })
-  }, [userId])
+    const uid = userIdRef.current
+    if (!uid) return
+    const gen = ++genRef.current
+    const isLatest = () => genRef.current === gen && userIdRef.current === uid
+    try {
+      const next = await fetchProfile(uid)
+      if (isLatest()) setProfileState({ userId: uid, profile: next })
+    } catch (err) {
+      // This request superseded the initial load, so it must still mark the profile as loaded.
+      if (isLatest()) {
+        setProfileState((prev) => (prev?.userId === uid ? prev : { userId: uid, profile: null }))
+      }
+      throw err
+    }
+  }, [])
 
   const signInWithGoogle = useCallback(async (next?: string) => {
     const { error } = await supabase.auth.signInWithOAuth({

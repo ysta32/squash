@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => {
   return {
     unsubscribe,
     getSession: vi.fn(),
-    onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe } } })),
+    onAuthStateChange: vi.fn((_cb: (event: string, session: unknown) => void) => ({
+      data: { subscription: { unsubscribe } },
+    })),
     signInWithOAuth: vi.fn(),
     signInWithOtp: vi.fn(),
     signOut: vi.fn(),
@@ -102,6 +104,73 @@ describe('AuthProvider', () => {
   })
 })
 
+describe('profile loading across account switches', () => {
+  type Pending = { uid: string; resolve: (v: { data: unknown; error: null }) => void }
+
+  function setup() {
+    const pending: Pending[] = []
+    mocks.from.mockImplementation(() => ({
+      select: () => ({
+        eq: (_col: string, uid: string) => ({
+          maybeSingle: () =>
+            new Promise((resolve) => {
+              pending.push({ uid, resolve })
+            }),
+        }),
+      }),
+    }))
+    let emit: (event: string, session: unknown) => void = () => {}
+    mocks.onAuthStateChange.mockImplementation((cb) => {
+      emit = cb
+      return { data: { subscription: { unsubscribe: mocks.unsubscribe } } }
+    })
+    return { pending, emit: (s: unknown) => emit('SIGNED_IN', s) }
+  }
+
+  const profileOf = (id: string) => ({
+    id,
+    display_name: id,
+    avatar_url: null,
+    avatar_color: '#000',
+    created_at: '2026-01-01T00:00:00Z',
+  })
+
+  it('drops a stale refreshProfile result for the previous user', async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'A' } } }, error: null })
+    const { pending, emit } = setup()
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await waitFor(() => expect(pending).toHaveLength(1))
+    await act(async () => pending[0].resolve({ data: profileOf('A'), error: null }))
+    await waitFor(() => expect(result.current.profile?.id).toBe('A'))
+    expect(result.current.loading).toBe(false)
+
+    let refresh!: Promise<void>
+    act(() => {
+      refresh = result.current.refreshProfile()
+    })
+    await waitFor(() => expect(pending).toHaveLength(2))
+    expect(pending[1].uid).toBe('A')
+
+    act(() => emit({ user: { id: 'B' } }))
+    await waitFor(() => expect(pending).toHaveLength(3))
+    expect(pending[2].uid).toBe('B')
+    expect(result.current.loading).toBe(true)
+
+    await act(async () => pending[2].resolve({ data: profileOf('B'), error: null }))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.profile?.id).toBe('B')
+
+    await act(async () => {
+      pending[1].resolve({ data: profileOf('A'), error: null })
+      await refresh
+    })
+    expect(result.current.user?.id).toBe('B')
+    expect(result.current.profile?.id).toBe('B')
+    expect(result.current.loading).toBe(false)
+  })
+})
+
 describe('safeNext (callback next validation)', () => {
   it('rejects absolute and protocol-relative urls', () => {
     expect(safeNext('https://evil')).toBe('/app')
@@ -109,6 +178,17 @@ describe('safeNext (callback next validation)', () => {
     expect(safeNext('/\\evil')).toBe('/app')
     expect(safeNext('')).toBe('/app')
     expect(safeNext(null)).toBe('/app')
+  })
+
+  it('rejects control characters and whitespace that browsers normalise away', () => {
+    const decoded = new URLSearchParams('next=%2F%0A%2Fevil.example').get('next')
+    expect(decoded).toBe('/\n/evil.example')
+    expect(safeNext(decoded)).toBe('/app')
+    expect(safeNext('/\t/evil.example')).toBe('/app')
+    expect(safeNext('/\r/evil.example')).toBe('/app')
+    expect(safeNext('/\u0000/evil')).toBe('/app')
+    expect(safeNext('/\u007f/evil')).toBe('/app')
+    expect(safeNext('/ /evil')).toBe('/app')
   })
 
   it('accepts same-origin paths', () => {
