@@ -14,6 +14,6 @@ Replace `<domain>` with your app hostname and `<project-ref>` with your Supabase
 
 ## Automation
 
-Pull requests and pushes to `main` run installation, type checking, linting, formatting, tests, and a production build. CI uses Node.js 22 as specified for this workflow; the package currently declares Node.js >=24, so npm can report an engine warning.
+Pull requests and pushes to `main` run installation, type checking, linting, formatting, tests, and a production build. CI uses Node.js 24 to match the package requirement of Node.js >=24.
 
 Pushing a `v*` tag runs a production build, packages `dist` as `squash-dist.zip`, and creates a GitHub release with generated notes and the zip attached. Configure the repository Actions variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GITHUB_URL`, and `VITE_SITE_URL` before releasing: these public values are embedded in the release build. Release automation requires permission to write repository contents.
