@@ -67,15 +67,25 @@ export function useWorkspaces(): {
     workspaces: Workspace[]
     error: string | null
   }>({ key: null, workspaces: [], error: null })
-  const activeKey = useRef<string | null>(null)
+  // Bumped on every effect run and cleanup so responses from any earlier
+  // run (including an A->B->A key sequence) are recognised as obsolete.
+  const genRef = useRef(0)
+  // Reset to empty/loading during render whenever the identity changes, so
+  // data cached for an earlier visit to the same key is never shown.
+  const [trackedKey, setTrackedKey] = useState(userId)
+  if (trackedKey !== userId) {
+    setTrackedKey(userId)
+    setState({ key: null, workspaces: [], error: null })
+  }
 
   const refresh = useCallback(async () => {
     if (!userId) return
+    const gen = genRef.current
     const { data, error: err } = await supabase
       .from('workspace_members')
       .select('workspace_id, workspaces(*)')
       .eq('user_id', userId)
-    if (activeKey.current !== userId) return
+    if (gen !== genRef.current) return
     if (err) {
       setState((prev) => ({
         key: userId,
@@ -93,8 +103,12 @@ export function useWorkspaces(): {
   }, [userId])
 
   useEffect(() => {
-    if (!userId) return
-    activeKey.current = userId
+    genRef.current += 1
+    if (!userId) {
+      return () => {
+        genRef.current += 1
+      }
+    }
     const timer = setTimeout(() => void refresh(), 0)
     const channel = supabase
       .channel(`my-workspaces:${userId}`)
@@ -110,7 +124,7 @@ export function useWorkspaces(): {
       )
       .subscribe()
     return () => {
-      activeKey.current = null
+      genRef.current += 1
       clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
@@ -169,14 +183,23 @@ export function useWorkspace(workspaceId: string): {
     members: WorkspaceMember[]
     notFound: boolean
   }>({ key: null, workspace: null, members: [], notFound: false })
-  const activeKey = useRef<string | null>(null)
-  const current = state.key === workspaceId
+  // State identity covers both the auth user and the workspace, so a user
+  // switch within the same workspace never shows the previous user's data.
+  const key = `${userId ?? ''}:${workspaceId}`
+  const genRef = useRef(0)
+  const [trackedKey, setTrackedKey] = useState(key)
+  if (trackedKey !== key) {
+    setTrackedKey(key)
+    setState({ key: null, workspace: null, members: [], notFound: false })
+  }
+  const current = state.key === key
   const workspace = current ? state.workspace : null
   const members = useMemo(() => (current ? state.members : []), [current, state.members])
   const notFound = current ? state.notFound : false
   const loading = !current
 
   const refresh = useCallback(async () => {
+    const gen = genRef.current
     const [wsRes, memRes] = await Promise.all([
       supabase.from('workspaces').select('*').eq('id', workspaceId).maybeSingle(),
       supabase
@@ -185,24 +208,26 @@ export function useWorkspace(workspaceId: string): {
         .eq('workspace_id', workspaceId)
         .order('joined_at', { ascending: true }),
     ])
-    if (activeKey.current !== workspaceId) return
+    if (gen !== genRef.current) return
     if (wsRes.error || !wsRes.data) {
-      setState({ key: workspaceId, workspace: null, members: [], notFound: true })
+      setState({ key, workspace: null, members: [], notFound: true })
     } else {
       const list: WorkspaceMember[] = []
       for (const row of memRes.data ?? []) {
         const profile = row.profile
         if (profile && !Array.isArray(profile)) list.push({ ...row, profile })
       }
-      setState({ key: workspaceId, workspace: wsRes.data, members: list, notFound: false })
+      setState({ key, workspace: wsRes.data, members: list, notFound: false })
     }
-  }, [workspaceId])
+  }, [workspaceId, key])
 
   useEffect(() => {
-    activeKey.current = workspaceId
+    genRef.current += 1
+    const gen = genRef.current
     const timer = setTimeout(() => void refresh(), 0)
     const markGone = () => {
-      setState({ key: workspaceId, workspace: null, members: [], notFound: true })
+      if (gen !== genRef.current) return
+      setState({ key, workspace: null, members: [], notFound: true })
     }
     const channel = supabase
       .channel(`workspace:${workspaceId}`)
@@ -229,11 +254,11 @@ export function useWorkspace(workspaceId: string): {
       )
       .subscribe()
     return () => {
-      activeKey.current = null
+      genRef.current += 1
       clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
-  }, [workspaceId, userId, refresh])
+  }, [workspaceId, userId, key, refresh])
 
   const role = members.find((m) => m.user_id === userId)?.role ?? null
 

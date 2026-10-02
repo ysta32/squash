@@ -140,4 +140,159 @@ describe('stale responses', () => {
     expect(result.current.workspace?.id).toBe('B')
     expect(result.current.loading).toBe(false)
   })
+
+  function mockChannel() {
+    const channel = { on: vi.fn(), subscribe: vi.fn() }
+    channel.on.mockReturnValue(channel)
+    channel.subscribe.mockReturnValue(channel)
+    return channel
+  }
+
+  it('useWorkspaces ignores obsolete responses after A -> B -> A', async () => {
+    vi.resetModules()
+    const calls: Deferred<{ data: unknown[]; error: null }>[] = []
+    const channel = mockChannel()
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: () => ({
+          select: () => ({
+            eq: () => {
+              const d = deferred<{ data: unknown[]; error: null }>()
+              calls.push(d)
+              return d.promise
+            },
+          }),
+        }),
+        channel: () => channel,
+        removeChannel: vi.fn(),
+      },
+    }))
+    let uid = 'A'
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: uid } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const ws = (id: string) => ({ workspaces: { id, name: id } })
+    const { result, rerender } = renderHook(() => mod.useWorkspaces())
+    await waitFor(() => expect(calls.length).toBe(1))
+    uid = 'B'
+    rerender()
+    await waitFor(() => expect(calls.length).toBe(2))
+    uid = 'A'
+    rerender()
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspaces).toEqual([])
+    await waitFor(() => expect(calls.length).toBe(3))
+    const [firstA, b, secondA] = calls
+    await act(async () => {
+      firstA.resolve({ data: [ws('stale-A')], error: null })
+      b.resolve({ data: [ws('B')], error: null })
+      await Promise.all([firstA.promise, b.promise])
+    })
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspaces).toEqual([])
+    await act(async () => {
+      secondA.resolve({ data: [ws('fresh-A')], error: null })
+      await secondA.promise
+    })
+    expect(result.current.workspaces.map((w) => w.id)).toEqual(['fresh-A'])
+    expect(result.current.loading).toBe(false)
+  })
+
+  function mockWorkspaceSupabase() {
+    const calls: Deferred<{ data: unknown; error: null }>[] = []
+    const members = Promise.resolve({ data: [], error: null })
+    const channel = mockChannel()
+    vi.doMock('../lib/supabase', () => ({
+      supabase: {
+        from: (table: string) =>
+          table === 'workspaces'
+            ? {
+                select: () => ({
+                  eq: () => ({
+                    maybeSingle: () => {
+                      const d = deferred<{ data: unknown; error: null }>()
+                      calls.push(d)
+                      return d.promise
+                    },
+                  }),
+                }),
+              }
+            : { select: () => ({ eq: () => ({ order: () => members }) }) },
+        channel: () => channel,
+        removeChannel: vi.fn(),
+      },
+    }))
+    return calls
+  }
+
+  it('useWorkspace ignores obsolete responses after A -> B -> A', async () => {
+    vi.resetModules()
+    const calls = mockWorkspaceSupabase()
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const { result, rerender } = renderHook(({ id }) => mod.useWorkspace(id), {
+      initialProps: { id: 'A' },
+    })
+    await waitFor(() => expect(calls.length).toBe(1))
+    rerender({ id: 'B' })
+    await waitFor(() => expect(calls.length).toBe(2))
+    rerender({ id: 'A' })
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspace).toBeNull()
+    await waitFor(() => expect(calls.length).toBe(3))
+    const [firstA, b, secondA] = calls
+    await act(async () => {
+      firstA.resolve({ data: { id: 'A', name: 'stale' }, error: null })
+      b.resolve({ data: { id: 'B', name: 'B' }, error: null })
+      await Promise.all([firstA.promise, b.promise])
+    })
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspace).toBeNull()
+    await act(async () => {
+      secondA.resolve({ data: { id: 'A', name: 'fresh' }, error: null })
+      await secondA.promise
+    })
+    expect(result.current.workspace?.name).toBe('fresh')
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('useWorkspace resets and ignores the previous user within the same workspace', async () => {
+    vi.resetModules()
+    const calls = mockWorkspaceSupabase()
+    let uid = 'u1'
+    vi.doMock('../lib/auth', () => ({ useAuth: () => ({ user: { id: uid } }) }))
+    const { renderHook, waitFor, act } = await import('@testing-library/react')
+    const mod = await import('./useWorkspaces')
+    const { result, rerender } = renderHook(() => mod.useWorkspace('W'))
+    await waitFor(() => expect(calls.length).toBe(1))
+    await act(async () => {
+      calls[0].resolve({ data: { id: 'W', name: 'u1-view' }, error: null })
+      await calls[0].promise
+    })
+    expect(result.current.workspace?.name).toBe('u1-view')
+    // u1 refreshes again (e.g. realtime) but the response is slow.
+    let slow!: Promise<void>
+    act(() => {
+      slow = result.current.refresh()
+    })
+    expect(calls.length).toBe(2)
+    uid = 'u2'
+    rerender()
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspace).toBeNull()
+    await waitFor(() => expect(calls.length).toBe(3))
+    await act(async () => {
+      calls[1].resolve({ data: { id: 'W', name: 'u1-late' }, error: null })
+      await slow
+    })
+    expect(result.current.loading).toBe(true)
+    expect(result.current.workspace).toBeNull()
+    await act(async () => {
+      calls[2].resolve({ data: { id: 'W', name: 'u2-view' }, error: null })
+      await calls[2].promise
+    })
+    expect(result.current.workspace?.name).toBe('u2-view')
+    expect(result.current.loading).toBe(false)
+  })
 })
