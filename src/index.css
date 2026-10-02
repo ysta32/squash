@@ -7,6 +7,7 @@
   --bg-subtle: #f6f6f7;
   --fg: #18181b;
   --fg-muted: #71717a;
+  --muted: var(--fg-muted);
   --border: #e4e4e7;
   --accent: #7c3aed;
   --accent-fg: #ffffff;
@@ -22,6 +23,7 @@
   --bg-subtle: #151518;
   --fg: #ececef;
   --fg-muted: #8b8b94;
+  --muted: var(--fg-muted);
   --border: #26262b;
   --accent: #a78bfa;
   --accent-fg: #0b0b0d;
@@ -61,6 +63,17 @@
   transition-property: color, background-color, border-color, opacity, box-shadow, transform;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

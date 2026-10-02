@@ -40,6 +40,16 @@ export default defineConfig([
     },
   },
   {
+    // Frozen contract (PLAN.md): ToastProvider and useToast live in the same module.
+    files: ['src/components/Toast.tsx'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true, allowExportNames: ['useToast'] },
+      ],
+    },
+  },
+  {
     files: ['*.config.{js,ts}'],
     languageOptions: {
       globals: globals.node,
