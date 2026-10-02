@@ -563,6 +563,18 @@ create or replace trigger attachments_limit
 
 -- -----------------------------------------------------------------------------
 -- RPCs
+--
+-- Lock order (every RPC/trigger acquires a prefix-respecting subset, in this
+-- order, so no two transactions can wait on each other in a cycle):
+--   1. advisory 'squash:user:<uid>'        create_workspace, join_workspace, delete_account
+--   2. advisory 'squash:owner:<uid>'       create_workspace, transfer_ownership (new owner),
+--                                          delete_account, workspaces_limit trigger
+--   3. workspaces row(s) FOR UPDATE        owner RPCs, bugs_set_number; multiple rows are
+--                                          always locked in ascending id order
+--   4. advisory 'squash:members:<ws_id>'   join_workspace, delete_account, members_limit
+--   5. storage.objects rows                purge_workspace_storage_rows (delete paths)
+-- Bug-scoped locks ('squash:bugs:<uid>', 'squash:attachments:<bug_id>') are leaf
+-- locks taken inside single-row INSERT triggers and never held while acquiring 1-5.
 -- -----------------------------------------------------------------------------
 create or replace function public.create_workspace(p_name text)
 returns public.workspaces
@@ -704,6 +716,9 @@ begin
   if auth.uid() is null then
     raise exception using message = 'not_authenticated', errcode = 'P0001';
   end if;
+  if p_new_owner is not null then
+    perform pg_advisory_xact_lock(hashtext('squash:owner:' || p_new_owner::text));
+  end if;
   select w.owner_id into v_owner from public.workspaces w where w.id = p_workspace_id for update;
   if v_owner is null or v_owner <> auth.uid() then
     raise exception using message = 'not_owner', errcode = 'P0001';
@@ -715,9 +730,8 @@ begin
                  where m.workspace_id = p_workspace_id and m.user_id = p_new_owner) then
     raise exception using message = 'not_member', errcode = 'P0001';
   end if;
-  -- 5-owned cap for the new owner (also enforced, under the same lock, by the
-  -- workspaces_limit trigger on update of owner_id).
-  perform pg_advisory_xact_lock(hashtext('squash:owner:' || p_new_owner::text));
+  -- 5-owned cap for the new owner (also enforced by the workspaces_limit trigger
+  -- on update of owner_id); the owner lock was taken above, before the row lock.
   if (select count(*) from public.workspaces w where w.owner_id = p_new_owner) >= 5 then
     raise exception using message = 'workspace_limit', errcode = 'P0001';
   end if;
@@ -782,6 +796,7 @@ begin
   -- (read committed: each statement sees rows committed before it started).
   perform pg_advisory_xact_lock(hashtext('squash:user:' || v_uid::text));
   perform pg_advisory_xact_lock(hashtext('squash:owner:' || v_uid::text));
+  perform 1 from public.workspaces w where w.owner_id = v_uid order by w.id for update;
   for v_ws_id in select w.id from public.workspaces w where w.owner_id = v_uid order by w.id loop
     perform pg_advisory_xact_lock(hashtext('squash:members:' || v_ws_id::text));
   end loop;
@@ -792,7 +807,7 @@ begin
   ) then
     raise exception using message = 'transfer_ownership_required', errcode = 'P0001';
   end if;
-  for v_ws_id in select w.id from public.workspaces w where w.owner_id = v_uid loop
+  for v_ws_id in select w.id from public.workspaces w where w.owner_id = v_uid order by w.id loop
     perform public.purge_workspace_storage_rows(v_ws_id);
     delete from public.workspaces w where w.id = v_ws_id;
   end loop;
