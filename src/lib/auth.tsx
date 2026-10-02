@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: 'google',
       options: {
         redirectTo: authCallbackUrl(next),
-        queryParams: { access_type: 'offline', prompt: 'select_account' },
+        queryParams: { prompt: 'select_account' },
       },
     })
     if (error) throw new Error(error.message)

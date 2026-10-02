@@ -293,6 +293,19 @@ describe('BugDetail', () => {
     expect(screen.getByText('Upload failed')).toBeTruthy()
   })
 
+  it('offers Retry on a failed pending upload', () => {
+    const onRetryUploads = vi.fn()
+    setup(
+      makeBug({
+        pending: [{ localId: 'p1', previewUrl: 'blob:p1', progress: 0.2, error: 'boom' }],
+      }),
+      { onRetryUploads },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect(onRetryUploads).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Screenshot viewer' })).toBeNull()
+  })
+
   it('lightbox navigates with arrow keys and closes on Esc', () => {
     setup(makeBug({ attachments: [attachment('a1'), attachment('a2'), attachment('a3')] }))
     fireEvent.click(screen.getByRole('button', { name: 'Open screenshot 2' }))

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { openChannel } from './useRealtimeStatus'
 import type { MemberRole, Workspace, WorkspaceMember } from '../lib/types'
 
 export const LAST_WORKSPACE_KEY = 'squash:lastWorkspace'
@@ -116,8 +117,7 @@ export function useWorkspaces(): {
       }
     }
     const timer = setTimeout(() => void refresh(), 0)
-    const channel = supabase
-      .channel(`my-workspaces:${userId}`)
+    const channel = openChannel(`my-workspaces:${userId}`)
       .on(
         'postgres_changes',
         {
@@ -240,8 +240,7 @@ export function useWorkspace(workspaceId: string): {
       if (gen !== genRef.current) return
       setState({ key, workspace: null, members: [], notFound: true })
     }
-    const channel = supabase
-      .channel(`workspace:${workspaceId}`)
+    const channel = openChannel(`workspace:${workspaceId}`)
       .on(
         'postgres_changes',
         {

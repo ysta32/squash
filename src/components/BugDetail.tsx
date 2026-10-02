@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, Check, Mic, RotateCcw } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Check, Mic, RotateCcw, RotateCw } from 'lucide-react'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type {
   Bug,
@@ -31,6 +31,8 @@ export interface BugDetailProps {
   /** Counter bumped by the keyboard shortcut to open the Reopen popover. */
   reopenRequest?: number
   onToast?: (msg: string) => void
+  /** Retries this bug's failed screenshot uploads. */
+  onRetryUploads?: () => void
 }
 
 type PopoverState = { bugId: string; mode: 'resolve' | 'reopen' } | null
@@ -103,6 +105,7 @@ function BugBody({
   onReopen,
   onBack,
   onToast,
+  onRetryUploads,
   popover,
   onPopover,
 }: BugBodyProps) {
@@ -382,6 +385,7 @@ function BugBody({
                 upload={p}
                 label={`Open screenshot ${bug.attachments.length + i + 1}`}
                 onOpen={() => setLightboxKey(p.localId)}
+                onRetry={onRetryUploads}
               />
             ))}
           </div>
@@ -442,10 +446,12 @@ function PendingThumb({
   upload,
   label,
   onOpen,
+  onRetry,
 }: {
   upload: PendingUpload
   label: string
   onOpen: () => void
+  onRetry?: () => void
 }) {
   const uploading = !upload.error && upload.progress < 1
   const r = 9
@@ -453,56 +459,70 @@ function PendingThumb({
   const shown = Math.max(0.25, Math.min(1, upload.progress))
 
   return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onOpen}
-      className={cn(THUMB_CLASS, 'cursor-zoom-in')}
-    >
-      <img
-        src={upload.previewUrl}
-        alt=""
-        className={cn('h-full w-full object-cover', uploading && 'opacity-60')}
-      />
-      {uploading && (
-        <span className="absolute inset-0 flex items-center justify-center">
-          <svg
-            viewBox="0 0 24 24"
-            className="h-6 w-6 animate-spin"
-            role="progressbar"
-            aria-label="Uploading"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(upload.progress * 100)}
-          >
-            <circle
-              cx="12"
-              cy="12"
-              r={r}
-              fill="none"
-              stroke="white"
-              strokeOpacity="0.35"
-              strokeWidth="3"
-            />
-            <circle
-              cx="12"
-              cy="12"
-              r={r}
-              fill="none"
-              stroke="white"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={`${shown * circumference} ${circumference}`}
-              transform="rotate(-90 12 12)"
-            />
-          </svg>
-        </span>
+    <div className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onOpen}
+        className={cn(THUMB_CLASS, 'cursor-zoom-in')}
+      >
+        <img
+          src={upload.previewUrl}
+          alt=""
+          className={cn('h-full w-full object-cover', uploading && 'opacity-60')}
+        />
+        {uploading && (
+          <span className="absolute inset-0 flex items-center justify-center">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 animate-spin"
+              role="progressbar"
+              aria-label="Uploading"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(upload.progress * 100)}
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r={r}
+                fill="none"
+                stroke="white"
+                strokeOpacity="0.35"
+                strokeWidth="3"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r={r}
+                fill="none"
+                stroke="white"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${shown * circumference} ${circumference}`}
+                transform="rotate(-90 12 12)"
+              />
+            </svg>
+          </span>
+        )}
+        {upload.error && (
+          <span className="absolute right-1 bottom-1 left-1 rounded bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+            Upload failed
+          </span>
+        )}
+      </button>
+      {upload.error && onRetry && (
+        <button
+          type="button"
+          aria-label="Retry upload"
+          title="Retry upload"
+          onClick={onRetry}
+          className="absolute top-1 right-1 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-black/85"
+        >
+          <RotateCw size={10} aria-hidden="true" />
+          Retry
+        </button>
       )}
-      {upload.error && (
-        <span className="absolute right-1 bottom-1 left-1 rounded bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-          Upload failed
-        </span>
-      )}
-    </button>
+    </div>
   )
 }
