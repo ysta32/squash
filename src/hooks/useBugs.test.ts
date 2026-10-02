@@ -2,7 +2,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta } from '../lib/types'
 import { uploadAttachment } from '../lib/upload'
-import { applySnapshot, countBugs, filterBugs, resetPendingUploads, useBugs } from './useBugs'
+import {
+  applySnapshot,
+  countBugs,
+  filterBugs,
+  resetPendingUploads,
+  retainedUploadCount,
+  useBugs,
+} from './useBugs'
 
 type Result = { data: unknown; error: { message: string } | null }
 
@@ -741,6 +748,7 @@ describe('useBugs sync', () => {
     await waitFor(() => expect(second.result.current.loading).toBe(false))
     expect(second.result.current.bugs[0].attachments.map((a) => a.id)).toEqual(['early'])
     expect(second.result.current.bugs[0].pending).toBeUndefined()
+    expect(retainedUploadCount('ws1')).toBe(0)
 
     // A later fetch that started after the completion is authoritative again.
     h.state.deferSelect = false
@@ -752,5 +760,57 @@ describe('useBugs sync', () => {
     await act(async () => status?.('SUBSCRIBED'))
     await waitFor(() => expect(h.state.selectCalls).toBeGreaterThanOrEqual(3))
     expect(second.result.current.bugs[0].attachments.map((a) => a.id)).toEqual(['early'])
+  })
+
+  it('retains nothing for an upload that completes with no fetch in flight', async () => {
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.fileBug({
+        description: 'x',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    await waitFor(() => expect(result.current.bugs[0].attachments).toHaveLength(1))
+    expect(retainedUploadCount('ws1')).toBe(0)
+  })
+
+  it('clears retained uploads when the last hook for the workspace unmounts', async () => {
+    let finish: (a: ReturnType<typeof att>) => void = () => {}
+    vi.mocked(uploadAttachment).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const first = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    await act(async () => {
+      await first.result.current.fileBug({
+        description: 'x',
+        transcript: null,
+        severity: 'low',
+        files: [new File(['img'], 'a.png', { type: 'image/png' })],
+      })
+    })
+    const id = first.result.current.bugs[0].id
+    await waitFor(() => expect(vi.mocked(uploadAttachment)).toHaveBeenCalledTimes(1))
+
+    h.state.deferSelect = true
+    const second = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(h.state.resolveSelect).not.toBeNull())
+    await act(async () => {
+      finish(att('held', id))
+    })
+    expect(retainedUploadCount('ws1')).toBe(1)
+
+    first.unmount()
+    expect(retainedUploadCount('ws1')).toBe(1)
+    second.unmount()
+    expect(retainedUploadCount('ws1')).toBe(0)
   })
 })

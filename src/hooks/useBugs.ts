@@ -296,35 +296,39 @@ type CompletedListener = (ws: string, attachment: BugAttachment) => void
 const completedListeners = new Set<CompletedListener>()
 
 /**
- * Completed uploads retained per workspace (bug id → attachment id → entry) until a list
- * snapshot that is guaranteed to include them has been applied, so an upload finishing while a
- * fetch is in flight (or before its bug is in state) is not lost. `seq` orders completions
- * against fetch starts (same counter as `fetchesInFlight`).
+ * Completed uploads retained per workspace (bug id → attachment id → entry) only while a list
+ * fetch that started before the completion is still in flight: that fetch's snapshot may lack
+ * them. With no such fetch, the live state merge (and any later fetch) already has them.
+ * `seq` orders completions against fetch starts (same counter as `fetchesInFlight`).
  */
 interface RetainedAttachment {
   attachment: BugAttachment
   seq: number
-  /** A fetch that started after this completion has been applied. */
-  covered: boolean
 }
 const retainedCompleted = new Map<string, Map<string, Map<string, RetainedAttachment>>>()
 /** Start sequence numbers of list fetches currently in flight, per workspace. */
 const fetchesInFlight = new Map<string, Set<number>>()
+/** Mounted useBugs instances per workspace. */
+const mountedHooks = new Map<string, number>()
 let syncSeq = 0
 
 /** Announces a finished upload to every mounted useBugs instance. */
 function publishCompleted(ws: string, attachment: BugAttachment): void {
-  let byBug = retainedCompleted.get(ws)
-  if (!byBug) {
-    byBug = new Map()
-    retainedCompleted.set(ws, byBug)
+  const seq = ++syncSeq
+  // Every in-flight fetch started before `seq`, so any of them may miss this attachment.
+  if (fetchesInFlight.get(ws)?.size) {
+    let byBug = retainedCompleted.get(ws)
+    if (!byBug) {
+      byBug = new Map()
+      retainedCompleted.set(ws, byBug)
+    }
+    let byId = byBug.get(attachment.bug_id)
+    if (!byId) {
+      byId = new Map()
+      byBug.set(attachment.bug_id, byId)
+    }
+    byId.set(attachment.id, { attachment, seq })
   }
-  let byId = byBug.get(attachment.bug_id)
-  if (!byId) {
-    byId = new Map()
-    byBug.set(attachment.bug_id, byId)
-  }
-  byId.set(attachment.id, { attachment, seq: ++syncSeq, covered: false })
   for (const listener of completedListeners) listener(ws, attachment)
 }
 
@@ -351,25 +355,34 @@ function retainedSince(ws: string, startSeq: number): (bugId: string) => BugAtta
 }
 
 /**
- * Ends a fetch. If it was applied, every retained completion before its start is covered (the
- * server has it, or it was deleted since). Covered entries are dropped once no fetch that
- * started before them is still in flight.
+ * Ends a fetch (applied or not). Entries no remaining in-flight fetch predates are dropped:
+ * everything once none is in flight, else those with seq ≤ the oldest remaining fetch start.
  */
-function endFetch(ws: string, startSeq: number, applied: boolean): void {
+function endFetch(ws: string, startSeq: number): void {
   const inflight = fetchesInFlight.get(ws)
   inflight?.delete(startSeq)
   if (inflight && inflight.size === 0) fetchesInFlight.delete(ws)
   const byBug = retainedCompleted.get(ws)
   if (!byBug) return
-  const oldestInFlight = inflight?.size ? Math.min(...inflight) : Infinity
+  if (!inflight?.size) {
+    retainedCompleted.delete(ws)
+    return
+  }
+  const oldestInFlight = Math.min(...inflight)
   for (const [bugId, byId] of byBug) {
     for (const [id, r] of byId) {
-      if (applied && r.seq < startSeq) r.covered = true
-      if (r.covered && r.seq < oldestInFlight) byId.delete(id)
+      if (r.seq <= oldestInFlight) byId.delete(id)
     }
     if (byId.size === 0) byBug.delete(bugId)
   }
   if (byBug.size === 0) retainedCompleted.delete(ws)
+}
+
+/** Test helper: number of completed uploads retained for a workspace. */
+export function retainedUploadCount(ws: string): number {
+  let n = 0
+  for (const byId of retainedCompleted.get(ws)?.values() ?? []) n += byId.size
+  return n
 }
 
 function subscribeCompleted(listener: CompletedListener): () => void {
@@ -385,6 +398,7 @@ export function resetPendingUploads(): void {
   pendingFiles.clear()
   retainedCompleted.clear()
   fetchesInFlight.clear()
+  mountedHooks.clear()
   for (const ws of workspaces) publishPending(ws)
 }
 
@@ -491,6 +505,7 @@ export function useBugs(
 
   useEffect(() => {
     liveWsRef.current = workspaceId
+    mountedHooks.set(workspaceId, (mountedHooks.get(workspaceId) ?? 0) + 1)
     let active = true
     let latest = 0
     const touched = touchedRef.current
@@ -499,7 +514,6 @@ export function useBugs(
       const seq = ++latest
       touched.clear()
       const startSeq = beginFetch(workspaceId)
-      let applied = false
       try {
         let fetched: BugWithMeta[]
         try {
@@ -530,9 +544,8 @@ export function useBugs(
             }),
           true,
         )
-        applied = liveWsRef.current === workspaceId
       } finally {
-        endFetch(workspaceId, startSeq, applied)
+        endFetch(workspaceId, startSeq)
       }
     }
 
@@ -625,6 +638,12 @@ export function useBugs(
     return () => {
       active = false
       if (liveWsRef.current === workspaceId) liveWsRef.current = null
+      const mounted = (mountedHooks.get(workspaceId) ?? 1) - 1
+      if (mounted > 0) mountedHooks.set(workspaceId, mounted)
+      else {
+        mountedHooks.delete(workspaceId)
+        retainedCompleted.delete(workspaceId)
+      }
       void supabase.removeChannel(channel)
     }
   }, [workspaceId, mutate])
