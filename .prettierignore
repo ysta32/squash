@@ -5,3 +5,4 @@ package-lock.json
 .orch
 .vercel
 *.tsbuildinfo
+.squash

@@ -25,7 +25,12 @@ vi.mock('../hooks/useSpeech', () => ({
   },
 }))
 
-vi.mock('../hooks/usePasteImage', () => ({ usePasteImage: () => {} }))
+const pasteState = vi.hoisted(() => ({ onFiles: (_f: File[]) => {} }))
+vi.mock('../hooks/usePasteImage', () => ({
+  usePasteImage: (onFiles: (f: File[]) => void) => {
+    pasteState.onFiles = onFiles
+  },
+}))
 
 function setup(onSubmit = vi.fn().mockResolvedValue(undefined), onToast = vi.fn()) {
   render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} onToast={onToast} />)
@@ -46,6 +51,33 @@ describe('CaptureBar', () => {
   })
   afterEach(cleanup)
 
+  it('pasting a screenshot from the page focuses the bar so you can type', () => {
+    const { box } = setup()
+    expect(document.activeElement).not.toBe(box)
+    act(() => pasteState.onFiles([new File(['x'], 'shot.png', { type: 'image/png' })]))
+    expect(document.activeElement).toBe(box)
+    expect(screen.getByAltText('shot.png')).toBeInTheDocument()
+  })
+
+  it('pasting a screenshot while typing elsewhere keeps that focus', () => {
+    setup()
+    const other = document.createElement('textarea')
+    document.body.appendChild(other)
+    other.focus()
+    act(() => pasteState.onFiles([new File(['x'], 'shot.png', { type: 'image/png' })]))
+    expect(document.activeElement).toBe(other)
+    other.remove()
+  })
+
+  it('files a feature request when the Features tab is showing', () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} kind="feature" />)
+    const box = screen.getByPlaceholderText('Describe the feature…')
+    fireEvent.change(box, { target: { value: 'Dark mode' } })
+    fireEvent.click(screen.getByRole('button', { name: 'File feature request' }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'feature' }))
+  })
+
   it('Enter submits with medium severity and clears', async () => {
     const { onSubmit, box } = setup()
     fireEvent.change(box, { target: { value: '  Broken login  ' } })
@@ -54,6 +86,7 @@ describe('CaptureBar', () => {
       description: 'Broken login',
       transcript: null,
       severity: 'medium',
+      kind: 'bug',
       files: [],
     })
     expect(box.value).toBe('')

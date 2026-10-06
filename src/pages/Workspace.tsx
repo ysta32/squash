@@ -17,16 +17,18 @@ import { InviteDialog } from '../components/InviteDialog'
 import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
-import { filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
+import { countBugs, filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
+import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
-import type { Bug } from '../lib/types'
+import type { Bug, BugKind } from '../lib/types'
 import { cn } from '../lib/utils'
 
 const DEFAULT_FILTERS: BugFilters = {
+  kind: 'bug',
   tab: 'open',
   filedBy: null,
   resolvedBy: null,
@@ -65,7 +67,7 @@ export default function Workspace() {
     if (bug.filed_by !== selfId) {
       const name =
         ws.members.find((m) => m.user_id === bug.filed_by)?.profile.display_name ?? 'Someone'
-      toast(`${name} filed #${bug.number}`)
+      toast(`${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
     }
     setHighlightIds((prev) => new Set(prev).add(bug.id))
     const timers = highlightTimers.current
@@ -84,17 +86,8 @@ export default function Workspace() {
     )
   }
 
-  const {
-    bugs,
-    loading,
-    counts,
-    fileBug,
-    updateBug,
-    resolveBug,
-    reopenBug,
-    retryUploads,
-    getBugByNumber,
-  } = useBugs(workspaceId, { onRemoteInsert })
+  const { bugs, loading, fileBug, updateBug, resolveBug, reopenBug, retryUploads, getBugByNumber } =
+    useBugs(workspaceId, { onRemoteInsert })
 
   const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)
   const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set())
@@ -106,7 +99,7 @@ export default function Workspace() {
     })
   }, [])
   const clearPicked = useCallback(() => setPickedIds(new Set()), [])
-  const claude = useClaudeExport(ws.workspace?.name ?? '', ws.members, toast)
+  const claude = useClaudeExport(workspaceId, ws.workspace?.name ?? '', ws.members, toast)
   /** Selection of an optimistic bug (no number yet, so it cannot live in the URL). */
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [lookupMissing, setLookupMissing] = useState<number | null>(null)
@@ -137,6 +130,18 @@ export default function Workspace() {
   const bugPath = useCallback((n: number) => `/app/${workspaceId}/bug/${n}`, [workspaceId])
 
   const presence = usePresence(workspaceId, selected?.id ?? null)
+
+  // The list follows the open item's kind: a deep link to a feature request (or moving the open
+  // item between Bugs and Features) switches the list to match.
+  const selectedKind = selected?.kind ?? null
+  const [followedKind, setFollowedKind] = useState<BugKind | null>(null)
+  if (selectedKind !== followedKind) {
+    setFollowedKind(selectedKind)
+    if (selectedKind !== null && selectedKind !== filters.kind) {
+      setFilters((f) => ({ ...f, kind: selectedKind }))
+      setPickedIds(new Set())
+    }
+  }
 
   useEffect(() => {
     if (ws.workspace) setLastWorkspace(ws.workspace.id)
@@ -189,6 +194,11 @@ export default function Workspace() {
   }, [hasNumberParam, navigate, basePath])
 
   const visible = useMemo(() => filterBugs(bugs, filters), [bugs, filters])
+  const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
+  const openByKind = useMemo(
+    () => ({ bug: countBugs(bugs, 'bug').open, feature: countBugs(bugs, 'feature').open }),
+    [bugs],
+  )
 
   const step = (dir: 1 | -1) => {
     if (visible.length === 0) return
@@ -220,7 +230,8 @@ export default function Workspace() {
   }
 
   useOverlayOpen(inviteOpen)
-  const shortcutsEnabled = !inviteOpen && !shortcutsOpen && ws.workspace !== null
+  const shortcutsEnabled =
+    !inviteOpen && !shortcutsOpen && !claude.setupOpen && ws.workspace !== null
   const opts = { enabled: shortcutsEnabled }
   useShortcut(
     'n',
@@ -288,7 +299,7 @@ export default function Workspace() {
       const target = picked.length > 0 ? picked : selected ? [selected] : []
       if (target.length === 0) return
       e.preventDefault()
-      claude.exportBugs(target)
+      claude.sendBugs(target)
     },
     opts,
   )
@@ -349,8 +360,8 @@ export default function Workspace() {
         reopenRequest={reopenRequest}
         onToast={toast}
         onRetryUploads={selected ? () => void retryUploads(selected.id) : undefined}
-        onExport={(bug) => claude.exportBugs([bug])}
-        bridge={claude.bridge}
+        onSend={(bug) => claude.sendBugs([bug])}
+        onCopy={(bug) => claude.copyBugs([bug])}
       />
     )
   } else if (notFound) {
@@ -396,6 +407,7 @@ export default function Workspace() {
           <CaptureBar
             workspaceId={workspaceId}
             onSubmit={fileBug}
+            kind={filters.kind}
             onToast={toast}
             focusRef={captureRef}
           />
@@ -412,8 +424,16 @@ export default function Workspace() {
             bugs={bugs}
             loading={loading}
             counts={counts}
+            openByKind={openByKind}
             filters={filters}
-            onFilters={setFilters}
+            onFilters={(next) => {
+              // Switching between Bugs and Features starts fresh: no picks, nothing open.
+              if (next.kind !== filters.kind) {
+                clearPicked()
+                deselect()
+              }
+              setFilters(next)
+            }}
             selectedId={selected?.id ?? null}
             onSelect={select}
             members={ws.members}
@@ -423,8 +443,10 @@ export default function Workspace() {
             pickedIds={pickedIds}
             onTogglePick={togglePick}
             onClearPicked={clearPicked}
-            onExport={claude.exportBugs}
-            bridge={claude.bridge}
+            onSend={claude.sendBugs}
+            onCopy={claude.copyBugs}
+            onClaudeSetup={claude.openSetup}
+            claudeConnected={claude.connected}
           />
         </div>
         <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>
@@ -439,6 +461,15 @@ export default function Workspace() {
         onRegenerate={ws.regenerateInviteCode}
       />
       <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ClaudeSetupDialog
+        open={claude.setupOpen}
+        onClose={claude.closeSetup}
+        status={claude.status}
+        workspaceId={workspaceId}
+        workspaceName={workspace.name}
+        pending={claude.pending}
+        onSendPending={() => claude.sendBugs(claude.pending)}
+      />
       <ReconnectingPill />
     </div>
   )

@@ -30,6 +30,7 @@ function bug(overrides: Partial<BugWithMeta> = {}): BugWithMeta {
     transcript: null,
     severity: 'high',
     status: 'open',
+    kind: 'bug',
     filed_by: 'ada',
     created_at: '2026-10-01T10:00:00Z',
     resolved_by: null,
@@ -93,6 +94,16 @@ describe('formatClaudePrompt', () => {
     expect(prompt).toContain('bug-12-1.webp: unavailable')
     expect(downloads).toEqual([])
     expect(prompt).not.toContain('curl')
+  })
+})
+
+describe('formatClaudePrompt for feature requests', () => {
+  it('asks Claude to build a feature, not fix a bug', () => {
+    const { prompt } = formatClaudePrompt({ ...base, bugs: [bug({ kind: 'feature' })] })
+    expect(prompt).toContain('Build this feature request from the Squash bug tracker')
+    expect(prompt).toContain('## Feature request #')
+    expect(prompt).toContain('Implement it in this codebase and verify it works.')
+    expect(prompt).not.toContain('root cause')
   })
 })
 

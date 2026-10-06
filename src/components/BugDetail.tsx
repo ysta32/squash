@@ -1,5 +1,16 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, Bot, Check, Mic, RotateCcw, RotateCw } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Bot,
+  Bug as BugIcon,
+  Check,
+  Copy,
+  Lightbulb,
+  Mic,
+  RotateCcw,
+  RotateCw,
+} from 'lucide-react'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type {
   Bug,
@@ -9,14 +20,14 @@ import type {
   Severity,
   WorkspaceMember,
 } from '../lib/types'
-import { SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
+import { KIND_LABEL, SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import { cn, relativeTime } from '../lib/utils'
 import { Avatar } from './Avatar'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
 import { ResolvePopover } from './ResolvePopover'
 
-export type BugPatch = Partial<Pick<Bug, 'title' | 'description' | 'severity'>>
+export type BugPatch = Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>
 
 export interface BugDetailProps {
   bug: BugWithMeta | null
@@ -33,9 +44,10 @@ export interface BugDetailProps {
   onToast?: (msg: string) => void
   /** Retries this bug's failed screenshot uploads. */
   onRetryUploads?: () => void
-  /** Sends this bug to Claude Code (or copies it when the local bridge is not running). */
-  onExport?: (bug: BugWithMeta) => void
-  bridge?: boolean
+  /** Opens Claude Code on this bug (or the setup guide when the helper is not connected). */
+  onSend?: (bug: BugWithMeta) => void
+  /** Copies a ready-to-paste Claude Code prompt for this bug. */
+  onCopy?: (bug: BugWithMeta) => void
 }
 
 type PopoverState = { bugId: string; mode: 'resolve' | 'reopen' } | null
@@ -109,8 +121,8 @@ function BugBody({
   onBack,
   onToast,
   onRetryUploads,
-  onExport,
-  bridge = false,
+  onSend,
+  onCopy,
   popover,
   onPopover,
 }: BugBodyProps) {
@@ -191,6 +203,9 @@ function BugBody({
     if (severity !== bug.severity) run(() => onUpdate(bug.id, { severity }))
   }
 
+  const otherKind = bug.kind === 'feature' ? 'bug' : 'feature'
+  const KindIcon = bug.kind === 'feature' ? Lightbulb : BugIcon
+
   function confirmPopover(note: string | null) {
     onPopover(null)
     // Act on the bug's current status: the popover label always mirrors it.
@@ -223,6 +238,17 @@ function BugBody({
           <ArrowLeft className="h-4 w-4" />
         </button>
         <span className="font-mono text-xs text-muted">#{bug.optimistic ? '…' : bug.number}</span>
+        <button
+          type="button"
+          disabled={!editable}
+          onClick={() => run(() => onUpdate(bug.id, { kind: otherKind }))}
+          aria-label={`${KIND_LABEL[bug.kind].one}: move to ${KIND_LABEL[otherKind].many}`}
+          title={`Move to ${KIND_LABEL[otherKind].many}`}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-bg-subtle hover:text-fg disabled:cursor-default disabled:hover:bg-transparent"
+        >
+          <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          {KIND_LABEL[bug.kind].one}
+        </button>
         <div role="group" aria-label="Severity" className="flex items-center gap-1">
           {SEVERITIES.map((s) => {
             const active = s === bug.severity
@@ -248,21 +274,41 @@ function BugBody({
             )
           })}
         </div>
-        {onExport && (
-          <button
-            type="button"
-            disabled={!editable}
-            onClick={() => onExport(bug)}
-            title={
-              bridge ? 'Open Claude Code on this bug (C)' : 'Copy a prompt for Claude Code (C)'
-            }
-            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-fg hover:bg-bg-subtle disabled:opacity-50"
-          >
-            <Bot className="h-4 w-4" />
-            {bridge ? 'Send to Claude' : 'Copy for Claude'}
-          </button>
+        {(onSend || onCopy) && (
+          <div className="ml-auto flex items-center">
+            {onSend && (
+              <button
+                type="button"
+                disabled={!editable}
+                onClick={() => onSend(bug)}
+                title="Open Claude Code on this bug (C)"
+                className={cn(
+                  'inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm text-fg hover:bg-bg-subtle disabled:opacity-50',
+                  onCopy ? 'rounded-l-md' : 'rounded-md',
+                )}
+              >
+                <Bot className="h-4 w-4" />
+                Send to Claude
+              </button>
+            )}
+            {onCopy && (
+              <button
+                type="button"
+                disabled={!editable}
+                onClick={() => onCopy(bug)}
+                aria-label="Copy for Claude"
+                title="Copy a prompt to paste into Claude Code"
+                className={cn(
+                  'inline-flex items-center border border-border px-2.5 py-2 text-sm text-fg hover:bg-bg-subtle disabled:opacity-50',
+                  onSend ? '-ml-px rounded-r-md' : 'rounded-md',
+                )}
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         )}
-        <div className={cn('relative', !onExport && 'ml-auto')}>
+        <div className={cn('relative', !onSend && !onCopy && 'ml-auto')}>
           <button
             type="button"
             disabled={!editable}

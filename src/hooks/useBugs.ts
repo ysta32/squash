@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Database } from '../lib/database.types'
-import type { Bug, BugAttachment, BugWithMeta, PendingUpload, Severity } from '../lib/types'
+import type {
+  Bug,
+  BugAttachment,
+  BugKind,
+  BugWithMeta,
+  PendingUpload,
+  Severity,
+} from '../lib/types'
 import { deriveTitle, randomId } from '../lib/utils'
 import { compressImage } from './useImageCompression'
 import { uploadAttachment } from '../lib/upload'
@@ -12,6 +19,8 @@ export { useBug } from './useBug'
 export { useSignedUrl } from './useSignedUrl'
 
 export interface BugFilters {
+  /** Bugs or feature requests: the list only ever shows one kind. */
+  kind: BugKind
   tab: 'open' | 'resolved' | 'all'
   filedBy: string | null
   resolvedBy: string | null
@@ -23,6 +32,7 @@ export interface NewBugInput {
   description: string
   transcript: string | null
   severity: Severity
+  kind: BugKind
   files: File[]
 }
 
@@ -39,7 +49,7 @@ export interface UseBugsResult {
   fileBug(input: NewBugInput): Promise<void>
   updateBug(
     id: string,
-    patch: Partial<Pick<Bug, 'title' | 'description' | 'severity'>>,
+    patch: Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>,
   ): Promise<void>
   resolveBug(id: string, note: string | null): Promise<void>
   reopenBug(id: string, note: string | null): Promise<void>
@@ -76,12 +86,13 @@ export function friendlyError(err: unknown, fallback = 'Something went wrong. Tr
   return message || fallback
 }
 
-/** Pure list filter used by the bug list (tabs, people, severity, free-text and `#<number>`). */
+/** Pure list filter used by the bug list (kind, tabs, people, severity, free-text and `#<number>`). */
 export function filterBugs(bugs: BugWithMeta[], f: BugFilters): BugWithMeta[] {
   const q = f.query.trim().toLowerCase()
   const numberMatch = /^#(\d+)$/.exec(q)
   const wantedNumber = numberMatch ? Number(numberMatch[1]) : null
   return bugs.filter((b) => {
+    if (b.kind !== f.kind) return false
     if (f.tab !== 'all' && b.status !== f.tab) return false
     if (f.filedBy !== null && b.filed_by !== f.filedBy) return false
     if (f.resolvedBy !== null && b.resolved_by !== f.resolvedBy) return false
@@ -93,14 +104,16 @@ export function filterBugs(bugs: BugWithMeta[], f: BugFilters): BugWithMeta[] {
   })
 }
 
-export function countBugs(bugs: BugWithMeta[]): BugCounts {
+/** Status counts, of one kind only when `kind` is given. */
+export function countBugs(bugs: BugWithMeta[], kind?: BugKind): BugCounts {
   let open = 0
   let resolved = 0
   for (const b of bugs) {
+    if (kind !== undefined && b.kind !== kind) continue
     if (b.status === 'open') open++
     else resolved++
   }
-  return { open, resolved, all: bugs.length }
+  return { open, resolved, all: open + resolved }
 }
 
 function toBugWithMeta(row: BugRowWithAttachments): BugWithMeta {
@@ -698,7 +711,9 @@ export function useBugs(
       const id = randomId()
       const now = new Date().toISOString()
       const title =
-        deriveTitle(input.description) || deriveTitle(input.transcript ?? '') || 'Untitled bug'
+        deriveTitle(input.description) ||
+        deriveTitle(input.transcript ?? '') ||
+        (input.kind === 'feature' ? 'Untitled feature' : 'Untitled bug')
       const description = input.description.trim()
       const transcript = input.transcript?.trim() ? input.transcript.trim() : null
 
@@ -722,6 +737,7 @@ export function useBugs(
         transcript,
         severity: input.severity,
         status: 'open',
+        kind: input.kind,
         filed_by: filedBy,
         created_at: now,
         resolved_by: null,
@@ -745,6 +761,7 @@ export function useBugs(
             description,
             transcript,
             severity: input.severity,
+            kind: input.kind,
             filed_by: filedBy,
           })
           .select()
@@ -842,7 +859,7 @@ export function useBugs(
   )
 
   const updateBug = useCallback(
-    (id: string, patch: Partial<Pick<Bug, 'title' | 'description' | 'severity'>>) =>
+    (id: string, patch: Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>) =>
       patchBug(id, patch, patch),
     [patchBug],
   )

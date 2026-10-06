@@ -4,9 +4,10 @@ import { Camera, Info, Mic, Paperclip, Send } from 'lucide-react'
 import type { NewBugInput } from '../hooks/useBugs'
 import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
+import { isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 import { SEVERITIES } from '../lib/types'
-import type { Severity } from '../lib/types'
+import type { BugKind, Severity } from '../lib/types'
 import { cn, randomId } from '../lib/utils'
 import { AttachmentChip } from './AttachmentChip'
 import { SeverityPicker } from './SeverityPicker'
@@ -17,6 +18,8 @@ const MAX_TEXTAREA_PX = 6 * 24
 interface CaptureBarProps {
   workspaceId: string
   onSubmit: (input: NewBugInput) => Promise<void>
+  /** What Enter files: a bug or a feature request. */
+  kind?: BugKind
   onToast?: (m: string) => void
   focusRef?: RefObject<HTMLTextAreaElement | null>
 }
@@ -33,7 +36,14 @@ function isCoarsePointer(): boolean {
     : false
 }
 
-export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: CaptureBarProps) {
+export function CaptureBar({
+  workspaceId,
+  onSubmit,
+  kind = 'bug',
+  onToast,
+  focusRef,
+}: CaptureBarProps) {
+  const noun = kind === 'feature' ? 'feature request' : 'bug'
   const [value, setValueState] = useState('')
   const [interim, setInterim] = useState('')
   const valueRef = useRef('')
@@ -125,7 +135,15 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
     [onToast],
   )
 
-  usePasteImage(addFiles)
+  // Screenshot → ⌘V anywhere → type: land the cursor in the bar unless another field has focus.
+  const onPasteFiles = useCallback(
+    (files: File[]) => {
+      addFiles(files)
+      if (!isTypingTarget(document.activeElement)) innerRef.current?.focus()
+    },
+    [addFiles],
+  )
+  usePasteImage(onPasteFiles)
 
   const removeChip = (id: string) => {
     setChips((prev) => {
@@ -184,6 +202,7 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
         description,
         transcript: snapshot.transcript,
         severity: snapshot.severity,
+        kind,
         files,
       })
       snapshot.chips.forEach((c) => URL.revokeObjectURL(c.previewUrl))
@@ -199,7 +218,7 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
       }
       setSeverity(snapshot.severity)
       setChips((prev) => [...snapshot.chips, ...prev])
-      onToast?.(err instanceof Error ? err.message : 'Could not file bug')
+      onToast?.(err instanceof Error ? err.message : `Could not file ${noun}`)
     }
   }
 
@@ -242,7 +261,9 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
           ref={setTextarea}
           value={value}
           rows={1}
-          placeholder={interim ? '' : 'Describe the bug…'}
+          placeholder={
+            interim ? '' : kind === 'feature' ? 'Describe the feature…' : 'Describe the bug…'
+          }
           onChange={(e) => setValue(e.target.value)}
           className="relative block w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-[var(--fg)] outline-none placeholder:text-[var(--muted)]"
         />
@@ -332,8 +353,8 @@ export function CaptureBar({ workspaceId, onSubmit, onToast, focusRef }: Capture
           <SeverityPicker value={severity} onChange={setSeverity} />
           <button
             type="button"
-            aria-label="File bug"
-            title="File bug (Enter)"
+            aria-label={`File ${noun}`}
+            title={`File ${noun} (Enter)`}
             disabled={!canSubmit}
             onClick={() => void submit()}
             className="rounded bg-[var(--accent)] p-1.5 text-white disabled:opacity-40"

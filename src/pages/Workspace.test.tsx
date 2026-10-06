@@ -76,6 +76,7 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
   const actual = await importOriginal<typeof UseBugsModule>()
   return {
     filterBugs: actual.filterBugs,
+    countBugs: actual.countBugs,
     useBugs: (_ws: string, opts?: { onRemoteInsert?: (bug: Bug) => void }) => {
       mocks.onRemoteInsert = opts?.onRemoteInsert ?? null
       return {
@@ -136,6 +137,7 @@ function makeBug(n: number, over: Partial<BugWithMeta> = {}): BugWithMeta {
     transcript: null,
     severity: 'medium',
     status: 'open',
+    kind: 'bug',
     filed_by: 'u1',
     created_at: NOW,
     resolved_by: null,
@@ -325,6 +327,14 @@ describe('Workspace', () => {
     act(() => vi.advanceTimersByTime(4000))
     expect(screen.queryByText('Grace filed #4')).toBeNull()
     expect(row).not.toHaveClass('bg-accent/10')
+  })
+
+  it('a deep link to a feature request switches the list to Features', () => {
+    mocks.bugs = [makeBug(4, { kind: 'feature', title: 'Feature number 4' }), ...mocks.bugs]
+    show('/app/ws/bug/4')
+    expect(screen.getByRole('tab', { name: /Features/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('option', { name: /Feature number 4/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Bug number 3/ })).not.toBeInTheDocument()
   })
 
   it('shows a not-found message for an unknown bug number', async () => {

@@ -63,7 +63,7 @@ export function formatClaudePrompt({
   const downloads: ScreenshotDownload[] = []
   const sections = bugs.map((bug) => {
     const lines = [
-      `## Bug #${bug.number}: ${bug.title}`,
+      `## ${bug.kind === 'feature' ? 'Feature request' : 'Bug'} #${bug.number}: ${bug.title}`,
       '',
       `- Severity: ${SEVERITY_LABEL[bug.severity]}`,
       `- Status: ${bug.status === 'open' ? 'Open' : 'Resolved'}`,
@@ -98,8 +98,14 @@ export function formatClaudePrompt({
     return lines.join('\n')
   })
 
-  const count = bugs.length === 1 ? 'this bug' : `these ${bugs.length} bugs`
-  const intro = [`Fix ${count} from the Squash bug tracker (workspace "${workspaceName}").`, '']
+  const features = bugs.length > 0 && bugs.every((b) => b.kind === 'feature')
+  const mixed = !features && bugs.some((b) => b.kind === 'feature')
+  const noun = features ? 'feature request' : mixed ? 'item' : 'bug'
+  const count = bugs.length === 1 ? `this ${noun}` : `these ${bugs.length} ${noun}s`
+  const intro = [
+    `${features ? 'Build' : mixed ? 'Work through' : 'Fix'} ${count} from the Squash bug tracker (workspace "${workspaceName}").`,
+    '',
+  ]
   if (downloads.length > 0 && localDir) {
     intro.push(
       'Before you start, view every screenshot listed below with the Read tool. They show what is wrong.',
@@ -118,10 +124,15 @@ export function formatClaudePrompt({
       '',
     )
   }
+  const task = features
+    ? 'implement it in this codebase and verify it works'
+    : mixed
+      ? 'fix each bug at its root cause or implement each feature request, then verify it'
+      : 'find the root cause in this codebase, fix it and verify the fix'
   intro.push(
     bugs.length === 1
-      ? 'Find the root cause in this codebase, fix it and verify the fix. When you are done, summarize what you changed.'
-      : 'Work through the bugs one at a time: find the root cause in this codebase, fix it and verify the fix. When you are done, list each bug number with what you changed.',
+      ? `${task[0].toUpperCase()}${task.slice(1)}. When you are done, summarize what you changed.`
+      : `Work through the ${noun}s one at a time: ${task}. When you are done, list each number with what you changed.`,
   )
   return { prompt: [intro.join('\n'), ...sections].join('\n\n') + '\n', downloads }
 }
@@ -167,17 +178,74 @@ export async function copyPending(text: Promise<string>): Promise<void> {
   await navigator.clipboard.writeText(await text)
 }
 
-/** Local bridge started with `npm run claude-bridge`; it opens Claude Code in a terminal. */
+/** Local bridge installed from `/bridge/install.sh`; it opens Claude Code in a terminal. */
 export const BRIDGE_URL = 'http://127.0.0.1:4317'
+/** Oldest bridge that maps each workspace to its own project folder. */
+export const BRIDGE_VERSION = 2
 
-/** True when the local bridge answers. Never throws. */
-export async function pingBridge(timeoutMs = 800): Promise<boolean> {
+export interface BridgeStatus {
+  version: number
+  platform: string
+}
+
+/** The bridge's status, or null when it is not running. Never throws. */
+export async function pingBridge(timeoutMs = 800): Promise<BridgeStatus | null> {
   try {
     const res = await fetch(`${BRIDGE_URL}/health`, { signal: AbortSignal.timeout(timeoutMs) })
-    return res.ok
+    if (!res.ok) return null
+    const body = (await res.json().catch(() => ({}))) as Partial<BridgeStatus>
+    return { version: body.version ?? 1, platform: body.platform ?? 'unknown' }
   } catch {
-    return false
+    return null
   }
+}
+
+/** One-line terminal command that installs (or updates) the bridge for this Squash origin. */
+export function installCommand(origin: string): string {
+  return `curl -fsSL ${origin}/bridge/install.sh | sh -s -- ${origin}`
+}
+
+export class BridgeError extends Error {
+  readonly code: string | undefined
+  constructor(message: string, code?: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+async function bridgeRequest<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BRIDGE_URL}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const json = (await res.json().catch(() => null)) as
+    (T & { error?: string; code?: string }) | null
+  if (!res.ok || !json) {
+    throw new BridgeError(json?.error ?? `Claude bridge failed (${res.status})`, json?.code)
+  }
+  return json
+}
+
+/** The project folder the bridge opens Claude in for this workspace, if one is set. */
+export async function getBridgeFolder(workspaceId: string): Promise<string | null> {
+  const { folder } = await bridgeRequest<{ folder: string | null }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/folder`,
+  )
+  return folder
+}
+
+/** Sets the workspace's project folder: a typed path, or the bridge's native picker when omitted. */
+export async function setBridgeFolder(
+  workspaceId: string,
+  workspaceName: string,
+  folder?: string,
+): Promise<string> {
+  const res = await bridgeRequest<{ folder: string }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/folder`,
+    { workspaceName, folder },
+  )
+  return res.folder
 }
 
 /** Folder name for one export batch, e.g. `20261006-153012-12-14`. */
@@ -189,20 +257,19 @@ export function batchName(bugs: BugWithMeta[], now = new Date()): string {
 
 /** Hands the bugs to the local bridge, which downloads screenshots and launches Claude Code. */
 export async function sendToBridge(
-  input: Omit<ClaudeExportInput, 'urls' | 'comments' | 'localDir'>,
+  input: Omit<ClaudeExportInput, 'urls' | 'comments' | 'localDir'> & { workspaceId: string },
 ): Promise<void> {
-  const batch = batchName(input.bugs)
+  const { workspaceId, ...rest } = input
+  const batch = batchName(rest.bugs)
   const { prompt, downloads } = await buildClaudeExport({
-    ...input,
+    ...rest,
     localDir: `.squash/bugs/${batch}`,
   })
-  const res = await fetch(`${BRIDGE_URL}/claude`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ batch, prompt, downloads }),
+  await bridgeRequest('/claude', {
+    workspaceId,
+    workspaceName: rest.workspaceName,
+    batch,
+    prompt,
+    downloads,
   })
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null
-    throw new Error(body?.error ?? `Claude bridge failed (${res.status})`)
-  }
 }

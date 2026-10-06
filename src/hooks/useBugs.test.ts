@@ -149,6 +149,7 @@ function bug(p: Partial<BugWithMeta>): BugWithMeta {
     transcript: null,
     severity: 'medium',
     status: 'open',
+    kind: 'bug',
     filed_by: 'u1',
     created_at: '2026-01-01T00:00:00Z',
     resolved_by: null,
@@ -160,7 +161,14 @@ function bug(p: Partial<BugWithMeta>): BugWithMeta {
   }
 }
 
-const BASE = { tab: 'all', filedBy: null, resolvedBy: null, severity: null, query: '' } as const
+const BASE = {
+  kind: 'bug',
+  tab: 'all',
+  filedBy: null,
+  resolvedBy: null,
+  severity: null,
+  query: '',
+} as const
 
 const sample = [
   bug({ id: 'a', number: 12, title: 'Login button broken', filed_by: 'u1', severity: 'high' }),
@@ -218,6 +226,21 @@ describe('counts', () => {
     expect(countBugs(sample)).toEqual({ open: 2, resolved: 1, all: 3 })
     expect(countBugs([])).toEqual({ open: 0, resolved: 0, all: 0 })
   })
+
+  it('counts one kind only when asked', () => {
+    const mixed = [...sample, bug({ id: 'f', kind: 'feature' })]
+    expect(countBugs(mixed, 'bug')).toEqual({ open: 2, resolved: 1, all: 3 })
+    expect(countBugs(mixed, 'feature')).toEqual({ open: 1, resolved: 0, all: 1 })
+  })
+})
+
+describe('filterBugs by kind', () => {
+  it('shows only the selected kind, even for a #number search', () => {
+    const mixed = [...sample, bug({ id: 'f', number: 7, kind: 'feature' })]
+    expect(ids(filterBugs(mixed, BASE))).toEqual(['a', 'b', 'c'])
+    expect(ids(filterBugs(mixed, { ...BASE, kind: 'feature' }))).toEqual(['f'])
+    expect(ids(filterBugs(mixed, { ...BASE, query: '#7' }))).toEqual([])
+  })
 })
 
 describe('useBugs', () => {
@@ -268,6 +291,7 @@ describe('useBugs', () => {
         description: 'Checkout total is wrong\nmore details',
         transcript: null,
         severity: 'high',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -307,6 +331,7 @@ describe('useBugs', () => {
           description: 'x',
           transcript: null,
           severity: 'low',
+          kind: 'bug',
           files: [],
         })
       } catch (err) {
@@ -446,6 +471,7 @@ describe('useBugs sync', () => {
         description: 'Original',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [],
       })
     })
@@ -527,6 +553,7 @@ describe('useBugs sync', () => {
         description: 'With screenshot',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -555,6 +582,7 @@ describe('useBugs sync', () => {
         description: 'x',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -617,6 +645,7 @@ describe('useBugs sync', () => {
         description: 'x',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -728,6 +757,7 @@ describe('useBugs sync', () => {
         description: 'x',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -773,6 +803,7 @@ describe('useBugs sync', () => {
         description: 'x',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -796,6 +827,7 @@ describe('useBugs sync', () => {
         description: 'x',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })
@@ -832,6 +864,7 @@ describe('useBugs sync', () => {
         description: 'x',
         transcript: null,
         severity: 'low',
+        kind: 'bug',
         files: [new File(['img'], 'a.png', { type: 'image/png' })],
       })
     })

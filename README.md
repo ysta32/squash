@@ -40,13 +40,23 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 
 **Capture**
 
-- Paste an image anywhere on the page with ⌘V or Ctrl+V. Drag-and-drop and a file picker also work, and the picker opens the camera on mobile.
+- Paste an image anywhere on the page with ⌘V or Ctrl+V, and the cursor jumps to the capture bar so you can type what's wrong straight away. Drag-and-drop and a file picker also work, and the picker opens the camera on mobile.
 - Images are compressed in the browser to WebP: at most 1920 px on the long edge, a target of 300 KB, and a 5 MB cap per original.
 - Voice dictation uses the Web Speech API, with a live interim transcript. It works in Chrome, Edge and Safari and is hidden where unsupported.
 - Bugs appear instantly, and uploads finish in the background with a progress ring.
+- On macOS, a global hotkey files a bug from any app. Press <kbd>⌃⌥S</kbd>, drag over what's broken, and Squash comes to the front with the screenshot on your clipboard: press ⌘V, type, and press Enter. It switches to your open Squash tab in Chrome, Arc, Brave, Edge or Safari, or to the installed app, and otherwise opens a new tab. Start it once per session:
+
+  ```sh
+  npm run hotkey                                    # or: swift scripts/squash-hotkey.swift
+  SQUASH_HOTKEY=cmd+shift+b npm run hotkey          # pick another hotkey
+  SQUASH_URL=http://localhost:5173/app npm run hotkey
+  ```
+
+  It needs the Xcode command line tools (`xcode-select --install`). macOS asks once to let your terminal record the screen and control your browser.
 
 **Track**
 
+- Bugs and Features live side by side: switch tabs to file and track feature requests apart from bugs, or move an item between them from its detail view.
 - Tabs for Open, Resolved and All show live counts.
 - Filter by who filed or resolved a bug, or by severity. Full-text search covers titles, descriptions and transcripts.
 - See which bug a teammate is viewing, and get a toast when they file one.
@@ -61,17 +71,17 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 
 **Fix with Claude**
 
-- **Send to Claude** on a bug, or **Send all to Claude** above the list, hands the bugs (details, comments and screenshots) to Claude Code. Pick specific bugs with ⌘/Ctrl/Shift-click or <kbd>X</kbd>, then press <kbd>C</kbd>.
-- With the local bridge running, one press opens Claude Code in a new Terminal window with the screenshots already downloaded into the repo. Start it once per session:
+- **Send to Claude** on a bug, or **Send all to Claude** above the list, opens Claude Code in your project with the bugs, their comments and their screenshots. Pick specific bugs with ⌘/Ctrl/Shift-click or <kbd>X</kbd>, then press <kbd>C</kbd>. The copy button next to it copies a ready-to-paste prompt instead; its screenshot links expire after an hour.
+- The first press walks you through setup in the app: paste one command into Terminal and the page connects by itself. The command installs a small helper that starts at login on macOS:
 
   ```sh
-  npm run claude-bridge                    # fix bugs in this repo
-  npm run claude-bridge -- ~/code/my-app   # or in another repo
+  curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://squash-livid.vercel.app
   ```
 
-  The bridge listens on `127.0.0.1:4317`, accepts requests only from the Squash origins in `SQUASH_ORIGINS`, and saves each batch to `.squash/bugs/` (ignored by git). Pass extra `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Chrome asks once to allow the page to reach the local network. On macOS it opens Terminal; elsewhere it runs `claude -p` headless and logs to the batch folder.
+  Self-hosting? Use your own domain in both places. Uninstall with `--uninstall` in place of the trailing address.
 
-- Without the bridge, the same button copies a ready-to-paste prompt whose screenshot links expire after an hour.
+- Each workspace opens Claude in its own project folder, in its own Terminal window. You pick the folder the first time you send from a workspace (a native folder picker), and change it with the folder button above the list. Choices are saved in `~/.squash/bridge.json`.
+- The helper listens only on `127.0.0.1:4317`, accepts requests only from Squash, and saves each batch to `.squash/bugs/` in the project (ignored by git). Chrome asks once to let the page reach the local network. To work on the helper itself, run `npm run claude-bridge`; pass extra `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Outside macOS it runs `claude -p` headless and logs to the batch folder.
 
 **Feel**
 
@@ -128,7 +138,7 @@ The policy test suite is in [`supabase/tests/rls.sql`](supabase/tests/rls.sql). 
 
 You need Node.js 24 or newer, a free [Supabase](https://supabase.com) project, and optionally a [Vercel](https://vercel.com) account.
 
-1. **Database.** Run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) in the Supabase SQL editor, or use `npx supabase link && npx supabase db push`. It creates the schema, policies, storage bucket and Realtime publication.
+1. **Database.** Run the files in [`supabase/migrations/`](supabase/migrations) in order in the Supabase SQL editor, or use `npx supabase link && npx supabase db push`. It creates the schema, policies, storage bucket and Realtime publication.
 2. **Auth.** Enable the Google provider and set your Site URL and redirect URLs. [MAINTAINER.md](MAINTAINER.md) has the exact Google Cloud and Supabase steps.
 3. **Configure.** Copy `.env.example` to `.env` and fill in the following. Use the anon or publishable key only, never a service-role key, because every `VITE_` value ships to the browser.
 

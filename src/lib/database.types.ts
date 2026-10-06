@@ -8,6 +8,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 type MemberRoleEnum = 'owner' | 'member'
 type BugSeverityEnum = 'low' | 'medium' | 'high' | 'critical'
 type BugStatusEnum = 'open' | 'resolved'
+type BugKindEnum = 'bug' | 'feature'
 type BugEventTypeEnum = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented'
 
 type WorkspaceRow = {
@@ -120,6 +121,7 @@ export type Database = {
           transcript: string | null
           severity: BugSeverityEnum
           status: BugStatusEnum
+          kind: BugKindEnum
           filed_by: string
           created_at: string
           resolved_by: string | null
@@ -137,6 +139,7 @@ export type Database = {
           transcript?: string | null
           severity?: BugSeverityEnum
           status?: BugStatusEnum
+          kind?: BugKindEnum
           filed_by: string
           created_at?: string
           resolved_by?: string | null
@@ -153,6 +156,7 @@ export type Database = {
           transcript?: string | null
           severity?: BugSeverityEnum
           status?: BugStatusEnum
+          kind?: BugKindEnum
           filed_by?: string
           created_at?: string
           resolved_by?: string | null
@@ -349,6 +353,7 @@ export type Database = {
       member_role: MemberRoleEnum
       bug_severity: BugSeverityEnum
       bug_status: BugStatusEnum
+      bug_kind: BugKindEnum
       bug_event_type: BugEventTypeEnum
     }
     CompositeTypes: {

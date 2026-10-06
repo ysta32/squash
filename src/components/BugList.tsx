@@ -1,9 +1,10 @@
 import type { RefObject } from 'react'
-import { Bot, Search, X } from 'lucide-react'
+import { Bot, Bug, Copy, FolderCog, Lightbulb, Search, X } from 'lucide-react'
 import { filterBugs } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
-import type { BugWithMeta, WorkspaceMember } from '../lib/types'
+import { KIND_LABEL } from '../lib/types'
+import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
 import { BugFilters } from './BugFilters'
 import { BugRow } from './BugRow'
@@ -13,7 +14,10 @@ import { Skeleton } from './Skeleton'
 export interface BugListProps {
   bugs: BugWithMeta[]
   loading: boolean
+  /** Status counts for the kind being shown. */
   counts: { open: number; resolved: number; all: number }
+  /** Open count per kind, shown on the Bugs / Features switch. */
+  openByKind?: Record<BugKind, number>
   filters: Filters
   onFilters: (filters: Filters) => void
   selectedId: string | null
@@ -26,15 +30,20 @@ export interface BugListProps {
   pickedIds?: Set<string>
   onTogglePick?: (id: string) => void
   onClearPicked?: () => void
-  /** Sends bugs to Claude Code (or copies them when the local bridge is not running). */
-  onExport?: (bugs: BugWithMeta[]) => void
-  bridge?: boolean
+  /** Opens Claude Code on the bugs (or the setup guide when the helper is not connected). */
+  onSend?: (bugs: BugWithMeta[]) => void
+  /** Copies a ready-to-paste Claude Code prompt for the bugs. */
+  onCopy?: (bugs: BugWithMeta[]) => void
+  /** Opens the Claude Code setup guide (helper and project folder). */
+  onClaudeSetup?: () => void
+  claudeConnected?: boolean
 }
 
 export function BugList({
   bugs,
   loading,
   counts,
+  openByKind,
   filters,
   onFilters,
   selectedId,
@@ -46,13 +55,15 @@ export function BugList({
   pickedIds,
   onTogglePick,
   onClearPicked,
-  onExport,
-  bridge = false,
+  onSend,
+  onCopy,
+  onClaudeSetup,
+  claudeConnected = false,
 }: BugListProps) {
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
-  const verb = bridge ? 'Send' : 'Copy'
+  const items = filters.kind === 'feature' ? 'features' : 'bugs'
   const filtered = Boolean(
     filters.query.trim() || filters.filedBy || filters.resolvedBy || filters.severity,
   )
@@ -60,6 +71,37 @@ export function BugList({
   return (
     <section aria-label="Bug list" className="flex h-full min-h-0 flex-col bg-bg text-fg">
       <div className="space-y-3 border-b border-border p-3">
+        <div
+          role="tablist"
+          aria-label="Bugs or features"
+          className="grid grid-cols-2 gap-1 rounded-lg bg-bg-subtle p-1"
+        >
+          {(['bug', 'feature'] as const).map((kind) => {
+            const Icon = kind === 'bug' ? Bug : Lightbulb
+            const active = filters.kind === kind
+            return (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => {
+                  if (!active) onFilters({ ...filters, kind })
+                }}
+                className={cn(
+                  't flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  active ? 'bg-bg text-fg shadow-sm' : 'text-muted hover:text-fg',
+                )}
+              >
+                <Icon size={14} aria-hidden="true" />
+                {KIND_LABEL[kind].many}
+                {openByKind && (
+                  <span className="font-mono text-xs text-muted">{openByKind[kind]}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
         <div role="group" aria-label="Bug status" className="flex gap-1">
           {(['open', 'resolved', 'all'] as const).map((tab) => (
             <button
@@ -78,14 +120,14 @@ export function BugList({
               <span className="font-mono text-muted">{counts[tab]}</span>
             </button>
           ))}
-          {onExport && exportable.length > 0 && (
+          {onSend && exportable.length > 0 && (
             <div className="ml-auto flex items-center gap-1">
               {picked.length > 0 && onClearPicked && (
                 <button
                   type="button"
                   onClick={onClearPicked}
-                  aria-label="Clear picked bugs"
-                  title="Clear picked bugs"
+                  aria-label={`Clear picked ${items}`}
+                  title={`Clear picked ${items}`}
                   className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   <X size={14} aria-hidden="true" />
@@ -93,19 +135,45 @@ export function BugList({
               )}
               <button
                 type="button"
-                onClick={() => onExport(exportable)}
+                onClick={() => onSend(exportable)}
                 title={
                   picked.length > 0
-                    ? `${verb} the picked bugs to Claude (C)`
-                    : `${verb} every bug in this view to Claude. ⌘/Ctrl-click or press X to pick specific bugs.`
+                    ? `Open Claude Code on the picked ${items} (C)`
+                    : `Open Claude Code on every ${KIND_LABEL[filters.kind].one.toLowerCase()} in this view. ⌘/Ctrl-click or press X to pick specific ${items}.`
                 }
                 className="t inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <Bot size={14} aria-hidden="true" />
                 {picked.length > 0
-                  ? `${verb} ${picked.length} to Claude`
-                  : `${verb} all ${exportable.length} to Claude`}
+                  ? `Send ${picked.length} to Claude`
+                  : `Send all ${exportable.length} to Claude`}
               </button>
+              {onCopy && (
+                <button
+                  type="button"
+                  onClick={() => onCopy(exportable)}
+                  aria-label={
+                    picked.length > 0
+                      ? `Copy picked ${items} for Claude`
+                      : `Copy all ${items} for Claude`
+                  }
+                  title="Copy a prompt to paste into Claude Code"
+                  className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <Copy size={14} aria-hidden="true" />
+                </button>
+              )}
+              {onClaudeSetup && claudeConnected && (
+                <button
+                  type="button"
+                  onClick={onClaudeSetup}
+                  aria-label="Claude Code project folder"
+                  title="Claude Code: change this workspace's project folder"
+                  className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <FolderCog size={14} aria-hidden="true" />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -118,7 +186,7 @@ export function BugList({
           <input
             ref={searchRef}
             type="search"
-            aria-label="Search bugs"
+            aria-label={`Search ${items}`}
             placeholder="Search  /"
             value={filters.query}
             onChange={(event) => onFilters({ ...filters, query: event.target.value })}
@@ -139,9 +207,9 @@ export function BugList({
         {loading ? (
           <Skeleton />
         ) : visible.length === 0 ? (
-          <EmptyState tab={filters.tab} filtered={filtered} />
+          <EmptyState kind={filters.kind} tab={filters.tab} filtered={filtered} />
         ) : (
-          <div role="listbox" aria-label="Bugs" className="space-y-1 p-2">
+          <div role="listbox" aria-label={KIND_LABEL[filters.kind].many} className="space-y-1 p-2">
             {visible.map((bug) => (
               <BugRow
                 key={bug.id}

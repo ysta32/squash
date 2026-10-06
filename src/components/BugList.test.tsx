@@ -11,6 +11,7 @@ vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: vi.fn(() => null) }))
 
 const filters: BugFilters = {
+  kind: 'bug',
   tab: 'open',
   filedBy: null,
   resolvedBy: null,
@@ -41,6 +42,7 @@ function bug(overrides: Partial<BugWithMeta> = {}): BugWithMeta {
     transcript: null,
     severity: 'high',
     status: 'open',
+    kind: 'bug',
     filed_by: 'ada',
     created_at: '2026-10-01T10:00:00Z',
     resolved_by: null,
@@ -111,6 +113,30 @@ describe('BugList', () => {
     expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'All 12' }))
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
+  })
+
+  it('switches between Bugs and Features', () => {
+    const onFilters = vi.fn()
+    const feature = bug({ id: 'feat', number: 3, title: 'Dark mode', kind: 'feature' })
+    render(
+      <Harness
+        bugs={[...bugs, feature]}
+        openByKind={{ bug: 1, feature: 1 }}
+        onFilters={onFilters}
+      />,
+    )
+    expect(screen.getByRole('tab', { name: /Bugs/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('option', { name: '#3 Dark mode' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Features/ }))
+    expect(onFilters).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'feature' }))
+    expect(screen.getByRole('option', { name: '#3 Dark mode' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search features' })).toBeInTheDocument()
+  })
+
+  it('shows feature wording when there are no feature requests', () => {
+    render(<Harness bugs={[]} filters={{ ...filters, kind: 'feature' }} />)
+    expect(screen.getByText('No open feature requests.')).toBeInTheDocument()
   })
 
   it.each([

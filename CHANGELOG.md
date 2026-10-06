@@ -4,7 +4,8 @@
 
 ### Added
 
-- Send bugs to Claude Code, one at a time or several at once, with their screenshots and comments. With `npm run claude-bridge` running, one press opens Claude Code on them in a new terminal; otherwise the button copies a ready-to-paste prompt.
+- A Features tab next to Bugs, so feature requests no longer have to be filed as bugs. The capture bar files into whichever tab is showing, the detail view can move an item between the two, and Claude exports ask Claude to build a feature rather than fix a bug. Needs migration `0002_bug_kind.sql`; existing items stay bugs.
+- Send bugs to Claude Code, one at a time or several at once, with their screenshots and comments. One press opens Claude Code on them in a new terminal, in the project folder chosen for that workspace. The first press walks through a one-command setup that installs a small helper which starts at login. A separate copy button copies a ready-to-paste prompt instead.
 
 ## v1.1.0 — 2026-10-02
 

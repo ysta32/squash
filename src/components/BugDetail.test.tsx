@@ -54,6 +54,7 @@ function makeBug(over: Partial<BugWithMeta> = {}): BugWithMeta {
     transcript: null,
     severity: 'high',
     status: 'open',
+    kind: 'bug',
     filed_by: 'u1',
     created_at: NOW,
     resolved_by: null,

@@ -1,5 +1,6 @@
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type BugStatus = 'open' | 'resolved'
+export type BugKind = 'bug' | 'feature'
 export type MemberRole = 'owner' | 'member'
 export type EventType = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented'
 
@@ -36,6 +37,7 @@ export interface Bug {
   transcript: string | null
   severity: Severity
   status: BugStatus
+  kind: BugKind
   filed_by: string
   created_at: string
   resolved_by: string | null
@@ -83,6 +85,11 @@ export type BugWithMeta = Bug & {
   attachments: BugAttachment[]
   pending?: PendingUpload[]
   optimistic?: boolean
+}
+
+export const KIND_LABEL: Record<BugKind, { one: string; many: string }> = {
+  bug: { one: 'Bug', many: 'Bugs' },
+  feature: { one: 'Feature', many: 'Features' },
 }
 
 export const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']

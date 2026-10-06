@@ -1,20 +1,30 @@
-import { Bug, CircleCheck, Search } from 'lucide-react'
+import { Bug, CircleCheck, Lightbulb, Search } from 'lucide-react'
 import type { BugFilters } from '../hooks/useBugs'
 
 export interface EmptyStateProps {
+  kind?: BugFilters['kind']
   tab: BugFilters['tab']
   filtered: boolean
 }
 
-export function EmptyState({ tab, filtered }: EmptyStateProps) {
-  const Icon = filtered ? Search : tab === 'open' ? CircleCheck : Bug
+export function EmptyState({ kind = 'bug', tab, filtered }: EmptyStateProps) {
+  const feature = kind === 'feature'
+  const Icon = filtered ? Search : tab === 'open' ? CircleCheck : feature ? Lightbulb : Bug
   const message = filtered
-    ? 'No bugs match.'
+    ? feature
+      ? 'No feature requests match.'
+      : 'No bugs match.'
     : tab === 'open'
-      ? 'No open bugs. Ship it.'
+      ? feature
+        ? 'No open feature requests.'
+        : 'No open bugs. Ship it.'
       : tab === 'resolved'
-        ? 'Nothing resolved yet.'
-        : 'File your first bug above.'
+        ? feature
+          ? 'No features shipped yet.'
+          : 'Nothing resolved yet.'
+        : feature
+          ? 'Request your first feature above.'
+          : 'File your first bug above.'
 
   return (
     <div

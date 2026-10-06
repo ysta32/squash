@@ -4,9 +4,11 @@ import { useOverlayOpen } from '../hooks/useKeyboard'
 import { isMac } from '../lib/utils'
 
 const ALT = isMac ? '⌥' : 'Alt'
+const MOD = isMac ? '⌘' : 'Ctrl'
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['N'], label: 'New bug (focus capture bar)' },
+  { keys: [MOD, 'V'], label: 'Paste screenshot and start typing' },
   { keys: ['Enter'], label: 'File bug' },
   { keys: ['Shift', 'Enter'], label: 'New line' },
   { keys: [ALT, '1–4'], label: 'Set severity (low → critical) while capturing' },
