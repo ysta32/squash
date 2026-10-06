@@ -206,7 +206,7 @@ describe('Settings', () => {
   it('renders tabs, defaults to profile, and switches panels', () => {
     show()
     const tabs = screen.getByRole('navigation', { name: 'Settings tabs' })
-    expect(within(tabs).getAllByRole('button')).toHaveLength(3)
+    expect(within(tabs).getAllByRole('button')).toHaveLength(4)
     expect(screen.getByLabelText('Display name')).toHaveValue('Ada')
     fireEvent.click(within(tabs).getByRole('button', { name: 'workspace' }))
     expect(screen.getByLabelText('Workspace name')).toHaveValue('My workspace')
@@ -332,5 +332,21 @@ describe('Settings', () => {
     // First attempt saw a shared workspace, so no screenshots were touched then.
     expect(mocks.list).toHaveBeenCalledTimes(1)
     expect(mocks.signOut).toHaveBeenCalledOnce()
+  })
+
+  it('switches and remembers the color scheme from the appearance tab', () => {
+    localStorage.clear()
+    show('appearance')
+    const ocean = screen.getByRole('button', { name: 'Color scheme Ocean' })
+    expect(screen.getByRole('button', { name: 'Color scheme Violet' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.click(ocean)
+    expect(ocean).toHaveAttribute('aria-pressed', 'true')
+    expect(document.documentElement.dataset.scheme).toBe('ocean')
+    expect(localStorage.getItem('squash:scheme')).toBe('ocean')
+    fireEvent.click(screen.getByRole('button', { name: 'Color scheme Violet' }))
+    expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
   })
 })

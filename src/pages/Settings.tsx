@@ -4,13 +4,17 @@ import { useAuth } from '../lib/auth'
 import { ProfileSettings } from '../components/settings/ProfileSettings'
 import { WorkspaceSettings } from '../components/settings/WorkspaceSettings'
 import { AccountSettings } from '../components/settings/AccountSettings'
+import { AppearanceSettings } from '../components/settings/AppearanceSettings'
 
 export default function Settings() {
   const { workspaceId } = useParams<{ workspaceId: string }>()
   const [params, setParams] = useSearchParams()
   const { user, profile, loading } = useAuth()
   const requested = params.get('tab')
-  const tab = requested === 'workspace' || requested === 'account' ? requested : 'profile'
+  const tab =
+    requested === 'workspace' || requested === 'account' || requested === 'appearance'
+      ? requested
+      : 'profile'
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 text-fg">
@@ -22,7 +26,7 @@ export default function Settings() {
       </Link>
       <h1 className="mt-6 text-2xl font-semibold">Settings</h1>
       <nav aria-label="Settings tabs" className="my-6 flex gap-5 border-b border-border">
-        {(['profile', 'workspace', 'account'] as const).map((value) => (
+        {(['profile', 'workspace', 'appearance', 'account'] as const).map((value) => (
           <button
             key={value}
             type="button"
@@ -40,7 +44,9 @@ export default function Settings() {
           </button>
         ))}
       </nav>
-      {loading ? (
+      {tab === 'appearance' ? (
+        <AppearanceSettings />
+      ) : loading ? (
         <p role="status">Loading settings…</p>
       ) : !user ? (
         <p>Please sign in to manage settings.</p>

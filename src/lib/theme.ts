@@ -3,9 +3,49 @@ import { useCallback, useEffect, useState } from 'react'
 export type Theme = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
+export const COLOR_SCHEMES = ['violet', 'ocean', 'forest', 'sunset', 'rose', 'graphite'] as const
+export type ColorScheme = (typeof COLOR_SCHEMES)[number]
+
+/** Labels and preview swatches for the scheme picker; values mirror index.css. */
+export const SCHEME_INFO: Record<
+  ColorScheme,
+  { label: string; accent: Record<ResolvedTheme, string>; bg: Record<ResolvedTheme, string> }
+> = {
+  violet: {
+    label: 'Violet',
+    accent: { light: '#7c3aed', dark: '#a78bfa' },
+    bg: { light: '#ffffff', dark: '#1b1b20' },
+  },
+  ocean: {
+    label: 'Ocean',
+    accent: { light: '#2563eb', dark: '#60a5fa' },
+    bg: { light: '#ffffff', dark: '#161b24' },
+  },
+  forest: {
+    label: 'Forest',
+    accent: { light: '#059669', dark: '#34d399' },
+    bg: { light: '#ffffff', dark: '#151c19' },
+  },
+  sunset: {
+    label: 'Sunset',
+    accent: { light: '#ea580c', dark: '#fb923c' },
+    bg: { light: '#ffffff', dark: '#1d1916' },
+  },
+  rose: {
+    label: 'Rose',
+    accent: { light: '#e11d48', dark: '#fb7185' },
+    bg: { light: '#ffffff', dark: '#1d171a' },
+  },
+  graphite: {
+    label: 'Graphite',
+    accent: { light: '#262626', dark: '#e5e5e5' },
+    bg: { light: '#ffffff', dark: '#171717' },
+  },
+}
+
 export const THEME_KEY = 'squash:theme'
+export const SCHEME_KEY = 'squash:scheme'
 const DARK_QUERY = '(prefers-color-scheme: dark)'
-const THEME_COLOR: Record<ResolvedTheme, string> = { light: '#ffffff', dark: '#09090b' }
 
 function readStored(): Theme {
   try {
@@ -13,6 +53,15 @@ function readStored(): Theme {
     return v === 'light' || v === 'dark' || v === 'system' ? v : 'system'
   } catch {
     return 'system'
+  }
+}
+
+function readStoredScheme(): ColorScheme {
+  try {
+    const v = localStorage.getItem(SCHEME_KEY)
+    return (COLOR_SCHEMES as readonly string[]).includes(v ?? '') ? (v as ColorScheme) : 'violet'
+  } catch {
+    return 'violet'
   }
 }
 
@@ -25,16 +74,19 @@ function resolve(theme: Theme): ResolvedTheme {
   return theme
 }
 
-function apply(theme: Theme): ResolvedTheme {
+function apply(theme: Theme, scheme: ColorScheme = readStoredScheme()): ResolvedTheme {
   const resolved = resolve(theme)
-  document.documentElement.classList.toggle('dark', resolved === 'dark')
+  const root = document.documentElement
+  root.classList.toggle('dark', resolved === 'dark')
+  if (scheme === 'violet') root.removeAttribute('data-scheme')
+  else root.setAttribute('data-scheme', scheme)
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (!meta) {
     meta = document.createElement('meta')
     meta.name = 'theme-color'
     document.head.appendChild(meta)
   }
-  meta.content = THEME_COLOR[resolved]
+  meta.content = SCHEME_INFO[scheme].bg[resolved]
   return resolved
 }
 
@@ -69,4 +121,21 @@ export function useTheme(): { theme: Theme; resolved: ResolvedTheme; setTheme(t:
   }, [])
 
   return { theme, resolved, setTheme }
+}
+
+/** The accent color scheme, applied on top of whichever light/dark mode is active. */
+export function useColorScheme(): { scheme: ColorScheme; setScheme(s: ColorScheme): void } {
+  const [scheme, setSchemeState] = useState<ColorScheme>(readStoredScheme)
+
+  const setScheme = useCallback((s: ColorScheme) => {
+    try {
+      localStorage.setItem(SCHEME_KEY, s)
+    } catch {
+      // storage unavailable: scheme still applies for this session
+    }
+    setSchemeState(s)
+    apply(readStored(), s)
+  }, [])
+
+  return { scheme, setScheme }
 }

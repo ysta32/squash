@@ -17,6 +17,7 @@ describe('applyStoredTheme', () => {
   beforeEach(() => {
     localStorage.clear()
     document.documentElement.classList.remove('dark')
+    document.documentElement.removeAttribute('data-scheme')
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -54,6 +55,24 @@ describe('applyStoredTheme', () => {
     localStorage.setItem('squash:theme', 'dark')
     applyStoredTheme()
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    expect(meta?.content).toBe('#09090b')
+    expect(meta?.content).toBe('#1b1b20')
+  })
+
+  it('applies a stored color scheme', () => {
+    mockMatchMedia(false)
+    localStorage.setItem('squash:theme', 'dark')
+    localStorage.setItem('squash:scheme', 'forest')
+    applyStoredTheme()
+    expect(document.documentElement.dataset.scheme).toBe('forest')
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    expect(meta?.content).toBe('#151c19')
+  })
+
+  it('ignores an unknown scheme and uses the default', () => {
+    mockMatchMedia(false)
+    document.documentElement.setAttribute('data-scheme', 'ocean')
+    localStorage.setItem('squash:scheme', 'neon')
+    applyStoredTheme()
+    expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
   })
 })
