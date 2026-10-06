@@ -10,7 +10,9 @@ import {
   Mic,
   RotateCcw,
   RotateCw,
+  Trash2,
 } from 'lucide-react'
+import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { ClaudeRun } from '../lib/claudeExport'
 import type {
@@ -38,6 +40,8 @@ export interface BugDetailProps {
   onUpdate: (id: string, patch: BugPatch) => void | Promise<void>
   onResolve: (id: string, note: string | null) => void | Promise<void>
   onReopen: (id: string, note: string | null) => void | Promise<void>
+  /** Permanently deletes the bug (after the user confirms). */
+  onDelete?: (id: string) => Promise<void>
   onBack: () => void
   /** Counter bumped by the keyboard shortcut to open the Resolve popover. */
   resolveRequest?: number
@@ -122,6 +126,7 @@ function BugBody({
   onUpdate,
   onResolve,
   onReopen,
+  onDelete,
   onBack,
   onToast,
   onRetryUploads,
@@ -136,6 +141,7 @@ function BugBody({
   const [error, setError] = useState<string | null>(null)
   const [signed, setSigned] = useState<Record<string, string>>({})
   const [lightboxKey, setLightboxKey] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const descRef = useRef<HTMLTextAreaElement>(null)
   /** Set by Esc so the blur that follows discards the draft instead of saving it. */
   const cancelRef = useRef(false)
@@ -336,7 +342,26 @@ function BugBody({
             onConfirm={confirmPopover}
           />
         </div>
+        {onDelete && (
+          <button
+            type="button"
+            disabled={!editable}
+            onClick={() => setConfirmDelete(true)}
+            aria-label={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
+            title={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
+            className="-mr-2 rounded-md p-2 text-muted hover:bg-bg-subtle hover:text-red-500 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
+      {onDelete && confirmDelete && (
+        <DeleteDialog
+          bug={bug}
+          onCancel={() => setConfirmDelete(false)}
+          onDelete={() => onDelete(bug.id)}
+        />
+      )}
 
       <section className="px-6 pt-3 pb-4">
         <input
@@ -475,6 +500,83 @@ function BugBody({
         />
       )}
     </div>
+  )
+}
+
+function DeleteDialog({
+  bug,
+  onCancel,
+  onDelete,
+}: {
+  bug: BugWithMeta
+  onCancel: () => void
+  onDelete: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useOverlayOpen(true)
+  const noun = KIND_LABEL[bug.kind].one.toLowerCase()
+
+  function destroy() {
+    setBusy(true)
+    setError(null)
+    // On success the bug leaves the list and this dialog unmounts with it.
+    onDelete().catch((err: unknown) => {
+      setBusy(false)
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
+    })
+  }
+
+  return (
+    <dialog
+      ref={(node) => {
+        if (node && !node.open) node.showModal()
+      }}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!busy) onCancel()
+      }}
+      aria-labelledby="delete-bug-title"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg-elevated p-6 text-fg backdrop:bg-black/50"
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          destroy()
+        }}
+        className="space-y-4 text-sm"
+      >
+        <h3 id="delete-bug-title" className="text-lg font-medium">
+          Delete {noun} #{bug.number}?
+        </h3>
+        <p className="text-muted">
+          “{bug.title}” and its screenshots, comments and activity will be permanently removed. This
+          cannot be undone. To keep a record, resolve it instead.
+        </p>
+        {error && (
+          <p role="alert" className="text-red-500">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-md border border-border px-3 py-2 hover:bg-bg-subtle disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            autoFocus
+            disabled={busy}
+            className="rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {busy ? 'Deleting…' : `Delete ${noun}`}
+          </button>
+        </div>
+      </form>
+    </dialog>
   )
 }
 

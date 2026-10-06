@@ -1,4 +1,4 @@
--- Squash RLS / limits test suite. Run AFTER supabase/migrations/0001_init.sql, against a fresh/scratch project:
+-- Squash RLS / limits test suite. Run AFTER every file in supabase/migrations/, against a fresh/scratch project:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls.sql
 -- The whole script runs in one transaction and ends with ROLLBACK, so nothing persists.
 -- Fake users (ids 10000000-0000-0000-0000-0000000000NN): 01=A owner of "WS One", 02=B member, 03=C outsider,
@@ -162,11 +162,17 @@ do $$ begin
   exception when others then if sqlstate <> '42501' then raise; end if;
   end;
 end $$;
--- [19] members cannot delete bugs (history kept)
-do $$ declare n int; begin
-  begin delete from public.bugs where id = current_setting('t.bug1')::uuid; get diagnostics n = row_count;
-  exception when sqlstate '42501' then n := 0; end;
-  if n <> 0 then raise exception 'FAIL[19]: member deleted a bug'; end if;
+-- [19] members can delete a bug (0003_bug_delete.sql); attachments, comments and events cascade
+do $$ declare b uuid; n int; begin
+  insert into public.bugs (workspace_id, title, description, severity, filed_by)
+    values (current_setting('t.ws1')::uuid, 'Doomed', 'x', 'low', '10000000-0000-0000-0000-000000000002')
+    returning id into b;
+  insert into public.comments (bug_id, author_id, body) values (b, '10000000-0000-0000-0000-000000000002', 'bye');
+  delete from public.bugs where id = b; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[19]: member could not delete a bug'; end if;
+  if exists (select 1 from public.bug_events where bug_id = b)
+     or exists (select 1 from public.comments where bug_id = b) then
+    raise exception 'FAIL[19]: deleted bug left comments/events behind'; end if;
 end $$;
 -- [20] bugs.filed_by cannot be changed
 do $$ begin
@@ -309,11 +315,14 @@ do $$ begin
   exception when others then if sqlstate <> '42501' then raise; end if;
   end;
 end $$;
--- [40] update bug / [41] update workspace / [42] update members affect 0 rows
+-- [40] update/delete bug / [41] update workspace / [42] update members affect 0 rows
 do $$ declare n int; begin
   begin update public.bugs set title = 'pwn' where id = current_setting('t.bug1')::uuid; get diagnostics n = row_count;
   exception when sqlstate '42501' then n := 0; end;
   if n <> 0 then raise exception 'FAIL[40]: outsider updated bug'; end if;
+  begin delete from public.bugs where id = current_setting('t.bug1')::uuid; get diagnostics n = row_count;
+  exception when sqlstate '42501' then n := 0; end;
+  if n <> 0 then raise exception 'FAIL[40]: outsider deleted bug'; end if;
   begin update public.workspaces set name = 'pwn' where id = current_setting('t.ws1')::uuid; get diagnostics n = row_count;
   exception when sqlstate '42501' then n := 0; end;
   if n <> 0 then raise exception 'FAIL[41]: outsider updated workspace'; end if;

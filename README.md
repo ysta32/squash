@@ -60,7 +60,7 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 - Tabs for Open, Resolved and All show live counts.
 - Filter by who filed or resolved a bug, or by severity. Full-text search covers titles, descriptions and transcripts.
 - See which bug a teammate is viewing, and get a toast when they file one.
-- Resolve or reopen with an optional note. Each bug has a full activity timeline and comments.
+- Resolve or reopen with an optional note, or delete a bug outright. Each bug has a full activity timeline and comments.
 - A screenshot gallery opens in a lightbox with zoom and arrow-key navigation.
 
 **Team**

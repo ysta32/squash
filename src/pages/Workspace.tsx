@@ -88,8 +88,17 @@ export default function Workspace() {
     )
   }
 
-  const { bugs, loading, fileBug, updateBug, resolveBug, reopenBug, retryUploads, getBugByNumber } =
-    useBugs(workspaceId, { onRemoteInsert })
+  const {
+    bugs,
+    loading,
+    fileBug,
+    updateBug,
+    resolveBug,
+    reopenBug,
+    deleteBug,
+    retryUploads,
+    getBugByNumber,
+  } = useBugs(workspaceId, { onRemoteInsert })
 
   const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)
   const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set())
@@ -221,6 +230,22 @@ export default function Workspace() {
     setPendingId(null)
     if (hasNumberParam) navigate(basePath)
   }, [hasNumberParam, navigate, basePath])
+
+  const deleteAndDeselect = useCallback(
+    async (id: string) => {
+      const bug = bugs.find((b) => b.id === id)
+      await deleteBug(id)
+      setPickedIds((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      if (bug) toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
+      deselect()
+    },
+    [bugs, deleteBug, toast, deselect],
+  )
 
   const visible = useMemo(() => filterBugs(bugs, filters), [bugs, filters])
   const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
@@ -384,6 +409,7 @@ export default function Workspace() {
         onUpdate={updateBug}
         onResolve={resolveBug}
         onReopen={reopenBug}
+        onDelete={deleteAndDeselect}
         onBack={deselect}
         resolveRequest={resolveRequest}
         reopenRequest={reopenRequest}

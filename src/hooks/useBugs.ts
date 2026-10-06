@@ -12,6 +12,7 @@ import type {
 import { deriveTitle, randomId } from '../lib/utils'
 import { compressImage } from './useImageCompression'
 import { uploadAttachment } from '../lib/upload'
+import { removeScreenshots } from '../lib/storageCleanup'
 import { requireUserId } from './useBug'
 import { openChannel } from './useRealtimeStatus'
 
@@ -54,6 +55,8 @@ export interface UseBugsResult {
   ): Promise<void>
   resolveBug(id: string, note: string | null): Promise<void>
   reopenBug(id: string, note: string | null): Promise<void>
+  /** Permanently deletes a bug with its screenshots, comments and activity. */
+  deleteBug(id: string): Promise<void>
   retryUploads(bugId: string): Promise<void>
   getBugByNumber(number: number): Promise<BugWithMeta | null>
 }
@@ -170,6 +173,10 @@ function mapBug(
     return n
   })
   return changed ? next : bugs
+}
+
+function removeBug(bugs: BugWithMeta[], id: string): BugWithMeta[] {
+  return bugs.some((b) => b.id === id) ? bugs.filter((b) => b.id !== id) : bugs
 }
 
 /**
@@ -451,6 +458,8 @@ export function useBugs(
   const localIdsRef = useRef(new Set<string>())
   /** Changes seen since the latest list fetch started (see SnapshotOptions.isRecent). */
   const touchedRef = useRef(new Set<string>())
+  /** Bugs deleted here or remotely; a fetch or event already under way must not bring them back. */
+  const deletedRef = useRef(new Set<string>())
   const onRemoteInsertRef = useRef(opts?.onRemoteInsert)
   const bugsRef = useRef<BugWithMeta[]>(EMPTY)
   /** Optimistic edits per bug id → field, while any edit of that field is outstanding. */
@@ -524,6 +533,7 @@ export function useBugs(
     let active = true
     let latest = 0
     const touched = touchedRef.current
+    const deleted = deletedRef.current
 
     const load = async () => {
       const seq = ++latest
@@ -552,11 +562,15 @@ export function useBugs(
         mutate(
           workspaceId,
           (b) =>
-            applySnapshot(b, fetched, {
-              truncated: fetched.length >= FETCH_LIMIT,
-              isRecent: (key) => recent.has(key),
-              retained,
-            }),
+            applySnapshot(
+              b,
+              fetched.filter((f) => !deleted.has(f.id)),
+              {
+                truncated: fetched.length >= FETCH_LIMIT,
+                isRecent: (key) => recent.has(key),
+                retained,
+              },
+            ),
           true,
         )
       } finally {
@@ -576,6 +590,7 @@ export function useBugs(
         (payload) => {
           if (!active) return
           const row = payload.new
+          if (deleted.has(row.id)) return
           touched.add(`bug:${row.id}`)
           mutate(workspaceId, (b) => upsertRow(b, row))
           const mine = localIdsRef.current.has(row.id) || row.filed_by === selfIdRef.current
@@ -593,8 +608,21 @@ export function useBugs(
         (payload) => {
           if (!active) return
           const row = payload.new
+          if (deleted.has(row.id)) return
           touched.add(`bug:${row.id}`)
           mutate(workspaceId, (b) => upsertRow(b, row))
+        },
+      )
+      // DELETE events cannot be filtered by column, so this sees every workspace's deletions.
+      .on<BugRow>(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'bugs' },
+        (payload) => {
+          if (!active) return
+          const removedId = payload.old.id
+          if (!removedId) return
+          deleted.add(removedId)
+          mutate(workspaceId, (b) => removeBug(b, removedId))
         },
       )
       .on<BugAttachment>(
@@ -894,6 +922,27 @@ export function useBugs(
     [patchBug],
   )
 
+  const deleteBug = useCallback(
+    async (id: string) => {
+      const ws = workspaceId
+      // The row goes first, so a refused delete never costs the bug its screenshots.
+      const { data, error } = await supabase.from('bugs').delete().eq('id', id).select('id')
+      if (error) throw new Error(friendlyError(error, 'Could not delete the bug.'))
+      if (!data?.length) throw new Error('Could not delete the bug. Try again.')
+      deletedRef.current.add(id)
+      mutate(ws, (b) => removeBug(b, id))
+      for (const f of pendingFiles.get(ws)?.get(id) ?? []) URL.revokeObjectURL(f.previewUrl)
+      removePending(ws, id)
+      // Best effort: the bug is already gone, so a failure here only leaves orphaned files.
+      try {
+        await removeScreenshots(`${ws}/${id}`)
+      } catch (err) {
+        console.error('Failed to remove screenshots of deleted bug', err)
+      }
+    },
+    [workspaceId, mutate],
+  )
+
   const retryUploads = useCallback(
     (bugId: string) => runUploads(workspaceId, bugId, 'failed'),
     [workspaceId, runUploads],
@@ -929,6 +978,7 @@ export function useBugs(
     updateBug,
     resolveBug,
     reopenBug,
+    deleteBug,
     retryUploads,
     getBugByNumber,
   }

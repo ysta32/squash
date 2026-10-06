@@ -2,7 +2,7 @@
 
 `rls.sql` is a self-contained psql script that checks RLS policies, RPC auth errors, abuse limits
 (`member_limit`, `workspace_limit`, `attachment_limit`, `rate_limited`), `bug_events` triggers and the
-`screenshots` storage policies. Run it after `supabase/migrations/0001_init.sql` has been applied, against a
+`screenshots` storage policies. Run it after every file in `supabase/migrations/` has been applied, against a
 fresh or scratch project (never production data: it creates fake `auth.users`, though it rolls back at the end):
 
 ```sh

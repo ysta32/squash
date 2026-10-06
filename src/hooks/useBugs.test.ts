@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta } from '../lib/types'
 import { uploadAttachment } from '../lib/upload'
+import { removeScreenshots } from '../lib/storageCleanup'
 import {
   applySnapshot,
   countBugs,
@@ -27,6 +28,8 @@ const h = vi.hoisted(() => {
     deferUpdate: false,
     deferSelect: false,
     resolveSelect: null as null | ((r: Result) => void),
+    deleteResult: { data: [{ id: 'x' }], error: null } as Result,
+    deleted: [] as string[],
     channels: [] as {
       topic: string
       handlers: { filter: { event: string; table: string }; cb: (p: unknown) => void }[]
@@ -76,6 +79,14 @@ vi.mock('../lib/supabase', () => {
           }),
         }
       },
+      delete: () => ({
+        eq: (_col: string, id: string) => ({
+          select: () => {
+            if (!state.deleteResult.error) state.deleted.push(id)
+            return Promise.resolve(state.deleteResult)
+          },
+        }),
+      }),
       update: () => ({
         eq: () =>
           state.deferUpdate
@@ -117,6 +128,10 @@ vi.mock('../lib/supabase', () => {
   }
   return { supabase }
 })
+
+vi.mock('../lib/storageCleanup', () => ({
+  removeScreenshots: vi.fn(async () => {}),
+}))
 
 vi.mock('./useImageCompression', () => ({
   compressImage: vi.fn(async () => ({
@@ -433,12 +448,67 @@ describe('useBugs sync', () => {
     h.state.resolveUpdate = null
     h.state.deferSelect = false
     h.state.resolveSelect = null
+    h.state.deleteResult = { data: [{ id: 'x' }], error: null }
+    h.state.deleted = []
     resetPendingUploads()
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
   })
   afterEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('deleteBug deletes the row, drops it from the list, then removes its screenshots', async () => {
+    h.state.selectResult = {
+      data: [
+        { ...bug({ id: 'x' }), bug_attachments: [] },
+        { ...bug({ id: 'y' }), bug_attachments: [] },
+      ],
+      error: null,
+    }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(ids(result.current.bugs)).toEqual(['x', 'y']))
+    await act(async () => result.current.deleteBug('x'))
+    expect(h.state.deleted).toEqual(['x'])
+    expect(ids(result.current.bugs)).toEqual(['y'])
+    expect(removeScreenshots).toHaveBeenCalledWith('ws1/x')
+  })
+
+  it('deleteBug keeps the bug and its screenshots when the delete is refused', async () => {
+    h.state.selectResult = { data: [{ ...bug({ id: 'x' }), bug_attachments: [] }], error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(ids(result.current.bugs)).toEqual(['x']))
+    // RLS without a delete policy matches no rows instead of erroring.
+    h.state.deleteResult = { data: [], error: null }
+    await act(async () => {
+      await expect(result.current.deleteBug('x')).rejects.toThrow(/Could not delete/)
+    })
+    expect(ids(result.current.bugs)).toEqual(['x'])
+    expect(removeScreenshots).not.toHaveBeenCalled()
+  })
+
+  it('drops bugs deleted remotely, even from a fetch that was already in flight', async () => {
+    h.state.selectResult = {
+      data: [
+        { ...bug({ id: 'x' }), bug_attachments: [] },
+        { ...bug({ id: 'y' }), bug_attachments: [] },
+      ],
+      error: null,
+    }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(ids(result.current.bugs)).toEqual(['x', 'y']))
+
+    h.state.deferSelect = true
+    const status = h.state.channels.find((c) => c.topic === 'ws:ws1:bugs')?.status
+    await act(async () => status?.('SUBSCRIBED'))
+    act(() => handler('bugs', 'DELETE')({ old: { id: 'x' } }))
+    expect(ids(result.current.bugs)).toEqual(['y'])
+    // The stale snapshot still contains x, and so does a late UPDATE event.
+    await act(async () => h.state.resolveSelect?.(h.state.selectResult))
+    act(() =>
+      handler('bugs', 'UPDATE')({ new: bug({ id: 'x', updated_at: '2026-09-01T00:00:00Z' }) }),
+    )
+    expect(ids(result.current.bugs)).toEqual(['y'])
   })
 
   it('fetches only once subscribed, and again on every re-subscribe', async () => {

@@ -99,6 +99,59 @@ describe('BugDetail', () => {
   })
   afterEach(cleanup)
 
+  it('deletes a bug only after the user confirms', async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.open = true
+      },
+    })
+    const onDelete = vi.fn<(id: string) => Promise<void>>().mockResolvedValue()
+    setup(makeBug(), { onDelete })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete bug' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete bug #42?' })
+    expect(dialog).toHaveTextContent('Login button broken')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(onDelete).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete bug' }))
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
+      )
+    })
+    expect(onDelete).toHaveBeenCalledWith('b1')
+  })
+
+  it('shows why a delete failed and keeps the dialog open', async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.open = true
+      },
+    })
+    const onDelete = vi
+      .fn<(id: string) => Promise<void>>()
+      .mockRejectedValue(new Error('Could not delete the bug. Try again.'))
+    setup(makeBug({ kind: 'feature' }), { onDelete })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete feature' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete feature #42?' })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete feature' }))
+    })
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Could not delete the bug.')
+  })
+
+  it('disables delete for an optimistic bug and hides it without a handler', () => {
+    setup(makeBug({ number: 0, optimistic: true }), { onDelete: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeDisabled()
+    cleanup()
+    setup(makeBug())
+    expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
+  })
+
   it('shows a placeholder when no bug is selected', () => {
     setup(null)
     expect(screen.getByText('Select a bug')).toBeTruthy()
