@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { Search } from 'lucide-react'
+import { Bot, Search, X } from 'lucide-react'
 import { filterBugs } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
@@ -22,6 +22,13 @@ export interface BugListProps {
   viewersOf: (bugId: string) => PresenceUser[]
   highlightIds: Set<string>
   searchRef?: RefObject<HTMLInputElement | null>
+  /** Bugs picked for a multi-bug Claude export. */
+  pickedIds?: Set<string>
+  onTogglePick?: (id: string) => void
+  onClearPicked?: () => void
+  /** Sends bugs to Claude Code (or copies them when the local bridge is not running). */
+  onExport?: (bugs: BugWithMeta[]) => void
+  bridge?: boolean
 }
 
 export function BugList({
@@ -36,8 +43,16 @@ export function BugList({
   viewersOf,
   highlightIds,
   searchRef,
+  pickedIds,
+  onTogglePick,
+  onClearPicked,
+  onExport,
+  bridge = false,
 }: BugListProps) {
   const visible = filterBugs(bugs, filters)
+  const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
+  const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
+  const verb = bridge ? 'Send' : 'Copy'
   const filtered = Boolean(
     filters.query.trim() || filters.filedBy || filters.resolvedBy || filters.severity,
   )
@@ -63,6 +78,36 @@ export function BugList({
               <span className="font-mono text-muted">{counts[tab]}</span>
             </button>
           ))}
+          {onExport && exportable.length > 0 && (
+            <div className="ml-auto flex items-center gap-1">
+              {picked.length > 0 && onClearPicked && (
+                <button
+                  type="button"
+                  onClick={onClearPicked}
+                  aria-label="Clear picked bugs"
+                  title="Clear picked bugs"
+                  className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onExport(exportable)}
+                title={
+                  picked.length > 0
+                    ? `${verb} the picked bugs to Claude (C)`
+                    : `${verb} every bug in this view to Claude. ⌘/Ctrl-click or press X to pick specific bugs.`
+                }
+                className="t inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <Bot size={14} aria-hidden="true" />
+                {picked.length > 0
+                  ? `${verb} ${picked.length} to Claude`
+                  : `${verb} all ${exportable.length} to Claude`}
+              </button>
+            </div>
+          )}
         </div>
         <label className="relative block">
           <Search
@@ -106,6 +151,8 @@ export function BugList({
                 members={members}
                 viewers={viewersOf(bug.id)}
                 highlighted={highlightIds.has(bug.id)}
+                picked={pickedIds?.has(bug.id) ?? false}
+                onTogglePick={onTogglePick}
               />
             ))}
           </div>

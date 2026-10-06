@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, Check, Mic, RotateCcw, RotateCw } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, Check, Mic, RotateCcw, RotateCw } from 'lucide-react'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type {
   Bug,
@@ -33,6 +33,9 @@ export interface BugDetailProps {
   onToast?: (msg: string) => void
   /** Retries this bug's failed screenshot uploads. */
   onRetryUploads?: () => void
+  /** Sends this bug to Claude Code (or copies it when the local bridge is not running). */
+  onExport?: (bug: BugWithMeta) => void
+  bridge?: boolean
 }
 
 type PopoverState = { bugId: string; mode: 'resolve' | 'reopen' } | null
@@ -106,6 +109,8 @@ function BugBody({
   onBack,
   onToast,
   onRetryUploads,
+  onExport,
+  bridge = false,
   popover,
   onPopover,
 }: BugBodyProps) {
@@ -243,7 +248,21 @@ function BugBody({
             )
           })}
         </div>
-        <div className="relative ml-auto">
+        {onExport && (
+          <button
+            type="button"
+            disabled={!editable}
+            onClick={() => onExport(bug)}
+            title={
+              bridge ? 'Open Claude Code on this bug (C)' : 'Copy a prompt for Claude Code (C)'
+            }
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-fg hover:bg-bg-subtle disabled:opacity-50"
+          >
+            <Bot className="h-4 w-4" />
+            {bridge ? 'Send to Claude' : 'Copy for Claude'}
+          </button>
+        )}
+        <div className={cn('relative', !onExport && 'ml-auto')}>
           <button
             type="button"
             disabled={!editable}
