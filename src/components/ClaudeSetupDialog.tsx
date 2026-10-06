@@ -282,7 +282,15 @@ export function ClaudeSetupDialog({
         <p className="mt-5 border-t border-border pt-3 text-xs text-muted">
           The helper only listens on this computer and only accepts requests from Squash. To remove
           it, run the same command with <code className="font-mono">--uninstall</code> in place of
-          the address at the end.
+          the address at the end.{' '}
+          <a
+            href="/claude"
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent underline-offset-2 hover:underline"
+          >
+            Full setup guide
+          </a>
         </p>
       </div>
     </div>

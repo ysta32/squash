@@ -72,7 +72,7 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 **Fix with Claude**
 
 - **Send to Claude** on a bug, or **Send all to Claude** above the list, opens Claude Code in your project with the bugs, their comments and their screenshots. Pick specific bugs with ⌘/Ctrl/Shift-click or <kbd>X</kbd>, then press <kbd>C</kbd>. The copy button next to it copies a ready-to-paste prompt instead; its screenshot links expire after an hour.
-- The first press walks you through setup in the app: paste one command into Terminal and the page connects by itself. The command installs a small helper that starts at login on macOS:
+- The first press walks you through setup in the app: paste one command into Terminal and the page connects by itself. The command installs a small helper that starts at login on macOS. The site has a step-by-step guide with a live check of your helper at [`/claude`](https://squash-livid.vercel.app/claude):
 
   ```sh
   curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://squash-livid.vercel.app

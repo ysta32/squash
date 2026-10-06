@@ -116,6 +116,9 @@ export default function Landing() {
       <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 border-t border-border px-6 py-6 text-xs text-muted">
         <p>Squash · Built for small teams.</p>
         <nav aria-label="Footer navigation" className="flex gap-5">
+          <Link to="/claude" className="t hover:text-fg">
+            Claude helper
+          </Link>
           <Link to="/privacy" className="t hover:text-fg">
             Privacy
           </Link>

@@ -4,6 +4,7 @@ import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/auth'
 import AppIndex from './pages/AppIndex'
 import AuthCallback from './pages/AuthCallback'
+import ClaudeGuide from './pages/ClaudeGuide'
 import Join from './pages/Join'
 import Landing from './pages/Landing'
 import Privacy from './pages/Privacy'
@@ -59,6 +60,7 @@ export function App() {
             <Route path="/" element={<Home />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
+            <Route path="/claude" element={<ClaudeGuide />} />
             <Route path="/signin" element={<SignIn />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/join/:code" element={<Join />} />
