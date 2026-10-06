@@ -182,6 +182,8 @@ export async function copyPending(text: Promise<string>): Promise<void> {
 export const BRIDGE_URL = 'http://127.0.0.1:4317'
 /** Oldest bridge that maps each workspace to its own project folder. */
 export const BRIDGE_VERSION = 2
+/** Oldest bridge that reports what Claude is doing on each run. */
+export const PROGRESS_VERSION = 3
 
 export interface BridgeStatus {
   version: number
@@ -269,7 +271,59 @@ export async function sendToBridge(
     workspaceId,
     workspaceName: rest.workspaceName,
     batch,
+    bugs: rest.bugs.map((b) => b.number),
     prompt,
     downloads,
   })
+}
+
+/**
+ * - starting: launched, Claude has not reported in yet
+ * - working: running tools or thinking
+ * - waiting: needs permission or an answer in its terminal
+ * - done: finished its turn (the terminal stays open for follow-ups)
+ * - ended: the Claude session was closed
+ */
+export type ClaudeRunState = 'starting' | 'working' | 'waiting' | 'done' | 'ended'
+
+export interface ClaudeTodo {
+  text: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+/** One "Send to Claude" session, as reported by the bridge. */
+export interface ClaudeRun {
+  id: string
+  /** Bug numbers sent in this run. */
+  bugs: number[]
+  folder: string
+  startedAt: string
+  updatedAt: string
+  state: ClaudeRunState
+  /** What Claude is doing right now, e.g. "Editing src/App.tsx". */
+  activity: string | null
+  /** Claude's latest message: its narration while working, its summary when done. */
+  message: string | null
+  todos: ClaudeTodo[] | null
+  /** Most recent steps, oldest first. */
+  steps: { t: string; text: string }[]
+  stepCount: number
+}
+
+export const isRunActive = (run: ClaudeRun) =>
+  run.state === 'starting' || run.state === 'working' || run.state === 'waiting'
+
+/** Recent Claude runs for this workspace, newest first. */
+export async function getBridgeRuns(workspaceId: string): Promise<ClaudeRun[]> {
+  const { runs } = await bridgeRequest<{ runs: ClaudeRun[] }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runs`,
+  )
+  return runs
+}
+
+/** The latest run per bug number (runs arrive newest first). */
+export function latestRunByBug(runs: ClaudeRun[]): Map<number, ClaudeRun> {
+  const byBug = new Map<number, ClaudeRun>()
+  for (const run of runs) for (const n of run.bugs) if (!byBug.has(n)) byBug.set(n, run)
+  return byBug
 }

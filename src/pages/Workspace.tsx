@@ -362,6 +362,7 @@ export default function Workspace() {
         onRetryUploads={selected ? () => void retryUploads(selected.id) : undefined}
         onSend={(bug) => claude.sendBugs([bug])}
         onCopy={(bug) => claude.copyBugs([bug])}
+        claudeRun={selected && !selected.optimistic ? claude.runs.get(selected.number) : undefined}
       />
     )
   } else if (notFound) {
@@ -447,6 +448,7 @@ export default function Workspace() {
             onCopy={claude.copyBugs}
             onClaudeSetup={claude.openSetup}
             claudeConnected={claude.connected}
+            claudeRuns={claude.runs}
           />
         </div>
         <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>

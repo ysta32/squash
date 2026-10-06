@@ -3,6 +3,7 @@ import { Bot, Check, Copy, FolderOpen, X } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import {
   BRIDGE_VERSION,
+  PROGRESS_VERSION,
   getBridgeFolder,
   installCommand,
   setBridgeFolder,
@@ -151,7 +152,9 @@ export function ClaudeSetupDialog({
             )}
           />
           {connected
-            ? 'Connected to this computer'
+            ? status.version >= PROGRESS_VERSION
+              ? 'Connected to this computer'
+              : 'Connected. Run the command below again to follow Claude’s progress in Squash.'
             : outdated
               ? 'An older helper is running. Run the command below to update it.'
               : 'Waiting for the helper… this updates by itself'}

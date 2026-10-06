@@ -81,6 +81,7 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
   Self-hosting? Use your own domain in both places. Uninstall with `--uninstall` in place of the trailing address.
 
 - Each workspace opens Claude in its own project folder, in its own Terminal window. You pick the folder the first time you send from a workspace (a native folder picker), and change it with the folder button above the list. Choices are saved in `~/.squash/bridge.json`.
+- While Claude works, the bug shows what it is doing: its current step, its plan, its latest message and, when it finishes, its summary. Bugs Claude is on get a pulsing Claude icon in the list, amber when it is waiting for you in Terminal. Progress comes from Claude Code hooks the helper adds to each session, so it is only visible on the computer running the helper. Helpers installed before this need the install command run again.
 - The helper listens only on `127.0.0.1:4317`, accepts requests only from Squash, and saves each batch to `.squash/bugs/` in the project (ignored by git). Chrome asks once to let the page reach the local network. To work on the helper itself, run `npm run claude-bridge`; pass extra `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Outside macOS it runs `claude -p` headless and logs to the batch folder.
 
 **Feel**

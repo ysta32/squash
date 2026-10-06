@@ -111,6 +111,30 @@ describe('BugDetail', () => {
     expect(screen.getByText(/Filed by/).textContent).toMatch(/Filed by Ada Lovelace · just now/)
   })
 
+  it('shows Claude progress only when a run is passed', () => {
+    setup(makeBug())
+    expect(screen.queryByRole('region', { name: 'Claude progress' })).not.toBeInTheDocument()
+    cleanup()
+    setup(makeBug(), {
+      claudeRun: {
+        id: 'r1',
+        bugs: [42],
+        folder: '/repo',
+        startedAt: NOW,
+        updatedAt: NOW,
+        state: 'working',
+        activity: 'Running the tests',
+        message: null,
+        todos: null,
+        steps: [],
+        stepCount: 0,
+      },
+    })
+    const panel = screen.getByRole('region', { name: 'Claude progress' })
+    expect(panel).toHaveTextContent('Claude is working')
+    expect(panel).toHaveTextContent('Running the tests')
+  })
+
   it('shows "#…" for optimistic bugs', () => {
     setup(makeBug({ number: 0, optimistic: true }))
     expect(screen.getByText('#…')).toBeTruthy()

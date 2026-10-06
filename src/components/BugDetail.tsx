@@ -12,6 +12,7 @@ import {
   RotateCw,
 } from 'lucide-react'
 import { useSignedUrl } from '../hooks/useSignedUrl'
+import type { ClaudeRun } from '../lib/claudeExport'
 import type {
   Bug,
   BugAttachment,
@@ -23,6 +24,7 @@ import type {
 import { KIND_LABEL, SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import { cn, relativeTime } from '../lib/utils'
 import { Avatar } from './Avatar'
+import { ClaudeProgress } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
 import { ResolvePopover } from './ResolvePopover'
@@ -48,6 +50,8 @@ export interface BugDetailProps {
   onSend?: (bug: BugWithMeta) => void
   /** Copies a ready-to-paste Claude Code prompt for this bug. */
   onCopy?: (bug: BugWithMeta) => void
+  /** The latest Claude Code session sent this bug, with what it is doing. */
+  claudeRun?: ClaudeRun
 }
 
 type PopoverState = { bugId: string; mode: 'resolve' | 'reopen' } | null
@@ -123,6 +127,7 @@ function BugBody({
   onRetryUploads,
   onSend,
   onCopy,
+  claudeRun,
   popover,
   onPopover,
 }: BugBodyProps) {
@@ -399,6 +404,8 @@ function BugBody({
           </p>
         )}
       </section>
+
+      {claudeRun && <ClaudeProgress run={claudeRun} />}
 
       <section className="border-t border-border px-6 py-4">
         <textarea

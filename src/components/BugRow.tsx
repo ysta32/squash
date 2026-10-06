@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { Check, SquareCheck } from 'lucide-react'
+import { Bot, Check, SquareCheck } from 'lucide-react'
 import type { PresenceUser } from '../hooks/usePresence'
 import { useSignedUrl } from '../hooks/useSignedUrl'
+import type { ClaudeRunState } from '../lib/claudeExport'
 import { SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn, relativeTime } from '../lib/utils'
@@ -17,6 +18,8 @@ export interface BugRowProps {
   /** Picked for a multi-bug export (⌘/Ctrl/Shift-click toggles). */
   picked?: boolean
   onTogglePick?: (id: string) => void
+  /** State of the Claude Code session working on this bug, while it is in progress. */
+  claudeState?: ClaudeRunState
 }
 
 export function BugRow({
@@ -28,6 +31,7 @@ export function BugRow({
   highlighted,
   picked = false,
   onTogglePick,
+  claudeState,
 }: BugRowProps) {
   const ref = useRef<HTMLButtonElement>(null)
   const signedUrl = useSignedUrl(bug.attachments[0]?.storage_path ?? null)
@@ -72,6 +76,20 @@ export function BugRow({
       <span className="min-w-0 flex-1 truncate text-sm" title={bug.title}>
         {bug.title}
       </span>
+      {(claudeState === 'starting' || claudeState === 'working' || claudeState === 'waiting') && (
+        <span
+          className={cn(
+            'inline-flex shrink-0 animate-pulse',
+            claudeState === 'waiting' ? 'text-amber-500' : 'text-accent',
+          )}
+          title={claudeState === 'waiting' ? 'Claude needs you in Terminal' : 'Claude is working'}
+        >
+          <Bot
+            size={14}
+            aria-label={claudeState === 'waiting' ? 'Claude needs you' : 'Claude is working'}
+          />
+        </span>
+      )}
       {thumbnail && (
         <img
           src={thumbnail}

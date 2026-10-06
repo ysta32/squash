@@ -7,6 +7,7 @@ import { KIND_LABEL } from '../lib/types'
 import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
 import { BugFilters } from './BugFilters'
+import type { ClaudeRun } from '../lib/claudeExport'
 import { BugRow } from './BugRow'
 import { EmptyState } from './EmptyState'
 import { Skeleton } from './Skeleton'
@@ -37,6 +38,8 @@ export interface BugListProps {
   /** Opens the Claude Code setup guide (helper and project folder). */
   onClaudeSetup?: () => void
   claudeConnected?: boolean
+  /** Latest Claude Code session per bug number, to mark rows Claude is working on. */
+  claudeRuns?: Map<number, ClaudeRun>
 }
 
 export function BugList({
@@ -59,6 +62,7 @@ export function BugList({
   onCopy,
   onClaudeSetup,
   claudeConnected = false,
+  claudeRuns,
 }: BugListProps) {
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
@@ -221,6 +225,7 @@ export function BugList({
                 highlighted={highlightIds.has(bug.id)}
                 picked={pickedIds?.has(bug.id) ?? false}
                 onTogglePick={onTogglePick}
+                claudeState={bug.optimistic ? undefined : claudeRuns?.get(bug.number)?.state}
               />
             ))}
           </div>
