@@ -18,6 +18,7 @@ import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
 import { filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
+import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
@@ -96,6 +97,16 @@ export default function Workspace() {
   } = useBugs(workspaceId, { onRemoteInsert })
 
   const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)
+  const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set())
+  const togglePick = useCallback((id: string) => {
+    setPickedIds((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }, [])
+  const clearPicked = useCallback(() => setPickedIds(new Set()), [])
+  const claude = useClaudeExport(ws.workspace?.name ?? '', ws.members, toast)
   /** Selection of an optimistic bug (no number yet, so it cannot live in the URL). */
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [lookupMissing, setLookupMissing] = useState<number | null>(null)
@@ -262,6 +273,26 @@ export default function Workspace() {
     opts,
   )
   useShortcut(
+    'x',
+    (e) => {
+      if (!selected || selected.optimistic) return
+      e.preventDefault()
+      togglePick(selected.id)
+    },
+    opts,
+  )
+  useShortcut(
+    'c',
+    (e) => {
+      const picked = bugs.filter((b) => pickedIds.has(b.id))
+      const target = picked.length > 0 ? picked : selected ? [selected] : []
+      if (target.length === 0) return
+      e.preventDefault()
+      claude.exportBugs(target)
+    },
+    opts,
+  )
+  useShortcut(
     'Escape',
     () => {
       if (showDetail && !isDesktop()) deselect()
@@ -318,6 +349,8 @@ export default function Workspace() {
         reopenRequest={reopenRequest}
         onToast={toast}
         onRetryUploads={selected ? () => void retryUploads(selected.id) : undefined}
+        onExport={(bug) => claude.exportBugs([bug])}
+        bridge={claude.bridge}
       />
     )
   } else if (notFound) {
@@ -387,6 +420,11 @@ export default function Workspace() {
             viewersOf={presence.viewers}
             highlightIds={highlightIds}
             searchRef={searchRef}
+            pickedIds={pickedIds}
+            onTogglePick={togglePick}
+            onClearPicked={clearPicked}
+            onExport={claude.exportBugs}
+            bridge={claude.bridge}
           />
         </div>
         <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>

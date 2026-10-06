@@ -59,6 +59,20 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 - A stats popover shows bugs filed and resolved per person, all-time and for the last 7 days.
 - Account deletion cleans up after itself. If you own a shared workspace, you must transfer it first.
 
+**Fix with Claude**
+
+- **Send to Claude** on a bug, or **Send all to Claude** above the list, hands the bugs (details, comments and screenshots) to Claude Code. Pick specific bugs with ⌘/Ctrl/Shift-click or <kbd>X</kbd>, then press <kbd>C</kbd>.
+- With the local bridge running, one press opens Claude Code in a new Terminal window with the screenshots already downloaded into the repo. Start it once per session:
+
+  ```sh
+  npm run claude-bridge                    # fix bugs in this repo
+  npm run claude-bridge -- ~/code/my-app   # or in another repo
+  ```
+
+  The bridge listens on `127.0.0.1:4317`, accepts requests only from the Squash origins in `SQUASH_ORIGINS`, and saves each batch to `.squash/bugs/` (ignored by git). Pass extra `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Chrome asks once to allow the page to reach the local network. On macOS it opens Terminal; elsewhere it runs `claude -p` headless and logs to the batch folder.
+
+- Without the bridge, the same button copies a ready-to-paste prompt whose screenshot links expire after an hour.
+
 **Feel**
 
 - A Linear-inspired interface with light and dark themes. It follows your system by default and can be toggled.
@@ -68,16 +82,18 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 
 ### Keyboard shortcuts
 
-| Key                                                  | Action                            |
-| ---------------------------------------------------- | --------------------------------- |
-| <kbd>N</kbd>                                         | New bug (focus the capture bar)   |
-| <kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd> | File bug / new line               |
-| <kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>4</kbd>             | Set severity while capturing      |
-| <kbd>/</kbd>                                         | Search                            |
-| <kbd>J</kbd> / <kbd>K</kbd>                          | Next / previous bug               |
-| <kbd>R</kbd> / <kbd>O</kbd>                          | Resolve / reopen the selected bug |
-| <kbd>Esc</kbd>                                       | Close / back to list              |
-| <kbd>?</kbd>                                         | Show all shortcuts                |
+| Key                                                  | Action                                   |
+| ---------------------------------------------------- | ---------------------------------------- |
+| <kbd>N</kbd>                                         | New bug (focus the capture bar)          |
+| <kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd> | File bug / new line                      |
+| <kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>4</kbd>             | Set severity while capturing             |
+| <kbd>/</kbd>                                         | Search                                   |
+| <kbd>J</kbd> / <kbd>K</kbd>                          | Next / previous bug                      |
+| <kbd>R</kbd> / <kbd>O</kbd>                          | Resolve / reopen the selected bug        |
+| <kbd>X</kbd>                                         | Pick the selected bug for Claude         |
+| <kbd>C</kbd>                                         | Send picked (or selected) bugs to Claude |
+| <kbd>Esc</kbd>                                       | Close / back to list                     |
+| <kbd>?</kbd>                                         | Show all shortcuts                       |
 
 ## Security model
 

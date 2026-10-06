@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Send bugs to Claude Code, one at a time or several at once, with their screenshots and comments. With `npm run claude-bridge` running, one press opens Claude Code on them in a new terminal; otherwise the button copies a ready-to-paste prompt.
+
 ## v1.1.0 — 2026-10-02
 
 ### Changed

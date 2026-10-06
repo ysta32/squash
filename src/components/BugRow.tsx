@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Check } from 'lucide-react'
+import { Check, SquareCheck } from 'lucide-react'
 import type { PresenceUser } from '../hooks/usePresence'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import { SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
@@ -14,9 +14,21 @@ export interface BugRowProps {
   members: WorkspaceMember[]
   viewers: PresenceUser[]
   highlighted: boolean
+  /** Picked for a multi-bug export (⌘/Ctrl/Shift-click toggles). */
+  picked?: boolean
+  onTogglePick?: (id: string) => void
 }
 
-export function BugRow({ bug, selected, onSelect, members, viewers, highlighted }: BugRowProps) {
+export function BugRow({
+  bug,
+  selected,
+  onSelect,
+  members,
+  viewers,
+  highlighted,
+  picked = false,
+  onTogglePick,
+}: BugRowProps) {
   const ref = useRef<HTMLButtonElement>(null)
   const signedUrl = useSignedUrl(bug.attachments[0]?.storage_path ?? null)
   const thumbnail = bug.optimistic
@@ -37,18 +49,25 @@ export function BugRow({ bug, selected, onSelect, members, viewers, highlighted 
       role="option"
       aria-selected={selected}
       aria-label={`#${num} ${bug.title}`}
-      onClick={() => onSelect(bug.id)}
+      onClick={(e) => {
+        if (onTogglePick && (e.metaKey || e.ctrlKey || e.shiftKey)) onTogglePick(bug.id)
+        else onSelect(bug.id)
+      }}
       className={cn(
         't flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
         selected && 'ring-1 ring-inset ring-accent',
-        highlighted ? 'bg-accent/10' : selected ? 'bg-muted/10' : 'hover:bg-bg-subtle',
+        highlighted || picked ? 'bg-accent/10' : selected ? 'bg-muted/10' : 'hover:bg-bg-subtle',
         bug.status === 'resolved' && 'opacity-60',
       )}
     >
-      <span
-        className={cn('h-2 w-2 shrink-0 rounded-full', SEVERITY_COLOR[bug.severity])}
-        title={`${SEVERITY_LABEL[bug.severity]} severity`}
-      />
+      {picked ? (
+        <SquareCheck size={14} aria-label="Picked" className="-mx-0.5 shrink-0 text-accent" />
+      ) : (
+        <span
+          className={cn('h-2 w-2 shrink-0 rounded-full', SEVERITY_COLOR[bug.severity])}
+          title={`${SEVERITY_LABEL[bug.severity]} severity`}
+        />
+      )}
       <span className="shrink-0 font-mono text-xs text-muted">#{num}</span>
       <span className="min-w-0 flex-1 truncate text-sm" title={bug.title}>
         {bug.title}
