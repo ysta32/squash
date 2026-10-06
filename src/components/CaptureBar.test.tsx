@@ -69,6 +69,27 @@ describe('CaptureBar', () => {
     other.remove()
   })
 
+  it('pasting a screenshot puts the cursor after text already typed', () => {
+    const { box } = setup()
+    fireEvent.change(box, { target: { value: 'Login is broken' } })
+    box.setSelectionRange(0, 0)
+    box.blur()
+    act(() => pasteState.onFiles([new File(['x'], 'shot.png', { type: 'image/png' })]))
+    expect(document.activeElement).toBe(box)
+    expect(box.selectionStart).toBe('Login is broken'.length)
+  })
+
+  it('pasting a screenshot while a dialog is open leaves focus alone', () => {
+    const { box } = setup()
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    document.body.appendChild(dialog)
+    act(() => pasteState.onFiles([new File(['x'], 'shot.png', { type: 'image/png' })]))
+    expect(document.activeElement).not.toBe(box)
+    expect(screen.getByAltText('shot.png')).toBeInTheDocument()
+    dialog.remove()
+  })
+
   it('files a feature request when the Features tab is showing', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} kind="feature" />)

@@ -4,7 +4,7 @@ import { Camera, Info, Mic, Paperclip, Send } from 'lucide-react'
 import type { NewBugInput } from '../hooks/useBugs'
 import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
-import { isTypingTarget } from '../hooks/useKeyboard'
+import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
@@ -135,11 +135,15 @@ export function CaptureBar({
     [onToast],
   )
 
-  // Screenshot → ⌘V anywhere → type: land the cursor in the bar unless another field has focus.
+  // Screenshot → ⌘V anywhere → type: land the cursor at the end of the bar unless another field
+  // has focus or an overlay is open.
   const onPasteFiles = useCallback(
     (files: File[]) => {
       addFiles(files)
-      if (!isTypingTarget(document.activeElement)) innerRef.current?.focus()
+      const el = innerRef.current
+      if (!el || isTypingTarget(document.activeElement) || isOverlayOpen()) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
     },
     [addFiles],
   )
