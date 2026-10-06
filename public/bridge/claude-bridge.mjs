@@ -1,5 +1,8 @@
 // Squash → Claude Code bridge. Receives bugs from the Squash tab, downloads their screenshots
-// into the workspace's project folder and opens Claude Code on them in a new terminal.
+// into the workspace's project folder and runs Claude Code on them unattended in a new terminal.
+// Claude's last step is to write result.json in the batch folder; when it exits, the terminal
+// closes and the open Squash tab resolves each bug it fixed with Claude's summary (or comments on
+// the ones it could not finish), claiming the run through POST .../results/<batch>/claim.
 //
 // Install (macOS, starts at login):  curl -fsSL https://<squash>/bridge/install.sh | sh
 // Run by hand:                       node claude-bridge.mjs [default-folder]
@@ -12,11 +15,13 @@
 // polls GET /workspaces/<id>/runs to show it on the bug.
 //
 // Env: SQUASH_BRIDGE_PORT (4317), SQUASH_ORIGINS (comma-separated allowed app origins),
-// SQUASH_CLAUDE_ARGS (extra `claude` flags, e.g. "--permission-mode acceptEdits").
+// SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
+// with e.g. "--permission-mode acceptEdits").
 import { execFile, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import {
   closeSync,
+  createWriteStream,
   existsSync,
   fstatSync,
   openSync,
@@ -27,13 +32,15 @@ import {
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 3
+const VERSION = 4
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
-const DEFAULT_FOLDER = process.argv[2] && !HOOK ? resolve(process.argv[2]) : null
+const RUNNER = process.argv[2] === '--run'
+const DEFAULT_FOLDER = process.argv[2] && !HOOK && !RUNNER ? resolve(process.argv[2]) : null
 const CONFIG_DIR = join(homedir(), '.squash')
 const CONFIG_FILE = join(CONFIG_DIR, 'bridge.json')
 const RUNS_FILE = join(CONFIG_DIR, 'runs.json')
@@ -50,11 +57,20 @@ const ORIGINS = new Set(
     .filter(Boolean),
 )
 const EXTRA_ARGS = (process.env.SQUASH_CLAUDE_ARGS ?? '').split(/\s+/).filter(Boolean)
+const CLAUDE_ARGS = EXTRA_ARGS.some((a) => a.startsWith('--permission-mode'))
+  ? EXTRA_ARGS
+  : ['--permission-mode', 'auto', ...EXTRA_ARGS]
 const MAC = process.platform === 'darwin'
 const MAX_BODY = 1024 * 1024
 const MAX_IMAGE = 15 * 1024 * 1024
 const MAX_DOWNLOADS = 100
 const SAFE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
+// Files in each batch folder (.squash/bugs/<batch>/), next to prompt.md and events.jsonl.
+const RUN_FILE = 'run.json' // claude flags for the runner
+const RESULT_FILE = 'result.json' // written by Claude as its last step
+const DONE_FILE = 'done.json' // written by the runner when Claude exits
+const CLAIM_FILE = 'applied' // created by the Squash tab that applied the result
+const CLOSE_AFTER_MS = 4000
 
 // ── Hook mode ────────────────────────────────────────────────────────────────────────────────
 // Claude Code runs `node claude-bridge.mjs --hook <run folder>` on each hook event with the event
@@ -454,36 +470,137 @@ async function download(url, dest) {
   await writeFile(dest, data)
 }
 
-/** Opens Claude Code on the prompt: a new Terminal window on macOS, headless elsewhere. */
-async function launch(folder, promptFile, batchDir) {
-  const settingsFile = join(batchDir, 'settings.json')
-  await writeFile(settingsFile, JSON.stringify(hookSettings(batchDir), null, 2) + '\n')
-  const args = ['--settings', settingsFile, ...EXTRA_ARGS].map(sh).join(' ')
+async function readJson(path) {
+  try {
+    return JSON.parse(await readFile(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+// ── Runner ───────────────────────────────────────────────────────────────────────────────────
+// `node claude-bridge.mjs --run <batch folder>`, started in the project folder: runs Claude Code
+// headless on the batch's prompt (its hooks still report progress), prints what it does, then
+// records the result for Squash and exits.
+
+/** One terminal line per tool call. */
+function toolLine(block) {
+  return `  • ${describeTool(block.name, block.input ?? {}, process.cwd())}`
+}
+
+async function runBatch(batchDir) {
+  const { args = [] } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
+  const prompt = await readFile(join(batchDir, 'prompt.md'), 'utf8')
+  const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a' })
+  console.log(`Squash → Claude Code in ${process.cwd()}`)
+  console.log('Running unattended. This window closes on its own when Claude is done.\n')
+
+  const settings = join(batchDir, 'settings.json')
+  const child = spawn(
+    'claude',
+    ['-p', '--output-format', 'stream-json', '--verbose', '--settings', settings, ...args],
+    { stdio: ['pipe', 'pipe', 'inherit'] },
+  )
+  const exited = new Promise((ok) => {
+    child.on('close', (code) => ok(code))
+    child.on('error', (err) => {
+      console.error(`✗ Could not start claude: ${err.message}`)
+      ok(null)
+    })
+  })
+  child.stdin.on('error', () => {})
+  child.stdin.end(prompt)
+  for await (const line of createInterface({ input: child.stdout })) {
+    log.write(line + '\n')
+    let event
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (event.type !== 'assistant') continue
+    for (const block of event.message?.content ?? []) {
+      if (block.type === 'text' && block.text.trim()) console.log(`\n${block.text.trim()}\n`)
+      if (block.type === 'tool_use') console.log(toolLine(block))
+    }
+  }
+  const exitCode = await exited
+  log.end()
+
+  const result = await readJson(join(batchDir, RESULT_FILE))
+  const t = new Date().toISOString()
+  // Close the run even if Claude exits without its SessionEnd hook.
+  await appendFile(join(batchDir, 'events.jsonl'), JSON.stringify({ t, kind: 'end' }) + '\n')
+  await writeFile(join(batchDir, DONE_FILE), JSON.stringify({ exitCode, result, finishedAt: t }))
+  console.log(
+    result
+      ? '\n✓ Done. Squash will update the bugs. Closing this window…'
+      : `\n✗ Claude finished without a result (exit ${exitCode}). Closing this window…`,
+  )
+}
+
+/** Closes a Terminal window once its shell has exited, so macOS does not ask to confirm. */
+async function closeWindow(windowId) {
+  for (let i = 0; i < 30; i++) {
+    const state = await osascript(
+      [
+        'on run argv',
+        'tell application "Terminal"',
+        'set matches to (every window whose id is ((item 1 of argv) as integer))',
+        'if matches is {} then return "gone"',
+        'set w to item 1 of matches',
+        'if busy of selected tab of w then return "busy"',
+        'close w',
+        'return "closed"',
+        'end tell',
+        'end run',
+      ],
+      [String(windowId)],
+    ).catch(() => 'gone')
+    if (state !== 'busy') return
+    await new Promise((ok) => setTimeout(ok, 1000))
+  }
+}
+
+/** Closes the run's Terminal window shortly after the runner reports Claude has finished. */
+function closeWhenDone(windowId, batchDir) {
+  const timer = setInterval(() => {
+    if (!existsSync(join(batchDir, DONE_FILE))) return
+    clearInterval(timer)
+    setTimeout(() => void closeWindow(windowId), CLOSE_AFTER_MS)
+  }, 2000)
+}
+
+/** Runs Claude Code on the batch: in a new Terminal window on macOS, headless elsewhere. */
+async function launch(folder, batchDir) {
+  await writeFile(
+    join(batchDir, 'settings.json'),
+    JSON.stringify(hookSettings(batchDir), null, 2) + '\n',
+  )
+  await writeFile(join(batchDir, RUN_FILE), JSON.stringify({ args: CLAUDE_ARGS }))
   if (MAC) {
-    const command = `cd ${sh(folder)} && claude ${args} "$(cat ${sh(promptFile)})"`
-    await osascript(
+    const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)}; exit`
+    const windowId = await osascript(
       [
         'on run argv',
         'tell application "Terminal"',
         'activate',
         'do script (item 1 of argv)',
+        // do script opens the new window in front.
+        'return id of front window',
         'end tell',
         'end run',
       ],
       [command],
     )
+    if (/^\d+$/.test(windowId)) closeWhenDone(Number(windowId), batchDir)
     return
   }
-  const log = openSync(join(batchDir, 'claude.log'), 'a')
-  const child = spawn('sh', ['-c', `claude -p ${args} "$(cat ${sh(promptFile)})"`], {
+  const log = openSync(join(batchDir, 'runner.log'), 'a')
+  const child = spawn(process.execPath, [SCRIPT, '--run', batchDir], {
     cwd: folder,
     detached: true,
     stdio: ['ignore', log, log],
-  })
-  // Close the run even if Claude exits without its SessionEnd hook.
-  child.on('exit', () => {
-    const event = { t: new Date().toISOString(), kind: 'end' }
-    appendFile(join(batchDir, 'events.jsonl'), JSON.stringify(event) + '\n').catch(() => {})
   })
   child.unref()
   console.log(`  running headless; output in ${join(batchDir, 'claude.log')}`)
@@ -498,8 +615,7 @@ async function handleSend(payload) {
   // Keep exported bugs out of git without touching the project's own .gitignore.
   await writeFile(join(root, '.gitignore'), '*\n')
   await Promise.all(downloads.map((d) => download(d.url, join(batchDir, d.file))))
-  const promptFile = join(batchDir, 'prompt.md')
-  await writeFile(promptFile, prompt)
+  await writeFile(join(batchDir, 'prompt.md'), prompt)
   await recordRun({
     id: batch,
     workspaceId,
@@ -508,7 +624,7 @@ async function handleSend(payload) {
     dir: batchDir,
     startedAt: new Date().toISOString(),
   })
-  await launch(folder, promptFile, batchDir)
+  await launch(folder, batchDir)
   console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
   return { ok: true, folder }
 }
@@ -525,6 +641,38 @@ async function handleSetFolder(workspaceId, payload) {
   await saveFolder(workspaceId, name, folder)
   console.log(`✓ ${name} → ${folder}`)
   return { folder }
+}
+
+/** The recorded run with this batch name in the workspace, or null. */
+async function findRun(workspaceId, batch) {
+  return (await loadRuns()).find((r) => r.id === batch && r.workspaceId === workspaceId) ?? null
+}
+
+/** Finished runs in the workspace that no Squash tab has applied yet. */
+async function workspaceResults(workspaceId) {
+  const results = []
+  for (const run of (await loadRuns()).filter((r) => r.workspaceId === workspaceId)) {
+    if (!run.dir || existsSync(join(run.dir, CLAIM_FILE))) continue
+    const done = await readJson(join(run.dir, DONE_FILE))
+    if (done)
+      results.push({ batch: run.id, exitCode: done.exitCode ?? null, result: done.result ?? null })
+  }
+  return results
+}
+
+/** Marks a run as applied. Only the first caller gets claimed: true, so it is applied once. */
+async function claimResult(workspaceId, batch) {
+  const run = await findRun(workspaceId, batch)
+  if (!run?.dir || !existsSync(join(run.dir, DONE_FILE))) {
+    throw new HttpError(404, 'not_found', 'No such finished run')
+  }
+  try {
+    await writeFile(join(run.dir, CLAIM_FILE), new Date().toISOString(), { flag: 'wx' })
+    return { claimed: true }
+  } catch (err) {
+    if (err?.code === 'EEXIST') return { claimed: false }
+    throw err
+  }
 }
 
 function serve() {
@@ -552,6 +700,9 @@ function serve() {
       const path = new URL(req.url ?? '/', 'http://localhost').pathname
       const folderRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/folder$/.exec(path)
       const runsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/runs$/.exec(path)
+      const resultsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results$/.exec(path)
+      const claimRoute =
+        /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/claim$/.exec(path)
       if (req.method === 'GET' && path === '/health') {
         return send(res, 200, { ok: true, version: VERSION, platform: process.platform }, origin)
       }
@@ -561,6 +712,12 @@ function serve() {
       }
       if (req.method === 'GET' && runsRoute) {
         return send(res, 200, { runs: await workspaceRuns(runsRoute[1]) }, origin)
+      }
+      if (req.method === 'GET' && resultsRoute) {
+        return send(res, 200, { runs: await workspaceResults(resultsRoute[1]) }, origin)
+      }
+      if (req.method === 'POST' && claimRoute) {
+        return send(res, 200, await claimResult(claimRoute[1], claimRoute[2]), origin)
       }
       if (req.method === 'POST' && folderRoute) {
         return send(res, 200, await handleSetFolder(folderRoute[1], await readBody(req)), origin)
@@ -606,6 +763,13 @@ if (isMain()) {
     // A broken progress report must never interrupt Claude: swallow everything, exit 0.
     await runHook(resolve(process.argv[3] ?? '.')).catch(() => {})
     process.exit(0)
+  }
+  if (RUNNER) {
+    await runBatch(resolve(process.argv[3] ?? '.')).catch((err) => {
+      console.error('✗', err instanceof Error ? err.message : err)
+      process.exitCode = 1
+    })
+    process.exit()
   }
   if (!existsSync(CONFIG_DIR)) await mkdir(CONFIG_DIR, { recursive: true })
   serve()

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta, WorkspaceMember } from './types'
-import { batchName, formatClaudePrompt } from './claudeExport'
+import { batchName, formatClaudePrompt, parseClaudeResult } from './claudeExport'
 
 vi.mock('./supabase', () => ({ supabase: {} }))
 
@@ -110,5 +110,35 @@ describe('formatClaudePrompt for feature requests', () => {
 describe('batchName', () => {
   it('is filesystem-safe and names the bugs', () => {
     expect(batchName([bug()], new Date('2026-10-06T15:30:12Z'))).toBe('20261006-153012-12')
+  })
+})
+
+describe('unattended bridge runs', () => {
+  it('asks Claude to report back through a result file only in bridge mode', () => {
+    const bridged = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    expect(bridged.prompt).toContain('`.squash/bugs/x/result.json`')
+    expect(bridged.prompt).toContain('"number":12')
+    expect(bridged.prompt).toContain('runs unattended')
+    const copied = formatClaudePrompt({ ...base, bugs: [bug()] })
+    expect(copied.prompt).not.toContain('result.json')
+  })
+
+  it('parses result files and drops malformed entries', () => {
+    expect(
+      parseClaudeResult({
+        bugs: [
+          { number: 12, resolved: true, summary: '  Fixed the handler.  ' },
+          { number: 13, resolved: 'yes', summary: 'Partly done' },
+          { number: 0, resolved: true, summary: 'bad number' },
+          { number: 14, resolved: true, summary: '' },
+          null,
+        ],
+      }),
+    ).toEqual([
+      { number: 12, resolved: true, summary: 'Fixed the handler.' },
+      { number: 13, resolved: false, summary: 'Partly done' },
+    ])
+    expect(parseClaudeResult(null)).toEqual([])
+    expect(parseClaudeResult({ bugs: 'x' })).toEqual([])
   })
 })

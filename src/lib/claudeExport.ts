@@ -48,6 +48,57 @@ function indent(text: string): string {
     .join('\n')
 }
 
+/** File Claude writes in the batch folder to report back; the bridge hands it to Squash. */
+export const RESULT_FILE = 'result.json'
+/** Summaries longer than this are cut to fit a resolution note or comment. */
+export const RESULT_SUMMARY_MAX = 4000
+
+export interface ClaudeResultItem {
+  number: number
+  resolved: boolean
+  summary: string
+}
+
+/** Tells an unattended Claude Code session how to report each bug back to Squash. */
+function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string): string {
+  const example = JSON.stringify({
+    bugs: bugs.map((b) => ({
+      number: b.number,
+      resolved: true,
+      summary: 'What you changed and how you verified it.',
+    })),
+  })
+  return [
+    'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+    '',
+    `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
+    '',
+    '```json',
+    example,
+    '```',
+    '',
+    `Set "resolved" to true only when the work is done and verified: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. Write each summary as a short plain-language statement of what you did. The terminal closes on its own once you finish.`,
+  ].join('\n')
+}
+
+/** Validates a result file written by Claude. Malformed entries are dropped. */
+export function parseClaudeResult(value: unknown): ClaudeResultItem[] {
+  const list = (value as { bugs?: unknown } | null)?.bugs
+  if (!Array.isArray(list)) return []
+  const items: ClaudeResultItem[] = []
+  for (const entry of list as unknown[]) {
+    const { number, resolved, summary } = (entry ?? {}) as Record<string, unknown>
+    if (typeof number !== 'number' || !Number.isInteger(number) || number < 1) continue
+    if (typeof summary !== 'string' || !summary.trim()) continue
+    items.push({
+      number,
+      resolved: resolved === true,
+      summary: summary.trim().slice(0, RESULT_SUMMARY_MAX),
+    })
+  }
+  return items
+}
+
 /** Builds a prompt Claude Code can act on directly: bug details plus a script that downloads the screenshots. */
 export function formatClaudePrompt({
   bugs,
@@ -134,6 +185,7 @@ export function formatClaudePrompt({
       ? `${task[0].toUpperCase()}${task.slice(1)}. When you are done, summarize what you changed.`
       : `Work through the ${noun}s one at a time: ${task}. When you are done, list each number with what you changed.`,
   )
+  if (localDir) intro.push('', resultInstructions(bugs, noun, localDir))
   return { prompt: [intro.join('\n'), ...sections].join('\n\n') + '\n', downloads }
 }
 
@@ -184,6 +236,8 @@ export const BRIDGE_URL = 'http://127.0.0.1:4317'
 export const BRIDGE_VERSION = 2
 /** Oldest bridge that reports what Claude is doing on each run. */
 export const PROGRESS_VERSION = 3
+/** Oldest bridge that runs Claude unattended and resolves bugs from its results. */
+export const AUTO_RESOLVE_VERSION = 4
 
 export interface BridgeStatus {
   version: number
@@ -281,7 +335,7 @@ export async function sendToBridge(
  * - starting: launched, Claude has not reported in yet
  * - working: running tools or thinking
  * - waiting: needs permission or an answer in its terminal
- * - done: finished its turn (the terminal stays open for follow-ups)
+ * - done: finished its work
  * - ended: the Claude session was closed
  */
 export type ClaudeRunState = 'starting' | 'working' | 'waiting' | 'done' | 'ended'
@@ -326,4 +380,30 @@ export function latestRunByBug(runs: ClaudeRun[]): Map<number, ClaudeRun> {
   const byBug = new Map<number, ClaudeRun>()
   for (const run of runs) for (const n of run.bugs) if (!byBug.has(n)) byBug.set(n, run)
   return byBug
+}
+
+/** A Claude Code run that has exited, with what Claude reported back. */
+export interface FinishedRun {
+  batch: string
+  /** Claude's exit code; non-zero when it crashed or was stopped. */
+  exitCode: number | null
+  /** Parsed result file, or null when Claude did not write a valid one. */
+  result: unknown
+}
+
+/** Finished runs for this workspace that no Squash tab has applied yet. */
+export async function getBridgeResults(workspaceId: string): Promise<FinishedRun[]> {
+  const { runs } = await bridgeRequest<{ runs: FinishedRun[] }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/results`,
+  )
+  return runs
+}
+
+/** Claims a finished run so it is applied once. False when another tab already claimed it. */
+export async function claimBridgeResult(workspaceId: string, batch: string): Promise<boolean> {
+  const { claimed } = await bridgeRequest<{ claimed: boolean }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/results/${encodeURIComponent(batch)}/claim`,
+    {},
+  )
+  return claimed
 }

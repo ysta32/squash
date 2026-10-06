@@ -20,10 +20,12 @@ import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { useClaudeExport } from '../hooks/useClaudeExport'
+import { useClaudeResults } from '../hooks/useClaudeResults'
 import { useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
+import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
 import type { Bug, BugKind } from '../lib/types'
 import { cn } from '../lib/utils'
 
@@ -100,6 +102,12 @@ export default function Workspace() {
   }, [])
   const clearPicked = useCallback(() => setPickedIds(new Set()), [])
   const claude = useClaudeExport(workspaceId, ws.workspace?.name ?? '', ws.members, toast)
+  useClaudeResults(
+    workspaceId,
+    (claude.status?.version ?? 0) >= AUTO_RESOLVE_VERSION,
+    { getBugByNumber, resolveBug },
+    toast,
+  )
   /** Selection of an optimistic bug (no number yet, so it cannot live in the URL). */
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [lookupMissing, setLookupMissing] = useState<number | null>(null)

@@ -3,7 +3,7 @@ import { Bot, Check, Copy, FolderOpen, X } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import {
   BRIDGE_VERSION,
-  PROGRESS_VERSION,
+  AUTO_RESOLVE_VERSION,
   getBridgeFolder,
   installCommand,
   setBridgeFolder,
@@ -131,7 +131,8 @@ export function ClaudeSetupDialog({
               <Bot size={18} aria-hidden="true" /> Send bugs to Claude Code
             </h2>
             <p className="mt-1 text-sm text-muted">
-              One press opens Claude Code in your project with the bug and its screenshots.
+              One press runs Claude Code in your project on the bug and its screenshots. When it is
+              done, the terminal closes and the bug is resolved with Claude’s summary.
             </p>
           </div>
           <button
@@ -152,9 +153,9 @@ export function ClaudeSetupDialog({
             )}
           />
           {connected
-            ? status.version >= PROGRESS_VERSION
+            ? status.version >= AUTO_RESOLVE_VERSION
               ? 'Connected to this computer'
-              : 'Connected. Run the command below again to follow Claude’s progress in Squash.'
+              : 'Connected. Run the command below again so Claude can follow along and resolve bugs on its own.'
             : outdated
               ? 'An older helper is running. Run the command below to update it.'
               : 'Waiting for the helper… this updates by itself'}

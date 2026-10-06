@@ -46,7 +46,8 @@ describe('ClaudeGuide', () => {
 
   it.each([
     [null, /No helper found/],
-    [{ version: 3, platform: 'darwin' }, /up to date/],
+    [{ version: 3, platform: 'darwin' }, /resolves bugs on its own/],
+    [{ version: 4, platform: 'darwin' }, /up to date/],
   ])('reports %o', async (status, text) => {
     pingBridge.mockResolvedValue(status)
     setup()

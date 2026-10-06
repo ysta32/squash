@@ -71,7 +71,7 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 
 **Fix with Claude**
 
-- **Send to Claude** on a bug, or **Send all to Claude** above the list, opens Claude Code in your project with the bugs, their comments and their screenshots. Pick specific bugs with ⌘/Ctrl/Shift-click or <kbd>X</kbd>, then press <kbd>C</kbd>. The copy button next to it copies a ready-to-paste prompt instead; its screenshot links expire after an hour.
+- **Send to Claude** on a bug, or **Send all to Claude** above the list, runs Claude Code in your project on the bugs, their comments and their screenshots. Claude works unattended; when it finishes, its Terminal window closes and Squash marks each bug it fixed as resolved, with Claude's summary as the resolution note. Bugs it could not finish stay open with the summary as a comment. Keep a Squash tab open (or open one later) to apply the results. Pick specific bugs with ⌘/Ctrl/Shift-click or <kbd>X</kbd>, then press <kbd>C</kbd>. The copy button next to it copies a ready-to-paste prompt instead; its screenshot links expire after an hour.
 - The first press walks you through setup in the app: paste one command into Terminal and the page connects by itself. The command installs a small helper that starts at login on macOS. The site has a step-by-step guide with a live check of your helper at [`/claude`](https://squash-livid.vercel.app/claude):
 
   ```sh
@@ -82,7 +82,7 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 
 - Each workspace opens Claude in its own project folder, in its own Terminal window. You pick the folder the first time you send from a workspace (a native folder picker), and change it with the folder button above the list. Choices are saved in `~/.squash/bridge.json`.
 - While Claude works, the bug shows what it is doing: its current step, its plan, its latest message and, when it finishes, its summary. Bugs Claude is on get a pulsing Claude icon in the list, amber when it is waiting for you in Terminal. Progress comes from Claude Code hooks the helper adds to each session, so it is only visible on the computer running the helper. Helpers installed before this need the install command run again.
-- The helper listens only on `127.0.0.1:4317`, accepts requests only from Squash, and saves each batch to `.squash/bugs/` in the project (ignored by git). Chrome asks once to let the page reach the local network. To work on the helper itself, run `npm run claude-bridge`; pass extra `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Outside macOS it runs `claude -p` headless and logs to the batch folder.
+- The helper listens only on `127.0.0.1:4317`, accepts requests only from Squash, and saves each batch to `.squash/bugs/` in the project (ignored by git). Chrome asks once to let the page reach the local network. To work on the helper itself, run `npm run claude-bridge`; Claude runs as `claude -p --permission-mode auto`; pass other `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Each run logs to `claude.log` in the batch folder, and Claude reports back through `result.json` there. Outside macOS it runs without a Terminal window.
 
 **Feel**
 

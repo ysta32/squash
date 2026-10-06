@@ -5,6 +5,7 @@ import {
   BRIDGE_URL,
   BRIDGE_VERSION,
   PROGRESS_VERSION,
+  AUTO_RESOLVE_VERSION,
   installCommand,
   pingBridge,
   type BridgeStatus,
@@ -94,10 +95,15 @@ function HelperCheck() {
                   'bg-amber-500',
                   `Helper v${status.version} is running. It can send bugs, but run the command below to update it so you can follow Claude’s progress.`,
                 ]
-              : [
-                  'bg-green-500',
-                  `Helper v${status.version} is installed and up to date. You can follow Claude’s progress in Squash.`,
-                ]
+              : status.version < AUTO_RESOLVE_VERSION
+                ? [
+                    'bg-amber-500',
+                    `Helper v${status.version} is running. Run the command below to update it so Claude resolves bugs on its own when it finishes.`,
+                  ]
+                : [
+                    'bg-green-500',
+                    `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
+                  ]
 
   return (
     <div className="mt-6 rounded-lg border border-border p-4">
@@ -279,7 +285,7 @@ export default function ClaudeGuide() {
               <code className={cn(code, 'break-all')}>
                 curl -H "Origin: {origin}" {BRIDGE_URL}/health
               </code>
-              . A working helper answers with its version, which should be {PROGRESS_VERSION} or
+              . A working helper answers with its version, which should be {AUTO_RESOLVE_VERSION} or
               higher.
             </dd>
           </div>
