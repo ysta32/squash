@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   onRemoteInsert: null as ((bug: Bug) => void) | null,
   setLastWorkspace: vi.fn(),
   getBugByNumber: vi.fn(),
+  fileBug: vi.fn(),
+  submit: null as ((input: unknown) => Promise<void>) | null,
 }))
 
 const workspace: WorkspaceRow = {
@@ -83,7 +85,7 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
         bugs: mocks.bugs,
         loading: false,
         counts: { open: mocks.bugs.length, resolved: 0, all: mocks.bugs.length },
-        fileBug: vi.fn(),
+        fileBug: mocks.fileBug,
         updateBug: vi.fn(),
         resolveBug: vi.fn(),
         reopenBug: vi.fn(),
@@ -117,14 +119,23 @@ vi.mock('../components/Header', async () => {
   }
 })
 vi.mock('../components/CaptureBar', () => ({
-  CaptureBar: ({ focusRef }: { focusRef?: { current: HTMLTextAreaElement | null } }) => (
-    <textarea
-      aria-label="Capture"
-      ref={(el) => {
-        if (focusRef) focusRef.current = el
-      }}
-    />
-  ),
+  CaptureBar: ({
+    focusRef,
+    onSubmit,
+  }: {
+    focusRef?: { current: HTMLTextAreaElement | null }
+    onSubmit: (input: unknown) => Promise<void>
+  }) => {
+    mocks.submit = onSubmit
+    return (
+      <textarea
+        aria-label="Capture"
+        ref={(el) => {
+          if (focusRef) focusRef.current = el
+        }}
+      />
+    )
+  },
 }))
 
 function makeBug(n: number, over: Partial<BugWithMeta> = {}): BugWithMeta {
@@ -161,8 +172,8 @@ function OpenMenu({ onClose }: { onClose: () => void }) {
   return <div ref={ref}>menu</div>
 }
 
-function show(path: string, extra?: ReactNode) {
-  render(
+function tree(path: string, extra?: ReactNode) {
+  return (
     <MemoryRouter initialEntries={[path]}>
       <ToastProvider>
         <Routes>
@@ -173,8 +184,12 @@ function show(path: string, extra?: ReactNode) {
         <LocationProbe />
         {extra}
       </ToastProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+}
+
+function show(path: string, extra?: ReactNode) {
+  return render(tree(path, extra))
 }
 
 const path = () => screen.getByTestId('path').textContent
@@ -216,6 +231,44 @@ describe('Workspace', () => {
     show('/app/ws')
     press('j')
     expect(path()).toBe('/app/ws/bug/2')
+  })
+
+  it('opens a newly filed bug in place of the previous selection', async () => {
+    let finishInsert = () => {}
+    mocks.fileBug.mockImplementation(
+      (_input: unknown, opts?: { onOptimistic?: (id: string) => void }) => {
+        mocks.bugs = [
+          makeBug(0, { id: 'new', title: 'Fresh bug', optimistic: true }),
+          ...mocks.bugs,
+        ]
+        opts?.onOptimistic?.('new')
+        return new Promise<void>((resolve) => {
+          finishInsert = () => {
+            mocks.bugs = mocks.bugs.map((b) =>
+              b.id === 'new' ? { ...b, number: 4, optimistic: false } : b,
+            )
+            resolve()
+          }
+        })
+      },
+    )
+    const view = show('/app/ws/bug/2')
+    expect(screen.getByDisplayValue('Bug number 2')).toBeInTheDocument()
+
+    let filing: Promise<void> = Promise.resolve()
+    act(() => {
+      filing = mocks.submit!({ description: 'Fresh bug' })
+    })
+    expect(path()).toBe('/app/ws')
+    expect(screen.getByDisplayValue('Fresh bug')).toBeInTheDocument()
+
+    await act(async () => {
+      finishInsert()
+      await filing
+    })
+    view.rerender(tree('/app/ws/bug/2'))
+    expect(path()).toBe('/app/ws/bug/4')
+    expect(screen.getByDisplayValue('Fresh bug')).toBeInTheDocument()
   })
 
   it('ignores shortcuts while typing in an input', () => {

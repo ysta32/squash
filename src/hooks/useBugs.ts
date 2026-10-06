@@ -46,7 +46,8 @@ export interface UseBugsResult {
   bugs: BugWithMeta[]
   loading: boolean
   counts: BugCounts
-  fileBug(input: NewBugInput): Promise<void>
+  /** `onOptimistic` runs with the new bug's id as soon as its optimistic row is in the list. */
+  fileBug(input: NewBugInput, opts?: { onOptimistic?: (id: string) => void }): Promise<void>
   updateBug(
     id: string,
     patch: Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>,
@@ -704,7 +705,7 @@ export function useBugs(
   }, [])
 
   const fileBug = useCallback(
-    async (input: NewBugInput) => {
+    async (input: NewBugInput, opts?: { onOptimistic?: (id: string) => void }) => {
       const ws = workspaceId
       const filedBy = await requireUserId()
       selfIdRef.current = filedBy
@@ -748,6 +749,7 @@ export function useBugs(
         optimistic: true,
       }
       mutate(ws, (b) => [optimistic, ...b.filter((x) => x.id !== id)])
+      opts?.onOptimistic?.(id)
 
       let inserted: BugRow | null = null
       let failure: unknown = null

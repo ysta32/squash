@@ -188,6 +188,27 @@ export default function Workspace() {
     [bugs, hasNumberParam, navigate, basePath, bugPath],
   )
 
+  // A newly filed item opens right away: it is optimistic (no number yet), so it is held as the
+  // pending selection and moves into the URL once the server assigns its number.
+  const fileAndSelect = useCallback(
+    async (input: Parameters<typeof fileBug>[0]) => {
+      let newId: string | null = null
+      try {
+        await fileBug(input, {
+          onOptimistic: (id) => {
+            newId = id
+            setPendingId(id)
+            if (hasNumberParam) navigate(basePath)
+          },
+        })
+      } catch (err) {
+        if (newId !== null) setPendingId((p) => (p === newId ? null : p))
+        throw err
+      }
+    },
+    [fileBug, hasNumberParam, navigate, basePath],
+  )
+
   const deselect = useCallback(() => {
     setPendingId(null)
     if (hasNumberParam) navigate(basePath)
@@ -407,7 +428,7 @@ export default function Workspace() {
         <div className="mx-auto max-w-5xl">
           <CaptureBar
             workspaceId={workspaceId}
-            onSubmit={fileBug}
+            onSubmit={fileAndSelect}
             kind={filters.kind}
             onToast={toast}
             focusRef={captureRef}
