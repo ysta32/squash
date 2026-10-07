@@ -344,7 +344,7 @@ describe('BugList', () => {
   it('renders severity, filer, timestamp and muted resolved rows with resolver', () => {
     render(<Harness filters={{ ...filters, tab: 'all' }} />)
     const open = screen.getByRole('option', { name: '#1 Broken login' })
-    expect(within(open).getByTitle('High severity')).toHaveClass('bg-amber-500')
+    expect(within(open).getByTitle('High severity')).toHaveClass('bg-sev-high')
     expect(within(open).getByTitle('Filed by Ada')).toBeInTheDocument()
     expect(open.querySelector('time')).toHaveAttribute('datetime', bugs[0].created_at)
     const resolved = screen.getByRole('option', { name: '#2 Fixed layout' })

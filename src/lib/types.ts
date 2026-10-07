@@ -103,8 +103,8 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 
 /** Tailwind background class for the severity dot/badge. */
 export const SEVERITY_COLOR: Record<Severity, string> = {
-  low: 'bg-zinc-400',
-  medium: 'bg-blue-500',
-  high: 'bg-amber-500',
-  critical: 'bg-red-500',
+  low: 'bg-sev-low',
+  medium: 'bg-sev-medium',
+  high: 'bg-sev-high',
+  critical: 'bg-sev-critical',
 }

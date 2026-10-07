@@ -11,6 +11,7 @@ import type { BugKind, Severity } from '../lib/types'
 import { cn, randomId } from '../lib/utils'
 import { AttachmentChip } from './AttachmentChip'
 import { SeverityPicker } from './SeverityPicker'
+import { Button, Kbd } from './ui'
 
 const MAX_FILES = 10
 const MAX_TEXTAREA_PX = 6 * 24
@@ -245,7 +246,7 @@ export function CaptureBar({
     <div
       data-workspace={workspaceId}
       onKeyDown={onKeyDown}
-      className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2 shadow-sm focus-within:border-[var(--accent)]"
+      className="t rounded-xl border border-border bg-bg p-2 shadow-sm hover:border-fg/20 focus-within:border-accent"
     >
       <div className="relative">
         <div
@@ -255,7 +256,7 @@ export function CaptureBar({
         >
           <span className="text-transparent">{value}</span>
           {interim && (
-            <span data-testid="interim" className="text-[var(--muted)]">
+            <span data-testid="interim" className="text-muted">
               {value && !/\s$/.test(value) ? ' ' : ''}
               {interim}
             </span>
@@ -266,10 +267,14 @@ export function CaptureBar({
           value={value}
           rows={1}
           placeholder={
-            interim ? '' : kind === 'feature' ? 'Describe the feature…' : 'Describe the bug…'
+            interim
+              ? ''
+              : kind === 'feature'
+                ? 'Paste a screenshot or describe a feature'
+                : 'Paste a screenshot or describe a bug'
           }
           onChange={(e) => setValue(e.target.value)}
-          className="relative block w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-[var(--fg)] outline-none placeholder:text-[var(--muted)]"
+          className="relative block w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-fg outline-none placeholder:text-muted"
         />
       </div>
 
@@ -292,7 +297,7 @@ export function CaptureBar({
           aria-label="Attach image"
           title="Attach image"
           onClick={() => fileInputRef.current?.click()}
-          className="rounded p-1.5 text-[var(--muted)] hover:text-[var(--fg)]"
+          className="focus-ring rounded-md p-1.5 text-muted hover:text-fg"
         >
           <Paperclip size={16} />
         </button>
@@ -312,7 +317,7 @@ export function CaptureBar({
               aria-label="Take photo"
               title="Take photo"
               onClick={() => cameraInputRef.current?.click()}
-              className="rounded p-1.5 text-[var(--muted)] hover:text-[var(--fg)]"
+              className="focus-ring rounded-md p-1.5 text-muted hover:text-fg"
             >
               <Camera size={16} />
             </button>
@@ -335,8 +340,8 @@ export function CaptureBar({
               title="Dictate"
               onClick={speech.toggle}
               className={cn(
-                'rounded p-1.5 hover:text-[var(--fg)]',
-                speech.listening ? 'text-red-500' : 'text-[var(--muted)]',
+                'focus-ring rounded-md p-1.5 hover:text-fg',
+                speech.listening ? 'text-danger' : 'text-muted',
               )}
             >
               <Mic size={16} />
@@ -344,27 +349,33 @@ export function CaptureBar({
             {speech.listening && (
               <span
                 data-testid="recording-dot"
-                className="h-2 w-2 animate-pulse rounded-full bg-red-500"
+                className="h-2 w-2 animate-pulse rounded-full bg-danger"
               />
             )}
           </span>
         ) : (
-          <span title="Voice needs Chrome, Edge, or Safari" className="p-1.5 text-[var(--muted)]">
+          <span title="Voice needs Chrome, Edge, or Safari" className="p-1.5 text-muted">
             <Info size={16} aria-label="Voice needs Chrome, Edge, or Safari" />
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {!canSubmit && !coarse && (
+            <span className="hidden items-center gap-1 text-xs text-muted sm:inline-flex">
+              Press <Kbd>N</Kbd> to focus
+            </span>
+          )}
           <SeverityPicker value={severity} onChange={setSeverity} />
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             aria-label={`File ${noun}`}
             title={`File ${noun} (Enter)`}
             disabled={!canSubmit}
             onClick={() => void submit()}
-            className="rounded bg-[var(--accent)] p-1.5 text-white disabled:opacity-40"
+            className="w-7 px-0"
           >
             <Send size={14} />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

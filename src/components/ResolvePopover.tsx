@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Button } from './ui'
 import { isMac } from '../lib/utils'
 
 export interface ResolvePopoverProps {
@@ -62,7 +63,7 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
       ref={rootRef}
       role="dialog"
       aria-label={`${verb} bug`}
-      className="absolute top-full right-0 z-30 mt-2 w-72 rounded-lg border border-border bg-bg-elevated p-3 shadow-lg"
+      className="absolute top-full right-0 z-30 mt-2 w-72 rounded-lg border border-border bg-bg-elevated p-3 shadow-elevated"
     >
       <textarea
         autoFocus
@@ -72,24 +73,20 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
         rows={3}
         placeholder="Add a note (optional)"
         aria-label="Note"
-        className="w-full resize-none rounded-md border border-border bg-bg-subtle px-2 py-1.5 text-sm outline-none placeholder:text-muted focus:border-accent"
+        className="w-full resize-none focus-ring rounded-md border border-border bg-bg-subtle px-2 py-1.5 text-sm placeholder:text-muted focus:border-accent"
       />
       <div className="mt-2 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => confirm(false)}
-          className="rounded-md px-2 py-1.5 text-xs text-muted hover:bg-bg-subtle hover:text-fg"
-        >
+        <Button variant="ghost" size="sm" onClick={() => confirm(false)}>
           {verb} without note
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => confirm(true)}
           title={`${isMac ? '⌘' : 'Ctrl'}+Enter`}
-          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
         >
           {verb}
-        </button>
+        </Button>
       </div>
     </div>
   )
