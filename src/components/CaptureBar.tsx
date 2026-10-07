@@ -422,7 +422,7 @@ export function CaptureBar({
             className="t focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-accent text-xs font-medium whitespace-nowrap text-accent-fg shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:bg-bg-subtle disabled:text-muted disabled:shadow-none sm:w-auto sm:pr-1.5 sm:pl-2.5"
           >
             <SendHorizontal size={14} aria-hidden="true" />
-            <span className="hidden sm:inline">File {noun}</span>
+            <span className="hidden sm:inline">{kind === 'feature' ? 'Request' : 'File bug'}</span>
             <kbd
               aria-hidden="true"
               className="hidden h-5 min-w-5 items-center justify-center rounded bg-current/15 px-1 font-sans text-[11px] sm:inline-flex"
