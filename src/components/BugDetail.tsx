@@ -239,7 +239,7 @@ function BugBody({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <div className="flex items-center gap-3 px-6 pt-4">
+      <div className="flex items-center gap-2 px-6 pt-4 sm:gap-3">
         <button
           type="button"
           onClick={onBack}
@@ -292,14 +292,15 @@ function BugBody({
                 type="button"
                 disabled={!editable}
                 onClick={() => onSend(bug)}
+                aria-label="Send to Claude"
                 title="Open Claude Code on this bug (C)"
                 className={cn(
-                  'inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm text-fg hover:bg-bg-subtle disabled:opacity-50',
+                  'inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm whitespace-nowrap text-fg hover:bg-bg-subtle disabled:opacity-50',
                   onCopy ? 'rounded-l-md' : 'rounded-md',
                 )}
               >
                 <Bot className="h-4 w-4" />
-                Send to Claude
+                <span className="hidden sm:inline">Send to Claude</span>
               </button>
             )}
             {onCopy && (
@@ -326,7 +327,7 @@ function BugBody({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => onPopover(popover ? null : isOpen ? 'resolve' : 'reopen')}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50',
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap disabled:opacity-50 sm:px-4',
               isOpen
                 ? 'bg-accent text-accent-fg hover:opacity-90'
                 : 'border border-border text-fg hover:bg-bg-subtle',
