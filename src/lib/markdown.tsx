@@ -27,7 +27,10 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
 function closing(text: string, marker: string, from: number): number {
   let at = text.indexOf(marker, from)
   while (at !== -1 && at === from) at = text.indexOf(marker, at + 1)
-  if (marker === '**') while (at !== -1 && text[at + 2] === '*') at++
+  if (marker === '**' && at !== -1 && text[at + 2] === '*') {
+    const lone = text.slice(from, at).replaceAll('**', '').split('*').length - 1
+    if (lone % 2 === 1) at++
+  }
   return at
 }
 

@@ -99,6 +99,13 @@ describe('Markdown', () => {
     expect(c.textContent).toBe('bold italic')
   })
 
+  it('keeps adjacent bold and italic separate', () => {
+    const c = html('**bold***italic*')
+    expect(c.querySelector('strong')?.textContent).toBe('bold')
+    expect(c.querySelector('em')?.textContent).toBe('italic')
+    expect(c.textContent).toBe('bolditalic')
+  })
+
   it('does not nest anchors inside link labels', () => {
     const c = html('[https://example.com](https://other.example)')
     const a = c.querySelectorAll('a')
