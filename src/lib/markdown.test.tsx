@@ -68,6 +68,12 @@ describe('Markdown', () => {
     expect(c.textContent).toContain('a@b.co')
   })
 
+  it('highlights unicode mentions', () => {
+    const c = html('hi @JoséGarcía and @Łukasz and @李雷')
+    const spans = Array.from(c.querySelectorAll('span')).map((s) => s.textContent)
+    expect(spans).toEqual(['@JoséGarcía', '@Łukasz', '@李雷'])
+  })
+
   it('never injects HTML', () => {
     const c = html('<img src=x onerror="alert(1)"> <script>bad()</script>')
     expect(c.querySelector('img')).toBeNull()

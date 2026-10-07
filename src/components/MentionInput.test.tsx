@@ -20,14 +20,14 @@ const members = [
   member('3', 'Grace Hopper'),
 ]
 
-function Harness({ onSubmit }: { onSubmit: () => void }) {
+function Harness({ onSubmit, list = members }: { onSubmit: () => void; list?: WorkspaceMember[] }) {
   const [v, setV] = useState('')
   return (
     <MentionInput
       value={v}
       onChange={setV}
       onSubmit={onSubmit}
-      members={members}
+      members={list}
       ariaLabel="Comment"
     />
   )
@@ -87,6 +87,31 @@ describe('MentionInput', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
     fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
     expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('matches accented and non-Latin names', () => {
+    const many = [member('1', 'José García'), member('2', 'Łukasz Nowak'), member('3', '李雷')]
+    render(<Harness onSubmit={vi.fn()} list={many} />)
+    const box = screen.getByRole('combobox')
+    type(box, '@')
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+    fireEvent.change(box, { target: { value: '@José', selectionStart: 5, selectionEnd: 5 } })
+    expect(screen.getAllByRole('option')).toHaveLength(1)
+    fireEvent.change(box, { target: { value: '@李', selectionStart: 2, selectionEnd: 2 } })
+    expect(screen.getAllByRole('option')).toHaveLength(1)
+  })
+
+  it('ignores keys while composing (IME)', () => {
+    const onSubmit = vi.fn()
+    render(<Harness onSubmit={onSubmit} />)
+    const box = screen.getByRole('combobox') as HTMLTextAreaElement
+    type(box, '@ada')
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true })
+    expect(box.value).toBe('@ada')
+    expect(onSubmit).not.toHaveBeenCalled()
+    type(box, 'x')
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true })
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('closes on Escape', () => {

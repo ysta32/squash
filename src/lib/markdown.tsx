@@ -145,7 +145,7 @@ function inline(text: string, inLink: boolean): ReactNode[] {
     }
 
     if (ch === '@' && !isWord(prev)) {
-      const m = /^@[\w.-]+/.exec(rest)
+      const m = /^@[\p{L}\p{N}_.-]+/u.exec(rest)
       if (m) {
         const name = m[0].replace(/[.-]+$/, '')
         if (name.length > 1) {

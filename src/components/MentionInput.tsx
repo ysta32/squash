@@ -4,7 +4,7 @@ import type { WorkspaceMember } from '../lib/types'
 import { Avatar } from './Avatar'
 
 const MAX_RESULTS = 6
-const TOKEN_RE = /(^|\s)@([\w.-]*)$/
+const TOKEN_RE = /(^|\s)@([\p{L}\p{N}_.-]*)$/u
 
 export interface MentionInputProps {
   value: string
@@ -76,6 +76,7 @@ export function MentionInput({
   }
 
   function onKeyDown(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return
     if (open) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
@@ -84,7 +85,6 @@ export function MentionInput({
         return
       }
       if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
-        if (e.nativeEvent.isComposing) return
         e.preventDefault()
         insert(matches[activeIndex])
         return
@@ -95,7 +95,7 @@ export function MentionInput({
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSubmit()
     }
