@@ -24,7 +24,7 @@ export function createSeoAssets(siteUrl?: string): { robots: string; sitemap: st
     .join('\n')
 
   return {
-    robots: `User-agent: *\nAllow: /\nDisallow: /app/\nDisallow: /auth/\n\nSitemap: ${baseUrl}/sitemap.xml\n`,
+    robots: `User-agent: *\nAllow: /\nDisallow: /app$\nDisallow: /app/\nDisallow: /auth/\nDisallow: /signin\nDisallow: /join/\n\nSitemap: ${baseUrl}/sitemap.xml\n`,
     sitemap: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`,
   }
 }

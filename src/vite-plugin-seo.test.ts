@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import html from '../index.html?raw'
 import { createSeoAssets, resolveSiteUrl, transformSeoHtml } from '../vite-plugin-seo'
 
 describe('SEO build helpers', () => {
@@ -13,11 +14,7 @@ describe('SEO build helpers', () => {
     expect(resolveSiteUrl(' https://squash.example/// ')).toBe('https://squash.example')
   })
 
-  it('makes every social and canonical URL absolute', () => {
-    const html = `<meta property="og:image" content="__SEO_SITE_URL__/og.png" />
-<meta name="twitter:image" content="__SEO_SITE_URL__/og.png" />
-<meta property="og:url" content="__SEO_SITE_URL__/" />
-<link rel="canonical" href="__SEO_SITE_URL__/" />`
+  it('makes social images absolute without assigning a shared canonical URL', () => {
     const document = new DOMParser().parseFromString(
       transformSeoHtml(html, 'https://squash.example/'),
       'text/html',
@@ -27,18 +24,14 @@ describe('SEO build helpers', () => {
         'https://squash.example/og.png',
       )
     }
-    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(
-      'https://squash.example/',
-    )
-    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
-      'https://squash.example/',
-    )
+    expect(document.querySelector('meta[property="og:url"]')).toBeNull()
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull()
   })
 
   it('generates crawl rules and only the four public sitemap routes', () => {
     const { robots, sitemap } = createSeoAssets('https://squash.example/')
     expect(robots).toBe(
-      'User-agent: *\nAllow: /\nDisallow: /app/\nDisallow: /auth/\n\nSitemap: https://squash.example/sitemap.xml\n',
+      'User-agent: *\nAllow: /\nDisallow: /app$\nDisallow: /app/\nDisallow: /auth/\nDisallow: /signin\nDisallow: /join/\n\nSitemap: https://squash.example/sitemap.xml\n',
     )
     const document = new DOMParser().parseFromString(sitemap, 'application/xml')
     expect(document.querySelector('parsererror')).toBeNull()
