@@ -6,7 +6,11 @@ export { Logo, LogoMark } from './Logo'
 export { Section } from './Section'
 export {
   buttonClass,
+  dialogOverlayClass,
+  dialogPanelClass,
   inputClass,
+  menuItemClass,
+  panelClass,
   proseLinkClass,
   type ButtonSize,
   type ButtonVariant,

@@ -40,15 +40,18 @@ export function EmptyState({
   return (
     <div
       role="status"
-      className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted"
+      className="flex flex-col items-center px-6 py-14 text-center text-sm text-muted"
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-bg-subtle">
-        <Icon size={24} strokeWidth={1.5} aria-hidden="true" />
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-bg-subtle text-muted">
+        <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
       </div>
-      <h2 className="text-base font-medium text-fg">{heading}</h2>
-      <p className="max-w-sm">{body}</p>
+      <h2 className="text-sm font-medium text-fg">{heading}</h2>
+      <p className="mt-1 max-w-xs text-xs leading-relaxed">{body}</p>
       {firstItem && (
-        <ol aria-label="How to file" className="flex flex-wrap justify-center gap-4 text-xs">
+        <ol
+          aria-label="How to file"
+          className="mt-5 flex flex-col items-start gap-2 rounded-lg border border-border bg-bg-subtle/50 px-4 py-3 text-xs"
+        >
           <li className="flex items-center gap-2">
             <Kbd>⌘V</Kbd> Paste a screenshot
           </li>
@@ -61,7 +64,7 @@ export function EmptyState({
         </ol>
       )}
       {filtered && onClearFilters && (
-        <Button variant="ghost" onClick={onClearFilters}>
+        <Button variant="secondary" size="sm" className="mt-4" onClick={onClearFilters}>
           Clear filters
         </Button>
       )}

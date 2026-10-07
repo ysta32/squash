@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils'
 export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
 
 const TONE: Record<BadgeTone, string> = {
-  neutral: 'bg-bg-subtle text-muted',
+  neutral: 'border border-border bg-bg-subtle text-muted',
   accent: 'bg-accent/12 text-accent',
   success: 'bg-success/12 text-success',
   warning: 'bg-warning/12 text-warning',
@@ -23,7 +23,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] font-medium',
+        'inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] leading-none font-medium whitespace-nowrap',
         TONE[tone],
         className,
       )}

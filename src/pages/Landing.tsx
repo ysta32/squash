@@ -1,207 +1,60 @@
-import { ArrowRight, Check } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ArrowRight, Check, ChevronDown, Command, Keyboard } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ButtonLink, Kbd, Logo, buttonClass } from '../components/ui'
+import {
+  DEFAULT_GITHUB_URL,
+  DETAILS,
+  FAQ,
+  FEATURES,
+  HERO_SHOT,
+  MOBILE_POINTS,
+  PALETTE_SHOT,
+  SELF_HOST,
+  SHORTCUTS,
+  STEPS,
+  type Feature,
+} from '../components/landing/content'
+import {
+  PhoneFrame,
+  ShotFrame,
+  ShotImage,
+  Stage,
+  type PhoneCrop,
+} from '../components/landing/Frames'
 import { useAuth } from '../lib/auth'
 import { useTheme, type ResolvedTheme } from '../lib/theme'
 import { cn } from '../lib/utils'
 
-const DEFAULT_GITHUB_URL = 'https://github.com/ysta32/squash'
+const CONTAINER = 'mx-auto w-full max-w-6xl px-5 sm:px-8'
+const SECTION = 'border-t border-border py-16 sm:py-24'
 
-interface Shot {
-  /** File in public/product without extension; themed shots get a -light/-dark suffix. */
-  name: string
-  themed: boolean
-  width: number
-  height: number
-  alt: string
-}
-
-const HERO_SHOT: Shot = {
-  name: 'workspace',
-  themed: true,
-  width: 1600,
-  height: 1000,
-  alt: 'The Squash workspace: a live bug list on the left, and an open bug on the right with its screenshots, activity, comments, and Claude Code working on the fix',
-}
-
-interface Feature {
-  id: string
-  label: string
-  title: string
-  body: string
-  bullets: string[]
-  shot: Shot
-}
-
-const FEATURES: Feature[] = [
+const PHONES: PhoneCrop[] = [
   {
-    id: 'capture',
-    label: 'Capture',
-    title: 'One input, always on screen',
-    body: 'No forms, no required fields, no ticket templates. Paste an image, type or dictate what went wrong, and press Enter.',
-    bullets: [
-      'Paste anywhere with ⌘V and the cursor jumps to the capture bar',
-      'Images are compressed to WebP in the browser before upload',
-      'Voice dictation with a live transcript in Chrome, Edge and Safari',
-    ],
-    shot: {
-      name: 'capture',
-      themed: true,
-      width: 1400,
-      height: 544,
-      alt: 'The capture bar with a typed description and an attached screenshot, above the live bug list',
-    },
+    x: 73,
+    y: 104,
+    w: 380,
+    h: 825,
+    alt: 'Squash on a phone in light mode: the capture bar above the live bug list',
   },
   {
-    id: 'markup',
-    label: 'Mark up',
-    title: 'Point at the problem, not around it',
-    body: 'Draw on a screenshot before you file it. An arrow and a box say more than a paragraph of “the button near the bottom”.',
-    bullets: [
-      'Arrow, box and pen, with A, B and P to switch',
-      'Undo with ⌘Z, and Escape asks before throwing work away',
-      'Large captures are re-encoded to stay under the upload limit',
-    ],
-    shot: {
-      name: 'annotate',
-      themed: true,
-      width: 1400,
-      height: 991,
-      alt: 'The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button',
-    },
-  },
-  {
-    id: 'claude',
-    label: 'Claude Code',
-    title: 'Send it to Claude Code and watch it get fixed',
-    body: 'Send one bug or the whole list, with screenshots and comments attached. Squash shows the file Claude is editing, its plan, and its latest message while it works.',
-    bullets: [
-      'Fixed bugs resolve themselves, with Claude’s summary as the note',
-      'Bugs it could not finish stay open with the summary as a comment',
-      'Runs through a small local helper you install with one command',
-    ],
-    shot: {
-      name: 'claude',
-      themed: true,
-      width: 1400,
-      height: 548,
-      alt: 'A bug with a Claude is working panel: the file being edited, a four-step plan with two steps done, and Claude’s latest explanation',
-    },
-  },
-  {
-    id: 'team',
-    label: 'Team',
-    title: 'Live for everyone on the team',
-    body: 'New bugs, edits, comments and resolutions reach every teammate in about a second. Invite up to ten people with a link.',
-    bullets: [
-      'See who is online and which bug each teammate has open',
-      'Assign an owner, and filter to what is yours or what nobody has picked up',
-      'Filed and resolved counts per member, for the week and all time',
-    ],
-    shot: {
-      name: 'stats',
-      themed: true,
-      width: 720,
-      height: 338,
-      alt: 'The stats popover listing bugs filed and resolved by each teammate over the last 7 days and all time',
-    },
+    x: 511,
+    y: 68,
+    w: 378,
+    h: 825,
+    alt: 'Squash on a phone in dark mode: a bug with Claude Code working on the fix and a teammate’s comments',
   },
 ]
 
-const STEPS = [
-  {
-    title: 'Create a workspace',
-    body: 'Sign in with Google or a magic link, name the workspace, and share the invite link with your team.',
-  },
-  {
-    title: 'File bugs as you find them',
-    body: 'Paste a screenshot, describe it in a sentence, and press Enter. It is on your teammate’s screen a second later.',
-  },
-  {
-    title: 'Fix them',
-    body: 'Resolve with a note, or send a batch to Claude Code and let it close the ones it fixes.',
-  },
-]
-
-const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['N'], label: 'New bug' },
-  { keys: ['⌘', 'V'], label: 'Paste screenshot' },
-  { keys: ['Enter'], label: 'File bug' },
-  { keys: ['Alt', '1–4'], label: 'Severity' },
-  { keys: ['J', 'K'], label: 'Next, previous' },
-  { keys: ['C'], label: 'Send to Claude' },
-]
-
-const SELF_HOST = [
-  {
-    title: 'MIT licensed',
-    body: 'Read it, fork it, change it. The whole app is one small React and TypeScript codebase.',
-  },
-  {
-    title: 'Runs on Supabase',
-    body: 'Postgres, Auth, Realtime and Storage on a free project, with Row Level Security on every table.',
-  },
-  {
-    title: 'One command for the database',
-    body: 'Run npx supabase db push for the schema, then import the repo into Vercel and deploy.',
-  },
-]
-
-const FAQ = [
-  {
-    q: 'Is Squash free?',
-    a: 'Yes. The hosted version is free to use, and the code is MIT licensed if you would rather run your own copy.',
-  },
-  {
-    q: 'Who is it built for?',
-    a: 'Founding teams of two to ten people who keep losing bug reports in a chat channel. A workspace holds up to ten members.',
-  },
-  {
-    q: 'What do I need for the Claude Code integration?',
-    a: 'Claude Code on your Mac and a small helper that Squash installs with one Terminal command. The helper listens only on 127.0.0.1 and accepts requests only from Squash.',
-  },
-  {
-    q: 'Where are my screenshots stored?',
-    a: 'In a private Supabase storage bucket, served through signed links that expire after an hour. Only members of your workspace can read them.',
-  },
-  {
-    q: 'How long does self-hosting take?',
-    a: 'About five minutes with Node.js 24, a free Supabase project, and optionally a Vercel account. The README walks through every step.',
-  },
-]
-
-function Screenshot({
-  shot,
-  theme,
-  lazy = true,
-  className,
-}: {
-  shot: Shot
-  theme: ResolvedTheme
-  lazy?: boolean
-  className?: string
-}) {
-  const src = `/product/${shot.themed ? `${shot.name}-${theme}` : shot.name}.webp`
-  return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-elevated',
-        className,
-      )}
-    >
-      <img
-        src={src}
-        alt={shot.alt}
-        width={shot.width}
-        height={shot.height}
-        loading={lazy ? 'lazy' : 'eager'}
-        fetchPriority={lazy ? undefined : 'high'}
-        decoding="async"
-        className="block h-auto w-full"
-      />
-    </div>
-  )
+function useScrolled(threshold = 8): boolean {
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > threshold)
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    return () => window.removeEventListener('scroll', update)
+  }, [threshold])
+  return scrolled
 }
 
 function PrimaryCta({ signedIn, className }: { signedIn: boolean; className?: string }) {
@@ -218,14 +71,115 @@ function PrimaryCta({ signedIn, className }: { signedIn: boolean; className?: st
   )
 }
 
-function SectionHeading({ id, children, sub }: { id: string; children: ReactNode; sub?: string }) {
+function Eyebrow({ children }: { children: ReactNode }) {
+  return <p className="text-sm font-medium text-accent">{children}</p>
+}
+
+function SectionIntro({
+  id,
+  eyebrow,
+  title,
+  sub,
+  className,
+}: {
+  id: string
+  eyebrow?: string
+  title: string
+  sub?: string
+  className?: string
+}) {
   return (
-    <div className="max-w-2xl">
-      <h2 id={id} className="text-2xl font-semibold tracking-tight sm:text-3xl">
-        {children}
+    <div className={cn('max-w-2xl', className)}>
+      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+      <h2
+        id={id}
+        className={cn(
+          'text-[1.75rem] leading-tight font-semibold tracking-tight text-balance sm:text-4xl',
+          eyebrow && 'mt-3',
+        )}
+      >
+        {title}
       </h2>
-      {sub && <p className="mt-3 text-base leading-7 text-muted">{sub}</p>}
+      {sub && (
+        <p className="mt-4 text-base leading-7 text-pretty text-muted sm:text-lg sm:leading-8">
+          {sub}
+        </p>
+      )}
     </div>
+  )
+}
+
+function CheckList({ items, className }: { items: string[]; className?: string }) {
+  return (
+    <ul className={cn('space-y-3 text-base leading-6', className)}>
+      {items.map((item) => (
+        <li key={item} className="flex gap-3">
+          <span
+            aria-hidden="true"
+            className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"
+          >
+            <Check size={12} strokeWidth={2.5} />
+          </span>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function FeatureRow({
+  feature,
+  index,
+  theme,
+}: {
+  feature: Feature
+  index: number
+  theme: ResolvedTheme
+}) {
+  const flip = index % 2 === 1
+  const small = feature.shot.width < 1000
+  return (
+    <section
+      aria-labelledby={`feature-${feature.id}`}
+      className="grid items-center gap-10 py-16 first:pt-0 last:pb-0 sm:py-20 lg:grid-cols-12 lg:gap-16"
+    >
+      <div className={cn('lg:col-span-5', flip && 'lg:order-2')}>
+        <Eyebrow>{feature.label}</Eyebrow>
+        <h2
+          id={`feature-${feature.id}`}
+          className="mt-3 text-[1.75rem] leading-tight font-semibold tracking-tight text-balance sm:text-[2rem]"
+        >
+          {feature.title}
+        </h2>
+        <p className="mt-4 text-base leading-7 text-pretty text-muted sm:text-lg sm:leading-8">
+          {feature.body}
+        </p>
+        <CheckList items={feature.bullets} className="mt-7" />
+      </div>
+      <div className={cn('lg:col-span-7', flip && 'lg:order-1')}>
+        <Stage className={cn(small ? 'px-6 py-12 sm:px-12 sm:py-20' : 'p-3 sm:p-5')}>
+          <ShotFrame plain className={small ? 'mx-auto max-w-md' : undefined}>
+            <ShotImage shot={feature.shot} theme={theme} />
+          </ShotFrame>
+        </Stage>
+      </div>
+    </section>
+  )
+}
+
+function Card({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('overflow-hidden rounded-2xl border border-border bg-bg-subtle', className)}>
+      {children}
+    </div>
+  )
+}
+
+function CardIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg text-fg">
+      {children}
+    </span>
   )
 }
 
@@ -234,226 +188,374 @@ export default function Landing() {
   const { user } = useAuth()
   const signedIn = Boolean(user)
   const { resolved: theme } = useTheme()
-  const navLink = 't focus-ring rounded-md px-2 py-1 text-sm text-muted hover:text-fg'
+  const scrolled = useScrolled()
+  const navLink =
+    't focus-ring rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-bg-subtle hover:text-fg'
+  const footLink = 't focus-ring rounded-sm text-sm text-muted hover:text-fg'
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-bg text-fg">
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-6">
-        <div className="flex items-center gap-6">
-          <Link to="/" aria-label="Squash home" className="focus-ring rounded-md">
-            <Logo className="text-base" />
-          </Link>
-          <nav aria-label="Main navigation" className="hidden items-center gap-1 sm:flex">
-            <Link to="/claude" className={navLink}>
-              Claude Code
+    <div className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <header
+        className={cn(
+          't sticky top-0 z-40 border-b',
+          scrolled
+            ? 'border-border bg-bg/80 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70'
+            : 'border-transparent bg-bg',
+        )}
+      >
+        <div className={cn(CONTAINER, 'flex h-14 items-center justify-between gap-4')}>
+          <div className="flex items-center gap-6">
+            <Link to="/" aria-label="Squash home" className="focus-ring rounded-md">
+              <Logo className="text-base" />
             </Link>
-            <a href={githubUrl} className={navLink}>
-              GitHub
-            </a>
-          </nav>
-        </div>
-        <div className="flex items-center gap-2">
-          {signedIn ? (
-            <ButtonLink to="/app" variant="primary">
-              Open app
-            </ButtonLink>
-          ) : (
-            <>
-              <ButtonLink to="/signin" variant="ghost">
-                Sign in
+            <nav aria-label="Main navigation" className="hidden items-center gap-0.5 sm:flex">
+              <Link to="/claude" className={navLink}>
+                Claude Code
+              </Link>
+              <a href={githubUrl} className={navLink}>
+                GitHub
+              </a>
+            </nav>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {signedIn ? (
+              <ButtonLink to="/app" variant="primary">
+                Open app
               </ButtonLink>
-              <ButtonLink to="/signin" variant="primary">
-                Get started
-              </ButtonLink>
-            </>
-          )}
+            ) : (
+              <>
+                <ButtonLink to="/signin" variant="ghost">
+                  Sign in
+                </ButtonLink>
+                <ButtonLink to="/signin" variant="primary">
+                  Get started
+                </ButtonLink>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
       <main>
-        <section className="mx-auto max-w-6xl px-5 pt-16 sm:px-6 sm:pt-24">
-          <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl leading-tight font-semibold tracking-tight text-balance sm:text-6xl">
-              Bug tracking at the speed of a screenshot
-            </h1>
-            <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-pretty text-muted sm:text-lg">
-              Paste a screenshot, type what broke, and press Enter: your team sees it in about a
-              second, and Claude Code can fix it from there.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <PrimaryCta signedIn={signedIn} />
-              <a href={githubUrl} className={buttonClass('secondary', 'lg')}>
-                Self-host it
-              </a>
+        <section aria-labelledby="hero-heading" className="relative isolate">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[44rem] bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,black_20%,transparent_100%)] bg-[size:64px_64px] opacity-50"
+          />
+          <div className={cn(CONTAINER, 'pt-16 sm:pt-28')}>
+            <div className="max-w-4xl">
+              <h1
+                id="hero-heading"
+                className="text-[2.75rem] leading-[1.05] font-semibold tracking-[-0.035em] text-balance sm:text-6xl sm:leading-[1.02] lg:text-[5rem]"
+              >
+                Bug tracking at the speed of a screenshot
+              </h1>
+              <p className="mt-6 max-w-[36rem] text-base leading-7 text-pretty text-muted sm:text-xl sm:leading-8">
+                Paste a screenshot, type what broke, and press Enter: your team sees it in about a
+                second, and Claude Code can fix it from there.
+              </p>
+              <div className="mt-9 flex flex-wrap items-center gap-3">
+                <PrimaryCta signedIn={signedIn} />
+                <a href={githubUrl} className={buttonClass('secondary', 'lg')}>
+                  Self-host it
+                </a>
+              </div>
+              <p className="mt-6 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-muted">
+                <span>Free</span>
+                <span aria-hidden="true" className="text-border">
+                  /
+                </span>
+                <span>Open source (MIT)</span>
+                <span aria-hidden="true" className="text-border">
+                  /
+                </span>
+                <span>Self-host in minutes</span>
+              </p>
             </div>
-            <p className="mt-4 text-xs text-muted">Free to use. Open source under MIT.</p>
           </div>
-          <Screenshot shot={HERO_SHOT} theme={theme} lazy={false} className="mt-14 sm:mt-20" />
+          <div className={cn(CONTAINER, 'relative mt-14 pb-16 sm:mt-20 sm:pb-24')}>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-[15%] top-[10%] -z-10 h-2/3 rounded-full bg-accent/15 blur-[96px] dark:bg-accent/10"
+            />
+            {/* On phones the shot runs off the right edge so the bug list stays legible. */}
+            <ShotFrame className="w-[180%] sm:w-full">
+              <ShotImage shot={HERO_SHOT} theme={theme} lazy={false} />
+            </ShotFrame>
+          </div>
         </section>
 
-        <div className="mx-auto max-w-6xl space-y-24 px-5 py-24 sm:space-y-32 sm:px-6 sm:py-32">
-          {FEATURES.map((f, i) => (
-            <section
-              key={f.id}
-              aria-labelledby={`feature-${f.id}`}
-              className="grid items-center gap-10 lg:grid-cols-5 lg:gap-16"
-            >
-              <div className={cn('lg:col-span-2', i % 2 === 1 && 'lg:order-2')}>
-                <p className="text-sm font-medium text-accent">{f.label}</p>
-                <h2
-                  id={`feature-${f.id}`}
-                  className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
-                >
-                  {f.title}
-                </h2>
-                <p className="mt-4 text-base leading-7 text-muted">{f.body}</p>
-                <ul className="mt-6 space-y-3 text-sm">
-                  {f.bullets.map((b) => (
-                    <li key={b} className="flex gap-3">
-                      <Check size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                      <span>{b}</span>
+        <div id="features" className="scroll-mt-14 border-t border-border py-16 sm:py-24">
+          <div className={cn(CONTAINER, 'divide-y divide-border')}>
+            {FEATURES.map((f, i) => (
+              <FeatureRow key={f.id} feature={f} index={i} theme={theme} />
+            ))}
+          </div>
+        </div>
+
+        <section aria-labelledby="details-heading" className={SECTION}>
+          <div className={CONTAINER}>
+            <SectionIntro
+              id="details-heading"
+              eyebrow="And the rest"
+              title="The small things, done properly"
+              sub="Everything a small team reaches for every day, without settings to configure first."
+            />
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Card className="flex flex-col sm:col-span-2">
+                <div className="p-5 sm:p-8">
+                  <CardIcon>
+                    <Command size={16} aria-hidden="true" />
+                  </CardIcon>
+                  <h3 className="mt-5 text-base font-semibold">Command palette</h3>
+                  <p className="mt-2 max-w-md text-base leading-6 text-muted">
+                    Press ⌘K to jump to any bug by number or title, switch workspaces, export,
+                    change theme, or open settings.
+                  </p>
+                </div>
+                <div className="relative mt-auto h-56 overflow-hidden sm:h-64">
+                  <div className="absolute inset-x-6 top-0 sm:inset-x-12">
+                    <ShotFrame plain>
+                      <ShotImage shot={PALETTE_SHOT} theme={theme} />
+                    </ShotFrame>
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-bg-subtle to-transparent"
+                  />
+                </div>
+              </Card>
+              <Card className="p-5 sm:col-span-2 sm:p-8 lg:col-span-1 lg:row-span-2">
+                <CardIcon>
+                  <Keyboard size={16} aria-hidden="true" />
+                </CardIcon>
+                <h3 className="mt-5 text-base font-semibold">Keyboard first</h3>
+                <p className="mt-2 text-base leading-6 text-muted">
+                  Every action has a key. Press ? in the app for the full list.
+                </p>
+                <ul aria-label="Keyboard shortcuts" className="mt-6 divide-y divide-border">
+                  {SHORTCUTS.map((s) => (
+                    <li
+                      key={s.label}
+                      className="flex items-center justify-between gap-4 py-3 text-sm"
+                    >
+                      <span className="text-muted">{s.label}</span>
+                      <span className="flex gap-1">
+                        {s.keys.map((k) => (
+                          <Kbd key={k} className="bg-bg">
+                            {k}
+                          </Kbd>
+                        ))}
+                      </span>
                     </li>
                   ))}
                 </ul>
-              </div>
-              <div className={cn('lg:col-span-3', i % 2 === 1 && 'lg:order-1')}>
-                <Screenshot
-                  shot={f.shot}
-                  theme={theme}
-                  className={f.shot.width < 1000 ? 'mx-auto max-w-xl' : undefined}
-                />
-              </div>
-            </section>
-          ))}
-        </div>
-
-        <section aria-labelledby="how-heading" className="border-y border-border bg-bg-subtle">
-          <div className="mx-auto max-w-6xl px-5 py-24 sm:px-6">
-            <SectionHeading id="how-heading">How it works</SectionHeading>
-            <ol className="mt-12 grid gap-10 sm:grid-cols-3">
-              {STEPS.map((s, i) => (
-                <li key={s.title}>
-                  <span className="flex size-7 items-center justify-center rounded-full border border-border bg-bg text-xs font-medium text-muted">
-                    {i + 1}
-                  </span>
-                  <h3 className="mt-4 text-base font-semibold">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted">{s.body}</p>
-                </li>
+              </Card>
+              {DETAILS.map(({ icon: Icon, title, body }) => (
+                <Card key={title} className="p-5 sm:p-8">
+                  <CardIcon>
+                    <Icon size={16} aria-hidden="true" />
+                  </CardIcon>
+                  <h3 className="mt-4 text-base font-semibold sm:mt-5">{title}</h3>
+                  <p className="mt-2 text-base leading-6 text-muted">{body}</p>
+                </Card>
               ))}
-            </ol>
-            <div className="mt-14 rounded-xl border border-border bg-bg p-5">
-              <h3 className="text-sm font-medium">Keyboard first</h3>
-              <ul aria-label="Keyboard shortcuts" className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
-                {SHORTCUTS.map((s) => (
-                  <li key={s.label} className="flex items-center gap-2 text-sm text-muted">
-                    <span className="flex gap-1">
-                      {s.keys.map((k) => (
-                        <Kbd key={k}>{k}</Kbd>
-                      ))}
-                    </span>
-                    {s.label}
-                  </li>
-                ))}
-              </ul>
             </div>
           </div>
         </section>
 
-        <section
-          aria-labelledby="mobile-heading"
-          className="mx-auto max-w-6xl px-5 py-24 sm:px-6 sm:py-32"
-        >
-          <SectionHeading
-            id="mobile-heading"
-            sub="Install it from the browser like an app. Take a photo straight into the capture bar, follow Claude’s progress, and resolve from wherever you are."
-          >
-            On your phone, too
-          </SectionHeading>
-          <img
-            src="/product/mobile.webp"
-            alt="Squash on three phones: the bug list with the capture bar, a bug with Claude Code working on it, and a bug with a voice transcript"
-            width={1400}
-            height={981}
-            loading="lazy"
-            decoding="async"
-            className="mt-12 block h-auto w-full rounded-xl"
-          />
+        <section aria-labelledby="mobile-heading" className={SECTION}>
+          <div className={cn(CONTAINER, 'grid items-center gap-12 lg:grid-cols-12 lg:gap-16')}>
+            <div className="lg:col-span-5">
+              <SectionIntro
+                id="mobile-heading"
+                eyebrow="Mobile"
+                title="On your phone, too"
+                sub="A list-to-detail layout built for one hand, with the same live updates as the desktop."
+              />
+              <CheckList items={MOBILE_POINTS} className="mt-7" />
+            </div>
+            <div className="lg:col-span-7">
+              <Stage className="px-6 pt-10 sm:px-12 sm:pt-14">
+                <div className="mx-auto flex max-w-lg items-start justify-center gap-4 sm:gap-6">
+                  <PhoneFrame crop={PHONES[0]} className="-mb-24 w-1/2 sm:-mb-32" />
+                  <PhoneFrame crop={PHONES[1]} className="mt-10 -mb-24 w-1/2 sm:mt-14 sm:-mb-32" />
+                </div>
+              </Stage>
+            </div>
+          </div>
         </section>
 
-        <section aria-labelledby="oss-heading" className="border-y border-border bg-bg-subtle">
-          <div className="mx-auto max-w-6xl px-5 py-24 sm:px-6">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-              <SectionHeading
+        <section aria-labelledby="how-heading" className={SECTION}>
+          <div className={CONTAINER}>
+            <SectionIntro
+              id="how-heading"
+              eyebrow="Getting started"
+              title="How it works"
+              sub="From sign-in to your first filed bug in under a minute."
+            />
+            <ol className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+              {STEPS.map((s, i) => (
+                <li key={s.title} className="bg-bg p-6 sm:p-8">
+                  <span className="font-mono text-sm text-accent">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <h3 className="mt-4 text-base font-semibold">{s.title}</h3>
+                  <p className="mt-2 text-base leading-6 text-muted">{s.body}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section aria-labelledby="oss-heading" className={cn(SECTION, 'bg-bg-subtle')}>
+          <div className={CONTAINER}>
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+              <SectionIntro
                 id="oss-heading"
+                eyebrow="Open source"
+                title="Open source and yours to run"
                 sub="Use the hosted version, or run your own copy on infrastructure you control."
+              />
+              <a
+                href={`${githubUrl}#self-host`}
+                className={buttonClass('secondary', 'lg', 'self-start lg:self-auto')}
               >
-                Open source and yours to run
-              </SectionHeading>
-              <a href={`${githubUrl}#self-host`} className={buttonClass('secondary', 'md')}>
                 Read the self-host guide
+                <ArrowRight size={16} aria-hidden="true" />
               </a>
             </div>
-            <dl className="mt-12 grid gap-8 sm:grid-cols-3">
+            <dl className="mt-12 grid gap-8 border-t border-border pt-10 sm:grid-cols-3 sm:gap-10">
               {SELF_HOST.map((s) => (
                 <div key={s.title}>
                   <dt className="text-base font-semibold">{s.title}</dt>
-                  <dd className="mt-2 text-sm leading-6 text-muted">{s.body}</dd>
+                  <dd className="mt-2 text-base leading-6 text-muted">{s.body}</dd>
                 </div>
               ))}
             </dl>
           </div>
         </section>
 
-        <section
-          aria-labelledby="faq-heading"
-          className="mx-auto max-w-3xl px-5 py-24 sm:px-6 sm:py-32"
-        >
-          <SectionHeading id="faq-heading">Questions</SectionHeading>
-          <div className="mt-10 divide-y divide-border border-y border-border">
-            {FAQ.map((item) => (
-              <details key={item.q} className="group">
-                <summary className="t focus-ring flex cursor-pointer list-none items-center justify-between gap-4 rounded-md py-4 text-base font-medium [&::-webkit-details-marker]:hidden">
-                  {item.q}
-                  <span
-                    aria-hidden="true"
-                    className="text-lg text-muted transition-transform group-open:rotate-45"
-                  >
-                    +
-                  </span>
-                </summary>
-                <p className="pb-5 text-sm leading-6 text-muted">{item.a}</p>
-              </details>
-            ))}
+        <section aria-labelledby="faq-heading" className={SECTION}>
+          <div className={cn(CONTAINER, 'grid gap-10 lg:grid-cols-12 lg:gap-16')}>
+            <div className="lg:col-span-4">
+              <SectionIntro id="faq-heading" eyebrow="FAQ" title="Questions" />
+              <p className="mt-4 text-base leading-7 text-muted">
+                Something else?{' '}
+                <a
+                  href={`${githubUrl}/issues`}
+                  className="t focus-ring rounded-sm text-fg underline decoration-border underline-offset-4 hover:decoration-fg"
+                >
+                  Open an issue
+                </a>
+                .
+              </p>
+            </div>
+            <div className="divide-y divide-border border-y border-border lg:col-span-8">
+              {FAQ.map((item) => (
+                <details key={item.q} className="group">
+                  <summary className="t focus-ring flex cursor-pointer list-none items-center justify-between gap-6 rounded-md py-5 text-base font-medium hover:text-fg [&::-webkit-details-marker]:hidden">
+                    {item.q}
+                    <ChevronDown
+                      size={16}
+                      aria-hidden="true"
+                      className="shrink-0 text-muted transition-transform duration-200 ease-out group-open:rotate-180"
+                    />
+                  </summary>
+                  <p className="-mt-1 max-w-2xl pr-10 pb-5 text-base leading-7 text-muted">
+                    {item.a}
+                  </p>
+                </details>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="px-5 pb-24 text-center sm:px-6 sm:pb-32">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            File your first bug in under a minute
-          </h2>
-          <p className="mt-3 text-base text-muted">Sign in, paste a screenshot, press Enter.</p>
-          <PrimaryCta signedIn={signedIn} className="mt-8" />
+        <section aria-labelledby="cta-heading" className={cn(CONTAINER, 'pb-16 sm:pb-24')}>
+          <div className="relative isolate overflow-hidden rounded-2xl border border-border bg-bg-subtle px-6 py-16 text-center sm:py-20">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_80%_at_50%_100%,black,transparent)] bg-[size:48px_48px] opacity-60"
+            />
+            <h2
+              id="cta-heading"
+              className="mx-auto max-w-xl text-[1.75rem] leading-tight font-semibold tracking-tight text-balance sm:text-4xl"
+            >
+              File your first bug in under a minute
+            </h2>
+            <p className="mt-4 text-base text-muted sm:text-lg">
+              Sign in, paste a screenshot, press Enter.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <PrimaryCta signedIn={signedIn} />
+              <Link to="/claude" className={buttonClass('secondary', 'lg')}>
+                Set up Claude Code
+              </Link>
+            </div>
+          </div>
         </section>
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <Logo size={18} className="text-sm text-fg" />
-          <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-5 gap-y-2">
-            <Link to="/claude" className="t focus-ring rounded-md hover:text-fg">
-              Claude Code
-            </Link>
-            <Link to="/privacy" className="t focus-ring rounded-md hover:text-fg">
-              Privacy
-            </Link>
-            <Link to="/terms" className="t focus-ring rounded-md hover:text-fg">
-              Terms
-            </Link>
-            <a href={githubUrl} className="t focus-ring rounded-md hover:text-fg">
-              GitHub
-            </a>
+        <div className={cn(CONTAINER, 'grid gap-10 py-12 sm:py-16 md:grid-cols-12')}>
+          <div className="md:col-span-6">
+            <Logo size={20} className="text-sm" />
+            <p className="mt-4 max-w-xs text-sm leading-6 text-muted">
+              Real-time bug tracking for founding teams of two to ten.
+            </p>
+          </div>
+          <nav aria-label="Footer navigation" className="grid grid-cols-3 gap-6 md:col-span-6">
+            <div>
+              <p className="text-sm font-medium">Product</p>
+              <ul className="mt-4 space-y-3">
+                <li>
+                  <a href="#features" className={footLink}>
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <Link to="/claude" className={footLink}>
+                    Claude Code
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-medium">Source</p>
+              <ul className="mt-4 space-y-3">
+                <li>
+                  <a href={githubUrl} className={footLink}>
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <a href={`${githubUrl}/releases`} className={footLink}>
+                    Releases
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-medium">Legal</p>
+              <ul className="mt-4 space-y-3">
+                <li>
+                  <Link to="/privacy" className={footLink}>
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/terms" className={footLink}>
+                    Terms
+                  </Link>
+                </li>
+              </ul>
+            </div>
           </nav>
-          <p className="text-xs">© {new Date().getFullYear()} Squash contributors</p>
+        </div>
+        <div className={CONTAINER}>
+          <p className="border-t border-border py-6 text-xs text-muted">
+            © {new Date().getFullYear()} Squash contributors. Released under the MIT License.
+          </p>
         </div>
       </footer>
     </div>

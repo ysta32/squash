@@ -53,6 +53,14 @@ export function MentionInput({
   const activeIndex = Math.min(active, Math.max(matches.length - 1, 0))
   const optionId = (i: number) => `${listId}-opt-${i}`
 
+  // Grow with the text (up to the max height), so longer comments stay readable while typing.
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+
   useLayoutEffect(() => {
     if (pendingCaret.current !== null && ref.current) {
       ref.current.setSelectionRange(pendingCaret.current, pendingCaret.current)
@@ -122,14 +130,14 @@ export function MentionInput({
         aria-controls={listId}
         aria-activedescendant={open ? optionId(activeIndex) : undefined}
         placeholder={placeholder}
-        className="w-full resize-none rounded-md border border-border bg-bg-subtle px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent disabled:opacity-60"
+        className="block max-h-60 min-h-[3.25rem] w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 text-sm leading-relaxed outline-none placeholder:text-muted disabled:cursor-not-allowed"
       />
       {open && (
         <ul
           id={listId}
           role="listbox"
           aria-label="Mention suggestions"
-          className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated"
+          className="absolute top-full left-2 z-20 mt-1 w-64 max-w-[calc(100%-1rem)] rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated"
         >
           {matches.map((m, i) => (
             <li
@@ -142,8 +150,8 @@ export function MentionInput({
                 insert(m)
               }}
               onMouseEnter={() => setActive(i)}
-              className={`flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm ${
-                i === activeIndex ? 'bg-bg-subtle text-fg' : 'text-fg'
+              className={`flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-fg ${
+                i === activeIndex ? 'bg-bg-subtle' : ''
               }`}
             >
               <Avatar profile={m.profile} size="xs" />

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, RefObject } from 'react'
-import { Camera, Info, Mic, Paperclip, Send } from 'lucide-react'
+import { Camera, CornerDownLeft, Info, Mic, Paperclip, SendHorizontal } from 'lucide-react'
 import type { NewBugInput } from '../hooks/useBugs'
 import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
@@ -13,10 +13,13 @@ import { cn, randomId } from '../lib/utils'
 import { AttachmentChip } from './AttachmentChip'
 import { AnnotateDialog } from './AnnotateDialog'
 import { SeverityPicker } from './SeverityPicker'
-import { Button, Kbd } from './ui'
+import { Kbd } from './ui'
 
 const MAX_FILES = 10
 const MAX_TEXTAREA_PX = 6 * 24
+
+const ICON_BUTTON =
+  't focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg'
 
 interface CaptureBarProps {
   workspaceId: string
@@ -74,6 +77,7 @@ export function CaptureBar({
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const chipsRef = useRef<Chip[]>(chips)
   const [coarse] = useState(isCoarsePointer)
+  const [focused, setFocused] = useState(false)
 
   const setTextarea = useCallback(
     (el: HTMLTextAreaElement | null) => {
@@ -274,13 +278,13 @@ export function CaptureBar({
     <div
       data-workspace={workspaceId}
       onKeyDown={onKeyDown}
-      className="t rounded-xl border border-border bg-bg p-2 shadow-sm hover:border-fg/20 focus-within:border-accent"
+      className="t rounded-lg border border-border bg-bg p-2 shadow-sm hover:border-fg/20 focus-within:border-accent/60 focus-within:ring-3 focus-within:ring-accent/15 focus-within:hover:border-accent/60"
     >
       <div className="relative">
         <div
           ref={mirrorRef}
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-1 py-1 text-sm leading-6"
+          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-1.5 py-1 text-sm leading-6"
         >
           <span className="text-transparent">{value}</span>
           {interim && (
@@ -301,13 +305,16 @@ export function CaptureBar({
                 ? 'Paste a screenshot or describe a feature'
                 : 'Paste a screenshot or describe a bug'
           }
+          aria-label={`Describe the ${noun}`}
           onChange={(e) => setValue(e.target.value)}
-          className="relative block w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 text-fg outline-none placeholder:text-muted"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className="relative block w-full resize-none bg-transparent px-1.5 py-1 text-sm leading-6 text-fg outline-none placeholder:text-muted"
         />
       </div>
 
       {chips.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2 px-1.5">
           {chips.map((c) => (
             <AttachmentChip
               key={c.id}
@@ -329,15 +336,15 @@ export function CaptureBar({
         />
       )}
 
-      <div className="mt-1 flex items-center gap-1">
+      <div className="mt-1.5 flex items-center gap-0.5">
         <button
           type="button"
           aria-label="Attach image"
           title="Attach image"
           onClick={() => fileInputRef.current?.click()}
-          className="focus-ring rounded-md p-1.5 text-muted hover:text-fg"
+          className={ICON_BUTTON}
         >
-          <Paperclip size={16} />
+          <Paperclip size={16} aria-hidden="true" />
         </button>
         <input
           ref={fileInputRef}
@@ -355,9 +362,9 @@ export function CaptureBar({
               aria-label="Take photo"
               title="Take photo"
               onClick={() => cameraInputRef.current?.click()}
-              className="focus-ring rounded-md p-1.5 text-muted hover:text-fg"
+              className={ICON_BUTTON}
             >
-              <Camera size={16} />
+              <Camera size={16} aria-hidden="true" />
             </button>
             <input
               ref={cameraInputRef}
@@ -370,50 +377,59 @@ export function CaptureBar({
           </>
         )}
         {speech.supported ? (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center">
             <button
               type="button"
               aria-label={speech.listening ? 'Stop dictation' : 'Start dictation'}
               aria-pressed={speech.listening}
-              title="Dictate"
+              title={speech.listening ? 'Stop dictation' : 'Dictate'}
               onClick={speech.toggle}
               className={cn(
-                'focus-ring rounded-md p-1.5 hover:text-fg',
-                speech.listening ? 'text-danger' : 'text-muted',
+                ICON_BUTTON,
+                speech.listening && 'bg-danger/10 text-danger hover:bg-danger/15 hover:text-danger',
               )}
             >
-              <Mic size={16} />
+              <Mic size={16} aria-hidden="true" />
             </button>
             {speech.listening && (
               <span
                 data-testid="recording-dot"
-                className="h-2 w-2 animate-pulse rounded-full bg-danger"
+                className="ml-1 h-2 w-2 animate-pulse rounded-full bg-danger"
               />
             )}
           </span>
         ) : (
-          <span title="Voice needs Chrome, Edge, or Safari" className="p-1.5 text-muted">
+          <span
+            title="Voice needs Chrome, Edge, or Safari"
+            className="inline-flex h-8 w-8 items-center justify-center text-muted/70"
+          >
             <Info size={16} aria-label="Voice needs Chrome, Edge, or Safari" />
           </span>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          {!canSubmit && !coarse && (
-            <span className="hidden items-center gap-1 text-xs text-muted sm:inline-flex">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {!canSubmit && !coarse && !focused && (
+            <span className="hidden items-center gap-1 text-xs text-muted md:inline-flex">
               Press <Kbd>N</Kbd> to focus
             </span>
           )}
-          <SeverityPicker value={severity} onChange={setSeverity} />
-          <Button
-            variant="primary"
-            size="sm"
+          <SeverityPicker value={severity} onChange={setSeverity} title="Severity (Alt+1–4)" />
+          <button
+            type="button"
             aria-label={`File ${noun}`}
             title={`File ${noun} (Enter)`}
             disabled={!canSubmit}
             onClick={() => void submit()}
-            className="w-7 px-0"
+            className="t focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-accent text-xs font-medium whitespace-nowrap text-accent-fg shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:bg-bg-subtle disabled:text-muted disabled:shadow-none sm:w-auto sm:pr-1.5 sm:pl-2.5"
           >
-            <Send size={14} />
-          </Button>
+            <SendHorizontal size={14} aria-hidden="true" />
+            <span className="hidden sm:inline">{kind === 'feature' ? 'Request' : 'File bug'}</span>
+            <kbd
+              aria-hidden="true"
+              className="hidden h-5 min-w-5 items-center justify-center rounded bg-current/15 px-1 font-sans text-[11px] sm:inline-flex"
+            >
+              <CornerDownLeft size={11} />
+            </kbd>
+          </button>
         </div>
       </div>
     </div>

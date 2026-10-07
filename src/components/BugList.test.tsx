@@ -1,16 +1,14 @@
 import { createRef, useState } from 'react'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugFilters } from '../hooks/useBugs'
-import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import * as bugExport from '../lib/export'
 import { BugList } from './BugList'
 import type { BugListProps } from './BugList'
 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
-vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: vi.fn(() => null) }))
 
 const filters: BugFilters = {
   kind: 'bug',
@@ -95,9 +93,16 @@ function Harness(props: Partial<BugListProps>) {
   )
 }
 
+/** Opens the filter chip named `label` and picks `option` from its listbox. */
+function pickFilter(label: string, option: string) {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label}(:|$)`) }))
+  fireEvent.click(
+    within(screen.getByRole('listbox', { name: label })).getByRole('option', { name: option }),
+  )
+}
+
 describe('BugList', () => {
   beforeEach(() => {
-    vi.mocked(useSignedUrl).mockReturnValue(null)
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       value: scrollIntoView,
@@ -270,6 +275,7 @@ describe('BugList', () => {
             query: 'missing',
             filedBy: 'grace',
             resolvedBy: 'ada',
+            assignee: 'grace',
             severity: 'low',
           }}
           onFilters={onFilters}
@@ -323,22 +329,84 @@ describe('BugList', () => {
 
   it('combines member and severity filters and clears them while preserving the tab', () => {
     render(<Harness filters={{ ...filters, tab: 'all' }} />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'Filed by' }), {
-      target: { value: 'grace' },
-    })
+    pickFilter('Filed by', 'Grace')
+    expect(screen.getByRole('button', { name: 'Filed by: Grace' })).toHaveAttribute(
+      'aria-haspopup',
+      'listbox',
+    )
     expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Resolved by' }), {
-      target: { value: 'ada' },
-    })
+    pickFilter('Resolved by', 'Ada')
     expect(screen.getByRole('option', { name: '#2 Fixed layout' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Severity' }), {
-      target: { value: 'high' },
-    })
+    pickFilter('Severity', 'High')
+    expect(screen.getByRole('button', { name: 'Severity: High' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('button', { name: 'All 2' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Filed by' })).toBeInTheDocument()
+  })
+
+  it('clears a single filter from its chip', () => {
+    const onFilters = vi.fn()
+    render(<Harness filters={{ ...filters, tab: 'all', severity: 'low' }} onFilters={onFilters} />)
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Severity filter' }))
+    expect(onFilters).toHaveBeenLastCalledWith({ ...filters, tab: 'all' })
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Severity' })).toBeInTheDocument()
+  })
+
+  it('operates filter menus from the keyboard', () => {
+    render(<Harness filters={{ ...filters, tab: 'all' }} />)
+    const trigger = screen.getByRole('button', { name: 'Severity' })
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    const menu = screen.getByRole('listbox', { name: 'Severity' })
+    expect(menu).toHaveFocus()
+    expect(trigger).toHaveAttribute('aria-controls', menu.id)
+    const active = () => document.getElementById(menu.getAttribute('aria-activedescendant')!)
+    expect(active()).toHaveAccessibleName('Any severity')
+    expect(active()).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(active()).toHaveAccessibleName('Low')
+    fireEvent.keyDown(menu, { key: 'End' })
+    expect(active()).toHaveAccessibleName('Critical')
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(active()).toHaveAccessibleName('Critical')
+    fireEvent.keyDown(menu, { key: 'Home' })
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    fireEvent.keyDown(menu, { key: 'Enter' })
+    expect(screen.queryByRole('listbox', { name: 'Severity' })).not.toBeInTheDocument()
+    const chosen = screen.getByRole('button', { name: 'Severity: Low' })
+    expect(chosen).toHaveFocus()
+    expect(screen.getByRole('option', { name: '#2 Fixed layout' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
+
+    fireEvent.click(chosen)
+    const reopened = screen.getByRole('listbox', { name: 'Severity' })
+    expect(within(reopened).getByRole('option', { name: 'Low' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    act(() => {
+      reopened.dispatchEvent(escape)
+    })
+    expect(escape.defaultPrevented).toBe(true)
+    expect(screen.queryByRole('listbox', { name: 'Severity' })).not.toBeInTheDocument()
+    expect(chosen).toHaveFocus()
+    expect(chosen).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes a filter menu on an outside pointer press without changing the filter', () => {
+    const onFilters = vi.fn()
+    render(<Harness onFilters={onFilters} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Filed by' }))
+    expect(screen.getByRole('listbox', { name: 'Filed by' })).toBeInTheDocument()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('listbox', { name: 'Filed by' })).not.toBeInTheDocument()
+    expect(onFilters).not.toHaveBeenCalled()
   })
 
   it('filters by assignee: Me first, then Unassigned, and clears with the other filters', () => {
@@ -348,23 +416,29 @@ describe('BugList', () => {
       bug({ id: 'nobody', number: 3, title: 'Typo on pricing' }),
     ]
     render(<Harness bugs={assigned} selfId="ada" />)
-    const select = screen.getByRole('combobox', { name: 'Assignee' })
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
     expect(
-      within(select)
+      within(screen.getByRole('listbox', { name: 'Assignee' }))
         .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual(['Assignee', 'Unassigned', 'Me', 'Grace'])
+        .map((o) => o.getAttribute('aria-label')),
+    ).toEqual(['Anyone', 'Unassigned', 'Me', 'Grace'])
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
     const rows = () =>
       within(screen.getByRole('listbox', { name: /bugs/i }))
         .getAllByRole('option')
         .map((o) => o.getAttribute('aria-label'))
 
-    fireEvent.change(select, { target: { value: 'ada' } })
+    pickFilter('Assignee', 'Me')
     expect(rows()).toEqual(['#2 Slow search'])
-    fireEvent.change(select, { target: { value: 'none' } })
+    pickFilter('Assignee', 'Unassigned')
+    expect(screen.getByRole('button', { name: 'Assignee: Unassigned' })).toBeInTheDocument()
     expect(rows()).toEqual(['#3 Typo on pricing'])
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(select).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Assignee' })).not.toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.queryByRole('button', { name: /^Assignee:/ })).not.toBeInTheDocument()
     expect(rows()).toHaveLength(3)
   })
 
@@ -408,6 +482,8 @@ describe('BugList', () => {
       'aria-selected',
       'true',
     )
+    expect(screen.getByRole('option', { name: '#1 Broken login' })).toHaveClass('bg-accent/8')
+    expect(screen.getByRole('option', { name: '#2 Fixed layout' })).not.toHaveClass('bg-accent/8')
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
     expect(scrollIntoView.mock.instances[0]).toBe(
       screen.getByRole('option', { name: '#1 Broken login' }),
@@ -429,51 +505,52 @@ describe('BugList', () => {
     const resolved = screen.getByRole('option', { name: '#2 Fixed layout' })
     expect(resolved).toHaveClass('opacity-60')
     expect(within(resolved).getByTitle('Resolved by Ada')).toBeInTheDocument()
+    expect(within(resolved).getByLabelText('Resolved')).toBeInTheDocument()
+    expect(within(resolved).getByTitle('Filed by Grace')).toBeInTheDocument()
+    expect(within(open).queryByLabelText('Resolved')).not.toBeInTheDocument()
   })
 
-  it('prefers signed attachments for saved rows and pending previews for optimistic rows', () => {
-    vi.mocked(useSignedUrl).mockReturnValue('https://example.test/signed')
-    const attachment = {
-      id: 'image',
+  it('summarizes screenshots as a muted icon with a count instead of thumbnails', () => {
+    const attachment = (id: string) => ({
+      id,
       bug_id: 'open',
-      storage_path: 'workspace/open/image.webp',
+      storage_path: `workspace/open/${id}.webp`,
       width: 32,
       height: 32,
       size_bytes: 100,
       created_at: bugs[0].created_at,
-    }
+    })
     const pending = [{ localId: 'pending', previewUrl: 'blob:preview', progress: 0 }]
-    const { rerender } = render(<Harness bugs={[bug({ attachments: [attachment], pending })]} />)
-    expect(useSignedUrl).toHaveBeenCalledWith(attachment.storage_path)
-    expect(screen.getByAltText('Screenshot preview')).toHaveAttribute(
-      'src',
-      'https://example.test/signed',
-    )
+    const { rerender } = render(<Harness bugs={[bug({ attachments: [attachment('a')] })]} />)
+    let row = screen.getByRole('option', { name: '#1 Broken login' })
+    expect(row.querySelector('img')).toBeNull()
+    expect(within(row).getByLabelText('1 screenshot')).toBeInTheDocument()
+    expect(within(row).getByTitle('1 screenshot')).not.toHaveTextContent('1')
+
+    rerender(<Harness bugs={[bug({ attachments: [attachment('a'), attachment('b')], pending })]} />)
+    row = screen.getByRole('option', { name: '#1 Broken login' })
+    expect(within(row).getByLabelText('3 screenshots')).toBeInTheDocument()
+    expect(within(row).getByTitle('Uploading screenshots')).toHaveTextContent('3')
+
     rerender(
       <Harness
         bugs={[
           bug({
             optimistic: true,
             number: 0,
-            attachments: [attachment],
-            pending,
+            pending: [{ ...pending[0], error: 'Upload failed.' }],
           }),
         ]}
       />,
     )
-    expect(screen.getByAltText('Screenshot preview')).toHaveAttribute('src', 'blob:preview')
-    const row = screen.getByRole('option', { name: '#… Broken login' })
+    row = screen.getByRole('option', { name: '#… Broken login' })
     expect(within(row).getByText('#…')).toBeInTheDocument()
     expect(within(row).queryByText('#0')).not.toBeInTheDocument()
-    vi.mocked(useSignedUrl).mockReturnValue(null)
-    rerender(<Harness bugs={[bug({ pending })]} />)
-    expect(screen.getByAltText('Screenshot preview')).toHaveAttribute('src', 'blob:preview')
-    vi.mocked(useSignedUrl).mockReturnValue('https://example.test/signed')
-    rerender(<Harness bugs={[bug({ optimistic: true, attachments: [attachment] })]} />)
-    expect(screen.getByAltText('Screenshot preview')).toHaveAttribute(
-      'src',
-      'https://example.test/signed',
-    )
+    expect(within(row).getByTitle('A screenshot failed to upload')).toHaveClass('text-danger')
+
+    rerender(<Harness bugs={[bug()]} />)
+    row = screen.getByRole('option', { name: '#1 Broken login' })
+    expect(within(row).queryByLabelText(/screenshot/)).not.toBeInTheDocument()
   })
 
   it('updates highlight and viewer presence from props', () => {
@@ -485,6 +562,9 @@ describe('BugList', () => {
     expect(row).toHaveClass('bg-accent/10')
     expect(viewersOf).toHaveBeenCalledWith('open')
     expect(within(row).getByTitle('Grace is viewing').firstChild).toHaveClass('ring-success')
+    const viewing = within(row).getByLabelText('Currently viewing')
+    expect(viewing.nextElementSibling).toBe(within(row).getByTitle('Filed by Ada'))
+    expect(viewing.previousElementSibling).toBe(row.querySelector('time'))
     rerender(<Harness />)
     expect(row).not.toHaveClass('bg-accent/10')
     expect(screen.queryByLabelText('Currently viewing')).not.toBeInTheDocument()

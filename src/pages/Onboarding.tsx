@@ -74,9 +74,9 @@ export default function Onboarding() {
                   aria-label="Invite code"
                   aria-describedby={describedBy}
                   maxLength={8}
-                  className="min-w-0 flex-1 font-mono uppercase tracking-widest"
+                  className="min-w-0 flex-1 font-mono tracking-widest uppercase placeholder:tracking-widest"
                 />
-                <Button type="submit" disabled={busy || code.length < 8}>
+                <Button type="submit" disabled={busy || code.length < 8} className="w-20">
                   Join
                 </Button>
               </div>
@@ -103,13 +103,7 @@ export default function Onboarding() {
             />
           )}
         </Field>
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          disabled={busy || !name.trim()}
-          className="w-full"
-        >
+        <Button type="submit" variant="primary" disabled={busy || !name.trim()} className="w-full">
           Create workspace
         </Button>
       </form>

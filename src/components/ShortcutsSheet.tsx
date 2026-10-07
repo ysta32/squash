@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { isMac } from '../lib/utils'
-import { Kbd } from './ui'
+import { cn } from '../lib/utils'
+import { Kbd, dialogOverlayClass, dialogPanelClass } from './ui'
 
 const ALT = isMac ? '⌥' : 'Alt'
 const MOD = isMac ? '⌘' : 'Ctrl'
@@ -63,7 +64,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      className={cn(dialogOverlayClass, 'flex items-end justify-center p-4 sm:items-center')}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -72,9 +73,9 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
-        className="w-full max-w-sm rounded-xl border border-border bg-bg-elevated p-5 text-fg shadow-elevated"
+        className={cn(dialogPanelClass, 'flex max-h-[85vh] max-w-md flex-col text-fg')}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between border-b border-border py-3 pr-3 pl-5">
           <h2 id="shortcuts-title" className="text-sm font-semibold">
             Keyboard shortcuts
           </h2>
@@ -83,14 +84,14 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="focus-ring rounded-md p-1 text-muted hover:text-fg"
+            className="t focus-ring flex size-8 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg"
           >
-            <X size={16} aria-hidden="true" />
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
-        <dl className="space-y-2 text-sm">
+        <dl className="overflow-y-auto px-5 py-3 text-sm">
           {SHORTCUTS.map(({ keys, label }) => (
-            <div key={label} className="flex items-center justify-between gap-4">
+            <div key={label} className="flex min-h-8 items-center justify-between gap-4">
               <dt className="text-muted">{label}</dt>
               <dd className="flex shrink-0 gap-1">
                 {keys.map((k) => (

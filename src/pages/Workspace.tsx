@@ -717,12 +717,15 @@ export default function Workspace() {
     )
   } else if (notFound) {
     detail = (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-muted">
-        <p>Bug #{numberParam} not found</p>
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+        <p className="text-sm font-medium text-fg">Bug #{numberParam} not found</p>
+        <p className="text-sm text-muted">
+          It may have been deleted, or the link is from another workspace.
+        </p>
         <button
           type="button"
           onClick={deselect}
-          className="inline-flex items-center gap-1.5 text-accent hover:underline"
+          className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-md text-sm text-accent hover:underline"
         >
           <ArrowLeft size={14} aria-hidden="true" /> Back to list
         </button>
@@ -730,9 +733,11 @@ export default function Workspace() {
     )
   } else {
     detail = (
-      <div role="status" aria-label="Loading bug" className="space-y-3 p-6">
-        <div className="h-6 w-2/3 animate-pulse rounded bg-bg-subtle" />
-        <div className="h-24 animate-pulse rounded bg-bg-subtle" />
+      <div role="status" aria-label="Loading bug" className="max-w-3xl space-y-4 p-6">
+        <div className="h-4 w-24 animate-pulse rounded bg-bg-subtle" />
+        <div className="h-7 w-2/3 animate-pulse rounded-md bg-bg-subtle" />
+        <div className="h-4 w-1/3 animate-pulse rounded bg-bg-subtle" />
+        <div className="h-28 animate-pulse rounded-lg bg-bg-subtle" />
       </div>
     )
   }
@@ -746,6 +751,7 @@ export default function Workspace() {
         online={presence.online}
         selfId={selfId}
         onInvite={() => setInviteOpen(true)}
+        onShowShortcuts={() => setShortcutsOpen(true)}
         role={ws.role}
       />
       <main className="flex min-h-0 flex-1 flex-col">
@@ -767,7 +773,7 @@ export default function Workspace() {
             />
           </div>
         </section>
-        <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_3fr]">
+        <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)]">
           <div
             className={cn(
               'h-full min-h-0 md:block md:border-r md:border-border',
@@ -814,7 +820,12 @@ export default function Workspace() {
               claudeRuns={claude.runs}
             />
           </div>
-          <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>
+          <div
+            className={cn(
+              'h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto md:block',
+              !showDetail && 'hidden',
+            )}
+          >
             {detail}
           </div>
         </div>

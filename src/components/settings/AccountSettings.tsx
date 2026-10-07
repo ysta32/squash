@@ -21,15 +21,27 @@ function OwnershipTransfer({
   const [selected, setSelected] = useState('')
   const [transferred, setTransferred] = useState(false)
   const candidates = members.filter((member) => member.user_id !== user?.id)
-  if (transferred) return <p role="status">Ownership of {workspace.name} transferred.</p>
-  if (loading) return <p role="status">Loading members of {workspace.name}…</p>
+  if (transferred)
+    return (
+      <p role="status" className="text-sm text-success">
+        Ownership of {workspace.name} transferred.
+      </p>
+    )
+  if (loading)
+    return (
+      <p role="status" className="text-sm text-muted">
+        Loading members of {workspace.name}…
+      </p>
+    )
   if (notFound)
     return (
-      <p role="alert">Could not load {workspace.name}. Close and reopen this dialog to retry.</p>
+      <p role="alert" className="text-sm text-danger">
+        Could not load {workspace.name}. Close and reopen this dialog to retry.
+      </p>
     )
   if (role !== 'owner' || candidates.length === 0) return null
   return (
-    <div className="space-y-3 rounded-xl border border-border p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-bg p-3">
       <Field label={`New owner for ${workspace.name}`}>
         {({ id, describedBy }) => (
           <select
@@ -51,6 +63,7 @@ function OwnershipTransfer({
       </Field>
       <Button
         type="button"
+        size="sm"
         disabled={busy || !candidates.some((member) => member.user_id === selected)}
         onClick={() =>
           void onTransfer(async () => {
@@ -137,32 +150,47 @@ export function AccountSettings() {
 
   return (
     <section className="space-y-6">
-      <Section title="Account" description="Manage your sign-in session.">
-        <Button disabled={busy} onClick={() => void run(finishSignOut)}>
-          Sign out
-        </Button>
-        {error && !open && (
-          <p role="alert" className="text-danger">
-            {error}
-          </p>
+      <Section
+        title="Account"
+        description="Manage your sign-in session."
+        footer={
+          <>
+            {error && !open && (
+              <p role="alert" className="mr-auto text-sm text-danger">
+                {error}
+              </p>
+            )}
+            <Button size="sm" disabled={busy} onClick={() => void run(finishSignOut)}>
+              Sign out
+            </Button>
+          </>
+        }
+      >
+        {user?.email && (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-fg">Email</p>
+            <p className="text-sm break-all text-muted">{user.email}</p>
+          </div>
         )}
       </Section>
       <Section
         title="Delete account"
         tone="danger"
         description="Permanently delete your account and workspaces you own alone. This cannot be undone."
-      >
-        <Button
-          variant="danger"
-          disabled={busy}
-          onClick={() => {
-            setError(null)
-            setOpen(true)
-          }}
-        >
-          Delete account
-        </Button>
-      </Section>
+        footer={
+          <Button
+            size="sm"
+            variant="danger"
+            disabled={busy}
+            onClick={() => {
+              setError(null)
+              setOpen(true)
+            }}
+          >
+            Delete account
+          </Button>
+        }
+      />
       {open && (
         <dialog
           ref={(node) => {
@@ -173,24 +201,28 @@ export function AccountSettings() {
             if (!busy) setOpen(false)
           }}
           aria-labelledby="delete-account-title"
-          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-6 text-fg backdrop:bg-fg/50"
+          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-5 text-fg shadow-elevated backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
         >
-          <h3 id="delete-account-title" className="text-lg font-medium">
+          <h3 id="delete-account-title" className="text-base font-semibold">
             Delete account permanently?
           </h3>
-          <p>
+          <p className="text-sm text-muted">
             This deletes your account and workspaces where you are the only member. This cannot be
             undone. Shared workspaces must have ownership transferred first.
           </p>
           {needsTransfer && (
             <div className="space-y-3">
-              <p role="status">
+              <p role="status" className="text-sm">
                 Transfer ownership of each shared workspace below, then retry deleting your account.
               </p>
-              {loading && <p role="status">Loading workspaces…</p>}
+              {loading && (
+                <p role="status" className="text-sm text-muted">
+                  Loading workspaces…
+                </p>
+              )}
               {workspaceError && (
-                <div>
-                  <p role="alert" className="text-danger">
+                <div className="space-y-2">
+                  <p role="alert" className="text-sm text-danger">
                     {workspaceError}
                   </p>
                   <Button type="button" disabled={busy} onClick={() => void run(refresh)}>
@@ -211,11 +243,11 @@ export function AccountSettings() {
             </div>
           )}
           {error && (
-            <p role="alert" className="text-danger">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-2 pt-1">
             <Button autoFocus type="button" disabled={busy} onClick={() => setOpen(false)}>
               Cancel
             </Button>
