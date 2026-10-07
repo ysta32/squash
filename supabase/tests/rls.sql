@@ -804,6 +804,66 @@ do $$ begin
     raise exception 'FAIL[84]: bug_events replica identity is not default'; end if;
 end $$;
 
+-- ===== Context constraints and existing bug RLS (0007) =====
+:as_a
+-- [85] filer can insert context; [86] oversized objects are rejected
+-- [87] non-object JSON is rejected, including JSON null
+do $$ declare bid uuid; payload jsonb; begin
+  insert into public.bugs (workspace_id, title, description, severity, filed_by, context)
+    values (current_setting('t.ws1')::uuid, 'Context bug', 'context', 'low', auth.uid(), '{"url":"https://example.com"}')
+    returning id into bid;
+  perform set_config('t.context_bug', bid::text, true);
+  if (select context->>'url' from public.bugs where id = bid) is distinct from 'https://example.com' then
+    raise exception 'FAIL[85]: filer context insert/read failed'; end if;
+  begin
+    update public.bugs set context = jsonb_build_object('build', repeat('x', 17000)) where id = bid;
+    raise exception 'FAIL[86]: oversized context accepted';
+  exception when check_violation then null;
+  end;
+  foreach payload in array array['[]'::jsonb, '"text"'::jsonb, '42'::jsonb, 'true'::jsonb, 'null'::jsonb] loop
+    begin
+      update public.bugs set context = payload where id = bid;
+      raise exception 'FAIL[87]: non-object context accepted';
+    exception when check_violation then null;
+    end;
+  end loop;
+end $$;
+:as_b
+-- [88] another member can read/update context, including SQL null
+do $$ begin
+  if (select context->>'url' from public.bugs where id = current_setting('t.context_bug')::uuid) is distinct from 'https://example.com' then
+    raise exception 'FAIL[88]: member cannot read context'; end if;
+  update public.bugs set context = null where id = current_setting('t.context_bug')::uuid;
+  if not found then raise exception 'FAIL[88]: member cannot clear context'; end if;
+  update public.bugs set context = '{"browser":"Firefox"}' where id = current_setting('t.context_bug')::uuid;
+  if (select context->>'browser' from public.bugs where id = current_setting('t.context_bug')::uuid) is distinct from 'Firefox' then
+    raise exception 'FAIL[88]: member cannot update context'; end if;
+end $$;
+:as_c
+-- [89] outsider cannot read or update context; [90] cannot insert it
+do $$ begin
+  if exists (select context from public.bugs where id = current_setting('t.context_bug')::uuid) then
+    raise exception 'FAIL[89]: outsider can read context'; end if;
+  update public.bugs set context = '{}' where id = current_setting('t.context_bug')::uuid;
+  if found then raise exception 'FAIL[89]: outsider can update context'; end if;
+  begin
+    insert into public.bugs (workspace_id, title, description, severity, filed_by, context)
+      values (current_setting('t.ws1')::uuid, 'Outsider', 'context', 'low', auth.uid(), '{}');
+    raise exception 'FAIL[90]: outsider inserted context';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+:as_a
+-- [91] context insert still cannot spoof another filer
+do $$ begin
+  begin
+    insert into public.bugs (workspace_id, title, description, severity, filed_by, context)
+      values (current_setting('t.ws1')::uuid, 'Spoof', 'context', 'low', '10000000-0000-0000-0000-000000000002', '{}');
+    raise exception 'FAIL[91]: context insert spoofed filer';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

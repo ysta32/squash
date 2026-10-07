@@ -43,6 +43,36 @@ function setup(onSubmit = vi.fn().mockResolvedValue(undefined), onToast = vi.fn(
 }
 
 describe('CaptureBar', () => {
+  it('attaches environment and the detected URL', async () => {
+    const { box, onSubmit } = setup()
+    fireEvent.change(box, { target: { value: 'Broken https://example.com/checkout' } })
+    expect(
+      screen.getByRole('button', { name: 'Remove URL https://example.com/checkout' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'File bug' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].context).toMatchObject({
+      url: 'https://example.com/checkout',
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+    })
+  })
+  it.each(['click', 'Backspace'])(
+    'removes the URL with %s and preserves removal after failure',
+    async (method) => {
+      const { box, onSubmit, onToast } = setup(vi.fn().mockRejectedValue(new Error('offline')))
+      fireEvent.change(box, { target: { value: 'Broken https://example.com/checkout' } })
+      const chip = screen.getByRole('button', { name: 'Remove URL https://example.com/checkout' })
+      if (method === 'click') fireEvent.click(chip)
+      else fireEvent.keyDown(chip, { key: method })
+      expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'File bug' }))
+      await waitFor(() => expect(onToast).toHaveBeenCalledWith('offline'))
+      expect(onSubmit.mock.calls[0][0].context.url).toBeUndefined()
+      expect(box.value).toContain('https://example.com/checkout')
+      expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
+    },
+  )
+
   beforeEach(() => {
     speechState.supported = true
     speechState.listening = false
@@ -106,6 +136,9 @@ describe('CaptureBar', () => {
     fireEvent.keyDown(box, { key: 'Enter' })
     expect(onSubmit).toHaveBeenCalledWith({
       description: 'Broken login',
+      context: {
+        viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
+      },
       transcript: null,
       severity: 'medium',
       kind: 'bug',

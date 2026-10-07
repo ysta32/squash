@@ -118,6 +118,7 @@ export type Database = {
           number: number
           title: string
           description: string
+          context: Json | null
           transcript: string | null
           severity: BugSeverityEnum
           status: BugStatusEnum
@@ -137,6 +138,7 @@ export type Database = {
           number?: number
           title: string
           description: string
+          context?: Json | null
           transcript?: string | null
           severity?: BugSeverityEnum
           status?: BugStatusEnum
@@ -155,6 +157,7 @@ export type Database = {
           number?: number
           title?: string
           description?: string
+          context?: Json | null
           transcript?: string | null
           severity?: BugSeverityEnum
           status?: BugStatusEnum

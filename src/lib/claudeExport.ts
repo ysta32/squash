@@ -1,3 +1,4 @@
+import { formatContext } from './bugContext'
 import { supabase } from './supabase'
 import type { BugWithMeta, Comment, WorkspaceMember } from './types'
 import { SEVERITY_LABEL } from './types'
@@ -121,6 +122,8 @@ export function formatClaudePrompt({
       `- Filed by ${nameOf(bug.filed_by)} on ${bug.created_at.slice(0, 10)}`,
       `- Link: ${origin}/app/${bug.workspace_id}/bug/${bug.number}`,
     ]
+    const context = formatContext(bug.context)
+    if (context) lines.push(`- Context: ${context}`)
     if (bug.description.trim() && bug.description.trim() !== bug.title.trim()) {
       lines.push('', 'Description:', indent(bug.description))
     }

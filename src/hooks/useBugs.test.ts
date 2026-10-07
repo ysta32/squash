@@ -362,6 +362,7 @@ describe('useBugs', () => {
     act(() => {
       filing = result.current.fileBug({
         description: 'Checkout total is wrong\nmore details',
+        context: { url: 'https://example.com/checkout', browser: 'Chrome 131' },
         transcript: null,
         severity: 'high',
         kind: 'bug',
@@ -370,6 +371,11 @@ describe('useBugs', () => {
     })
     await waitFor(() => expect(result.current.bugs).toHaveLength(1))
     const optimistic = result.current.bugs[0]
+    expect(optimistic.context).toEqual({
+      url: 'https://example.com/checkout',
+      browser: 'Chrome 131',
+    })
+    expect(h.state.inserted[0]).toMatchObject({ row: { context: optimistic.context } })
     expect(optimistic.optimistic).toBe(true)
     expect(optimistic.title).toBe('Checkout total is wrong')
     expect(optimistic.pending).toHaveLength(1)

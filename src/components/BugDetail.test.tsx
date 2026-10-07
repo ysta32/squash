@@ -95,6 +95,33 @@ function setup(bug: BugWithMeta | null, extra: Partial<Parameters<typeof BugDeta
 }
 
 describe('BugDetail', () => {
+  it('shows a context label with a safe external URL', () => {
+    setup(
+      makeBug({
+        context: {
+          url: 'https://example.com/checkout',
+          viewport: { w: 1440, h: 900, dpr: 2 },
+          browser: 'Chrome 131',
+          os: 'macOS',
+        },
+      }),
+    )
+    expect(screen.getByLabelText('Bug context')).toHaveTextContent(
+      'example.com/checkout · 1440×900 @2x · Chrome 131 · macOS',
+    )
+    const link = screen.getByRole('link', { name: 'example.com/checkout' })
+    expect(link).toHaveAttribute('href', 'https://example.com/checkout')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+  it.each([null, {}, { url: 'javascript:alert(1)' }])(
+    'hides empty or invalid context %j',
+    (context) => {
+      setup(makeBug({ context }))
+      expect(screen.queryByLabelText('Bug context')).not.toBeInTheDocument()
+    },
+  )
+
   beforeEach(() => {
     thread.comments = []
     thread.events = []
