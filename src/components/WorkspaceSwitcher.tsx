@@ -1,9 +1,13 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronsUpDown, Plus } from 'lucide-react'
 import type { Workspace } from '../lib/types'
 import { setLastWorkspace } from '../hooks/useWorkspaces'
 import { useDismiss } from '../hooks/useDismiss'
+import { cn } from '../lib/utils'
+
+const ITEM =
+  't focus-ring flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-visible:bg-bg-subtle'
 
 export interface WorkspaceSwitcherProps {
   workspace: Workspace
@@ -39,36 +43,51 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="focus-ring flex h-8 items-center gap-1 rounded-md px-2 text-sm font-medium hover:bg-bg-subtle"
+        title="Switch workspace"
+        className={cn(
+          't focus-ring flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-fg hover:bg-bg-subtle',
+          open && 'bg-bg-subtle',
+        )}
       >
-        <span className="max-w-[10rem] truncate">{workspace.name}</span>
-        <ChevronsUpDown className="h-3.5 w-3.5 text-muted" />
+        <span className="max-w-[9rem] truncate sm:max-w-[14rem]">{workspace.name}</span>
+        <ChevronsUpDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted" />
       </button>
       {open && (
         <div
           role="menu"
           onKeyDown={onMenuKey}
-          className="absolute left-0 top-full w-56 z-30 mt-1 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated"
+          aria-label="Workspaces"
+          className="t absolute left-0 top-full z-30 mt-1 w-60 max-w-[calc(100vw-1.5rem)] rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated starting:-translate-y-1 starting:opacity-0"
         >
+          <div
+            role="none"
+            className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase"
+          >
+            Workspaces
+          </div>
           {workspaces.map((w) => (
             <button
               key={w.id}
               type="button"
               role="menuitem"
               onClick={() => select(w.id)}
-              className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring justify-between gap-2"
+              aria-current={w.id === workspace.id ? 'true' : undefined}
+              className={cn(ITEM, 'text-fg', w.id === workspace.id && 'font-medium')}
             >
-              <span className="truncate">{w.name}</span>
-              {w.id === workspace.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+              <span className="min-w-0 flex-1 truncate">{w.name}</span>
+              {w.id === workspace.id && (
+                <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />
+              )}
             </button>
           ))}
-          <div role="separator" className="my-1 border-t border-border" />
+          <div role="separator" className="-mx-1 my-1 border-t border-border" />
           <Link
             to="/app?new=1"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring text-muted"
+            className={cn(ITEM, 'text-muted hover:text-fg')}
           >
+            <Plus aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             Create or join…
           </Link>
         </div>

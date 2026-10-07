@@ -2,7 +2,7 @@ import type { WorkspaceMember } from '../lib/types'
 import type { PresenceUser } from '../hooks/usePresence'
 import { Avatar } from './Avatar'
 
-const MAX_SHOWN = 5
+const MAX_SHOWN = 4
 
 export interface PresenceAvatarsProps {
   online: PresenceUser[]
@@ -10,28 +10,49 @@ export interface PresenceAvatarsProps {
   selfId: string
 }
 
+/** Stack of other members currently online, followed by a divider separating it from header actions. */
 export function PresenceAvatars({ online, members, selfId }: PresenceAvatarsProps) {
   const byId = new Map(members.map((m) => [m.user_id, m]))
+  const seen = new Set<string>()
   const others = online
-    .filter((u) => u.user_id !== selfId)
+    .filter((u) => u.user_id !== selfId && !seen.has(u.user_id) && seen.add(u.user_id))
     .map((u) => byId.get(u.user_id))
     .filter((m): m is WorkspaceMember => m !== undefined)
   if (others.length === 0) return null
   const shown = others.slice(0, MAX_SHOWN)
-  const extra = others.length - shown.length
+  const hidden = others.slice(MAX_SHOWN)
+  const names = others.map((m) => m.profile.display_name).join(', ')
+  const label = `${others.length} online: ${names}`
 
   return (
-    <div className="flex items-center -space-x-2">
-      {shown.map((m) => (
-        <span key={m.user_id} title={m.profile.display_name} className="inline-flex">
-          <Avatar profile={m.profile} size="sm" ring />
+    <div className="mr-1 flex items-center gap-2.5">
+      <div role="group" aria-label={label} title={label} className="flex items-center">
+        <span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-success sm:mr-2" />
+        <span aria-hidden="true" className="text-xs font-medium text-muted tabular-nums sm:hidden">
+          {others.length}
         </span>
-      ))}
-      {extra > 0 && (
-        <span className="z-10 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-bg-subtle px-1 text-xs font-semibold text-muted ring-2 ring-bg">
-          +{extra}
-        </span>
-      )}
+        <div className="hidden items-center -space-x-0.5 sm:flex">
+          {shown.map((m, i) => (
+            <span
+              key={m.user_id}
+              title={m.profile.display_name}
+              className="relative inline-flex rounded-full"
+              style={{ zIndex: shown.length - i }}
+            >
+              <Avatar profile={m.profile} size="sm" className="ring-2 ring-bg" />
+            </span>
+          ))}
+          {hidden.length > 0 && (
+            <span
+              title={hidden.map((m) => m.profile.display_name).join(', ')}
+              className="relative inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-bg-subtle px-1 text-[10px] font-semibold text-muted tabular-nums ring-2 ring-bg"
+            >
+              +{hidden.length}
+            </span>
+          )}
+        </div>
+      </div>
+      <span aria-hidden="true" className="h-5 w-px bg-border" />
     </div>
   )
 }
