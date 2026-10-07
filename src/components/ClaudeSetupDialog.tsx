@@ -11,6 +11,7 @@ import {
 } from '../lib/claudeExport'
 import type { BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
+import { Badge, Button, Input, Kbd } from './ui'
 
 export interface ClaudeSetupDialogProps {
   open: boolean
@@ -29,7 +30,7 @@ function Step({ n, done, children }: { n: number; done: boolean; children: React
       <span
         className={cn(
           'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-medium',
-          done ? 'bg-green-500 text-white' : 'bg-bg-subtle text-muted',
+          done ? 'bg-success/15 text-success' : 'bg-bg-subtle text-muted',
         )}
       >
         {done ? <Check size={12} aria-hidden="true" /> : n}
@@ -90,6 +91,8 @@ export function ClaudeSetupDialog({
   if (!open) return null
 
   const copy = async () => {
+    setError(null)
+    setCopied(false)
     try {
       await navigator.clipboard.writeText(command)
       setCopied(true)
@@ -115,14 +118,14 @@ export function ClaudeSetupDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Connect Claude Code"
-        className="w-full max-w-lg rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-elevated"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -135,23 +138,25 @@ export function ClaudeSetupDialog({
               done, the terminal closes and the bug is resolved with Claude’s summary.
             </p>
           </div>
-          <button
+          <Button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="rounded p-1 text-muted hover:text-fg"
+            variant="ghost"
+            size="sm"
+            className="px-2"
           >
             <X size={16} />
-          </button>
+          </Button>
         </div>
 
-        <p role="status" className="mt-4 flex items-center gap-2 text-xs text-muted">
-          <span
-            className={cn(
-              'h-2 w-2 rounded-full',
-              connected ? 'bg-green-500' : outdated ? 'bg-amber-500' : 'animate-pulse bg-zinc-400',
-            )}
-          />
+        <p role="status" className="mt-4 flex items-start gap-2 text-sm leading-6 text-muted">
+          <Badge
+            tone={connected ? 'success' : outdated ? 'warning' : 'neutral'}
+            className="shrink-0 text-xs"
+          >
+            {connected ? 'Connected' : outdated ? 'Update needed' : 'Waiting'}
+          </Badge>
           {connected
             ? status.version >= AUTO_RESOLVE_VERSION
               ? 'Connected to this computer'
@@ -167,32 +172,37 @@ export function ClaudeSetupDialog({
               {outdated ? 'Update the helper' : 'Paste this into Terminal and press Enter'}
             </p>
             <div className="mt-2 flex gap-2">
-              <input
+              <Input
                 readOnly
                 value={command}
                 aria-label="Install command"
                 onFocus={(e) => e.currentTarget.select()}
-                className="min-w-0 flex-1 rounded-md border border-border bg-bg px-3 py-2 font-mono text-xs"
+                className="min-w-0 flex-1 font-mono text-xs"
               />
-              <button
-                type="button"
-                onClick={() => void copy()}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
+              <Button type="button" onClick={() => void copy()} variant="primary">
+                {copied ? (
+                  <Check size={14} aria-hidden="true" />
+                ) : (
+                  <Copy size={14} aria-hidden="true" />
+                )}
+                <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+              </Button>
             </div>
             <p className="mt-2 text-xs text-muted">
-              {isMac
-                ? 'Open Terminal with ⌘Space, type “Terminal”, press Enter. The helper starts automatically from now on. '
-                : 'Keep that terminal open while you use Squash. '}
+              {isMac ? (
+                <>
+                  Open Terminal with <Kbd>⌘ Space</Kbd>, type “Terminal”, then press{' '}
+                  <Kbd>Enter</Kbd>. The helper starts automatically when you log in.{' '}
+                </>
+              ) : (
+                'Keep that terminal open while you use Squash. '
+              )}
               Needs{' '}
               <a
                 href="https://nodejs.org"
                 target="_blank"
                 rel="noreferrer"
-                className="underline underline-offset-2"
+                className="focus-ring rounded-md underline underline-offset-2"
               >
                 Node.js
               </a>{' '}
@@ -201,7 +211,7 @@ export function ClaudeSetupDialog({
                 href="https://claude.com/claude-code"
                 target="_blank"
                 rel="noreferrer"
-                className="underline underline-offset-2"
+                className="focus-ring rounded-md underline underline-offset-2"
               >
                 Claude Code
               </a>
@@ -225,15 +235,16 @@ export function ClaudeSetupDialog({
                   Each workspace opens Claude in its own folder, in its own terminal window.
                 </p>
                 {nativePicker ? (
-                  <button
+                  <Button
                     type="button"
                     disabled={busy}
                     onClick={() => void chooseFolder()}
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-subtle disabled:opacity-50"
+                    className="mt-2"
+                    size="sm"
                   >
                     <FolderOpen size={14} aria-hidden="true" />
                     {busy ? 'Choose in the dialog…' : current ? 'Change folder…' : 'Choose folder…'}
-                  </button>
+                  </Button>
                 ) : (
                   <form
                     className="mt-2 flex gap-2"
@@ -242,20 +253,16 @@ export function ClaudeSetupDialog({
                       if (typed.trim()) void chooseFolder(typed)
                     }}
                   >
-                    <input
+                    <Input
                       value={typed}
                       onChange={(e) => setTyped(e.target.value)}
                       placeholder="~/code/my-app"
                       aria-label="Project folder path"
-                      className="min-w-0 flex-1 rounded-md border border-border bg-bg px-3 py-1.5 font-mono text-xs"
+                      className="min-w-0 flex-1 font-mono text-xs"
                     />
-                    <button
-                      type="submit"
-                      disabled={busy || !typed.trim()}
-                      className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-subtle disabled:opacity-50"
-                    >
+                    <Button type="submit" disabled={busy || !typed.trim()} variant="secondary">
                       Save
-                    </button>
+                    </Button>
                   </form>
                 )}
               </>
@@ -264,31 +271,34 @@ export function ClaudeSetupDialog({
         </ol>
 
         {error && (
-          <p role="alert" className="mt-4 text-sm text-red-500">
+          <p role="alert" className="mt-4 text-sm text-danger">
             {error}
           </p>
         )}
 
         {pending.length > 0 && (
-          <button
+          <Button
             type="button"
             disabled={!connected || (!nativePicker && current === null)}
             onClick={onSendPending}
-            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+            variant="primary"
+            className="mt-6 w-full"
           >
             <Bot size={16} aria-hidden="true" /> Send {count} to Claude
-          </button>
+          </Button>
         )}
 
         <p className="mt-5 border-t border-border pt-3 text-xs text-muted">
-          The helper only listens on this computer and only accepts requests from Squash. To remove
-          it, run the same command with <code className="font-mono">--uninstall</code> in place of
-          the address at the end.{' '}
+          The helper listens at <code className="font-mono">127.0.0.1:4317</code> and accepts
+          requests from configured Squash origins. It saves the bugs and screenshots you send in
+          your project and starts Claude Code there with your Claude Code permissions. To remove it,
+          run the same command with <code className="font-mono">--uninstall</code> in place of the
+          address at the end.{' '}
           <a
             href="/claude"
             target="_blank"
             rel="noreferrer"
-            className="text-accent underline-offset-2 hover:underline"
+            className="focus-ring rounded-md text-accent underline-offset-2 hover:underline"
           >
             Full setup guide
           </a>
