@@ -262,9 +262,24 @@ export function BugList({
             onClaudeSetup={onClaudeSetup}
           />
         )}
+        {!loading && error && bugs.length > 0 && (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-muted"
+          >
+            <p>Couldn't refresh — showing saved results</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="focus-ring shrink-0 rounded-md px-2 py-1 text-accent hover:bg-bg-subtle"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {loading ? (
           <Skeleton />
-        ) : error ? (
+        ) : error && bugs.length === 0 ? (
           <div role="alert" className="space-y-3 p-6 text-center">
             <p className="text-sm text-fg">{error}</p>
             <button
