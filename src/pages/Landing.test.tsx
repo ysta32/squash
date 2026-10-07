@@ -136,9 +136,9 @@ describe('Landing', () => {
       workspace: [1600, 1000],
       capture: [1400, 544],
       annotate: [1400, 991],
-      claude: [1400, 784],
-      stats: [720, 338],
-      palette: [1000, 717],
+      claude: [1400, 1010],
+      stats: [720, 375],
+      palette: [1000, 761],
       mobile: [1400, 981],
     }
     for (const img of screen.getAllByRole('img')) {

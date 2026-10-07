@@ -86,7 +86,7 @@ export const FEATURES: Feature[] = [
       name: 'claude',
       themed: true,
       width: 1400,
-      height: 784,
+      height: 1010,
       alt: 'A bug with a Claude is working panel: the file being edited, a four-step plan with two steps done, and Claude’s latest explanation',
     },
   },
@@ -104,7 +104,7 @@ export const FEATURES: Feature[] = [
       name: 'stats',
       themed: true,
       width: 720,
-      height: 338,
+      height: 375,
       alt: 'The stats popover listing bugs filed and resolved by each teammate over the last 7 days and all time',
     },
   },
@@ -114,7 +114,7 @@ export const PALETTE_SHOT: Shot = {
   name: 'palette',
   themed: true,
   width: 1000,
-  height: 717,
+  height: 761,
   alt: 'The command palette listing actions, export commands and matching bugs',
 }
 

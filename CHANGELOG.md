@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## v1.5.0 — 2026-10-07
+
+A design pass over the whole app and a new landing page.
+
+### Changed
+
+- The landing page is rebuilt: a larger hero with a framed product shot, one section grid for every feature, a grid of the smaller features, a compact phone section, a tidier FAQ and a full footer. Product screenshots reserve their real size, so they no longer load as empty boxes.
+- Severity is a labelled control ("Medium", with a color dot) in the capture bar and the bug detail, with a menu and the <kbd>1</kbd>–<kbd>4</kbd> keys, instead of four unlabelled dots.
+- The capture bar has a real send button with a label and an <kbd>Enter</kbd> hint, a focus state for the whole composer, and consistent toolbar buttons.
+- List filters are chip menus instead of native selects. They show the active value, clear with one click, work from the keyboard, and scroll on one line on phones.
+- List rows keep a fixed column order: Claude status, screenshot count, time, viewers and the owner's avatar. Tiny thumbnails are gone and the selected row is quieter.
+- The bug detail uses a centered reading column, a joined Send to Claude button group, section headings, a larger attachment grid, a timeline line for activity and a comment composer with a send button.
+- The header shows who is online in a clean stack, gives Invite a label, and the profile menu shows your email and opens the keyboard shortcuts.
+- Buttons, menus, dialogs, toasts, settings and the sign-in pages share one set of surfaces, shadows and states. Disabled buttons are neutral grey instead of a faded accent.
+
+### Fixed
+
+- The bug detail no longer makes the page scroll sideways. A hidden description field kept its full width.
+- The join page no longer crashes when the invite lookup returns nothing.
+- "No matches" and "Clear filters" now take the assignee filter into account.
+- Resizing the bug title no longer logs ResizeObserver loop errors.
+
 ## v1.4.0 — 2026-10-07
 
 Screenshot mark-up, shareable views, a getting-started checklist, and an accessibility pass.
