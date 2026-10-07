@@ -806,6 +806,7 @@ export default function Workspace() {
             onSend={claude.sendBugs}
             onCopy={claude.copyBugs}
             onClaudeSetup={claude.openSetup}
+            onInvite={() => setInviteOpen(true)}
             claudeConnected={claude.connected}
             claudeRuns={claude.runs}
           />
