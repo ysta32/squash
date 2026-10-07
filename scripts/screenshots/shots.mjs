@@ -103,6 +103,50 @@ export function shots({ desktop, mobile }) {
       },
     })),
 
+    // Marking up a pasted screenshot before filing: an arrow and a box on the overlapping banner.
+    ...['dark', 'light'].map((theme) => ({
+      name: `annotate-${theme}`,
+      path: `${ws}/bug/24`,
+      viewport: desktop,
+      theme,
+      before: async (page) => {
+        await capture(page)
+        await page
+          .getByRole('button', { name: /^Mark up / })
+          .first()
+          .click()
+        const canvas = page
+          .getByRole('img', { name: 'Image annotation canvas' })
+          .or(page.getByLabel('Image annotation canvas'))
+          .first()
+        await canvas.waitFor()
+        await page.waitForTimeout(300)
+        const box = await canvas.boundingBox()
+        const at = (fx, fy) => [box.x + box.width * fx, box.y + box.height * fy]
+        const drag = async ([x1, y1], [x2, y2]) => {
+          await page.mouse.move(x1, y1)
+          await page.mouse.down()
+          await page.mouse.move(x2, y2, { steps: 12 })
+          await page.mouse.up()
+        }
+        await page.keyboard.press('b')
+        await drag(at(0.05, 0.75), at(0.95, 0.985))
+        await page.keyboard.press('a')
+        await drag(at(0.78, 0.5), at(0.62, 0.72))
+        await page.waitForTimeout(200)
+      },
+      clip: async (page) => {
+        const box = await page.getByRole('dialog', { name: /^Mark up / }).boundingBox()
+        const pad = 48
+        return {
+          x: box.x - pad,
+          y: box.y - pad,
+          width: box.width + pad * 2,
+          height: box.height + pad * 2,
+        }
+      },
+    })),
+
     // Screenshot lightbox.
     {
       name: 'lightbox-dark',

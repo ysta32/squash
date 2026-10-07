@@ -60,7 +60,6 @@ export const checkoutMobile = shell(`
       <span style="flex:1; text-align:center; padding:10px; border-radius:9px; border:1px solid #4b5563">Settings</span>
     </div>
   </div>
-  <div style="position:absolute; left:8px; right:8px; bottom:12px; height:160px; border:3px solid #ef4444; border-radius:18px"></div>
 `)
 
 export const checkoutDesktop = shell(`
