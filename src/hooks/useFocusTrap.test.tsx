@@ -34,6 +34,7 @@ function Harness({
   return (
     <>
       <button>outside</button>
+      <button>another outside</button>
       {children && <div ref={ref}>{children}</div>}
       {!children && show && <Trap active={active} />}
     </>
@@ -86,6 +87,17 @@ describe('useFocusTrap', () => {
     screen.getByText('outside').focus()
     expect(document.activeElement).toBe(screen.getByText('outside'))
     expect(fireEvent.keyDown(screen.getByText('three'), { key: 'Tab' })).toBe(true)
+  })
+
+  it.each(['unmount', 'deactivate'])('preserves focus moved outside before %s', (action) => {
+    const { rerender } = render(<Harness show={false} />)
+    screen.getByText('outside').focus()
+    rerender(<Harness show />)
+    expect(document.activeElement).toBe(screen.getByText('one'))
+    const outside = screen.getByText('another outside')
+    outside.focus()
+    rerender(<Harness show={action !== 'unmount'} active={false} />)
+    expect(document.activeElement).toBe(outside)
   })
 
   it('skips hidden and inert focusables when wrapping', () => {

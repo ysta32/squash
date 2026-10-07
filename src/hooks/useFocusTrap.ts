@@ -57,7 +57,13 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
       document.removeEventListener('keydown', onKeyDown)
       const at = stack.lastIndexOf(root)
       if (at >= 0) stack.splice(at, 1)
-      if (previous?.isConnected) previous.focus()
+      const focused = document.activeElement
+      if (
+        previous?.isConnected &&
+        (focused === null || focused === document.body || root.contains(focused))
+      ) {
+        previous.focus()
+      }
     }
   }, [ref, active])
 }
