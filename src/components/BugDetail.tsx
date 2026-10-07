@@ -167,7 +167,7 @@ function BugBody({
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
-  }, [description])
+  }, [description, showRendered])
 
   function run(action: () => void | Promise<void>, onSuccess?: () => void) {
     setError(null)

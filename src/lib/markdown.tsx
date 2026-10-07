@@ -27,12 +27,17 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
 function closing(text: string, marker: string, from: number): number {
   let at = text.indexOf(marker, from)
   while (at !== -1 && at === from) at = text.indexOf(marker, at + 1)
+  if (marker === '**') while (at !== -1 && text[at + 2] === '*') at++
   return at
 }
 
 /** Inline constructs: code, bold, italic, links, @mentions and #123 refs. Unclosed markers stay literal. */
 // eslint-disable-next-line react-refresh/only-export-components -- frozen contract exports a helper beside the component
 export function renderInline(text: string): ReactNode[] {
+  return inline(text, false)
+}
+
+function inline(text: string, inLink: boolean): ReactNode[] {
   const out: ReactNode[] = []
   let buf = ''
   let key = 0
@@ -75,7 +80,7 @@ export function renderInline(text: string): ReactNode[] {
       if (end !== -1) {
         push(
           <strong key={key++} className="font-semibold">
-            {renderInline(text.slice(i + 2, end))}
+            {inline(text.slice(i + 2, end), inLink)}
           </strong>,
         )
         i = end + 2
@@ -95,20 +100,20 @@ export function renderInline(text: string): ReactNode[] {
         !/^\s/.test(inner) &&
         !(ch === '_' && isWord(text[end + 1]))
       ) {
-        push(<em key={key++}>{renderInline(inner)}</em>)
+        push(<em key={key++}>{inline(inner, inLink)}</em>)
         i = end + 1
         continue
       }
     }
 
-    if (ch === '[') {
+    if (ch === '[' && !inLink) {
       const m = /^\[([^\]]+)\]\(([^)\s]+)\)/.exec(rest)
       if (m) {
         const href = safeHref(m[2])
         if (href) {
           push(
             <Link key={key++} href={href}>
-              {renderInline(m[1])}
+              {inline(m[1], true)}
             </Link>,
           )
         } else {
@@ -119,7 +124,7 @@ export function renderInline(text: string): ReactNode[] {
       }
     }
 
-    if (ch === 'h' && !isWord(prev)) {
+    if (ch === 'h' && !inLink && !isWord(prev)) {
       const m = /^https?:\/\/[^\s<>]+/.exec(rest)
       if (m) {
         const url = m[0].replace(/[.,;:!?)\]'"]+$/, '')
@@ -255,7 +260,13 @@ function renderBlocks(source: string): ReactNode[] {
     while (
       i < rows.length &&
       rows[i].trim() &&
-      !(para.length > 0 && (BULLET.test(rows[i]) || ORDERED.test(rows[i]) || QUOTE.test(rows[i])))
+      !(
+        para.length > 0 &&
+        (FENCE.test(rows[i]) ||
+          BULLET.test(rows[i]) ||
+          ORDERED.test(rows[i]) ||
+          QUOTE.test(rows[i]))
+      )
     ) {
       para.push(rows[i])
       i++

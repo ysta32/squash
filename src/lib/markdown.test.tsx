@@ -87,6 +87,25 @@ describe('Markdown', () => {
     expect(c.textContent).toContain('```')
   })
 
+  it('renders a fence directly after paragraph text', () => {
+    const c = html('intro\n```\n**raw**\n```')
+    expect(c.querySelector('pre code')?.textContent).toBe('**raw**')
+    expect(c.querySelector('strong')).toBeNull()
+  })
+
+  it('handles nested emphasis closing together', () => {
+    const c = html('- **bold *italic***')
+    expect(c.querySelector('li strong em')?.textContent).toBe('italic')
+    expect(c.textContent).toBe('bold italic')
+  })
+
+  it('does not nest anchors inside link labels', () => {
+    const c = html('[https://example.com](https://other.example)')
+    const a = c.querySelectorAll('a')
+    expect(a).toHaveLength(1)
+    expect(a[0].getAttribute('href')).toBe('https://other.example/')
+  })
+
   it('does not italicise snake_case', () => {
     expect(html('use snake_case_name here').querySelector('em')).toBeNull()
   })
