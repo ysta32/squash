@@ -17,6 +17,20 @@ interface Bridge {
   describeTool(name: string, input?: Record<string, unknown>, cwd?: string): string
   hookEvent(input: Record<string, unknown>, now?: Date): BridgeEvent | null
   summarizeRun(meta: Record<string, unknown>, events: BridgeEvent[]): ClaudeRun
+  parseHosts(list?: string): string[]
+  isAllowedDownload(url: string, extraHosts?: string[]): boolean
+  readCapped(res: Response, limit: number): Promise<Buffer>
+  fetchAllowed(url: string, extraHosts: string[], fetchImpl: typeof fetch): Promise<Response>
+  createLaunchLimiter(options: {
+    maxRunning?: number
+    maxLaunches?: number
+    windowMs?: number
+    isRunning?: (dir: string | null, ageMs: number, since: number) => boolean
+    now?: () => number
+  }): {
+    acquire(): { track(dir: string): void; release(): void } | null
+    readonly running: number
+  }
 }
 
 // The bridge is a standalone script served from /bridge; importing it must not start the server.
@@ -158,5 +172,189 @@ describe('summarizeRun', () => {
     expect(run.steps.map((s) => s.text)).toEqual(
       Array.from({ length: 8 }, (_, i) => `step ${i + 4}`),
     )
+  })
+})
+
+describe('isAllowedDownload', () => {
+  it('allows https Supabase storage hosts', () => {
+    expect(bridge.isAllowedDownload('https://abc.supabase.co/storage/v1/object/sign/x.png')).toBe(
+      true,
+    )
+    expect(bridge.isAllowedDownload('https://abc.supabase.in/x.png')).toBe(true)
+    expect(bridge.isAllowedDownload('https://ABC.Supabase.CO./x.png')).toBe(true)
+  })
+
+  it('rejects other hosts, look-alikes, plain http and credentials', () => {
+    for (const url of [
+      'https://example.com/x.png',
+      'https://supabase.co/x.png',
+      'https://evil-supabase.co/x.png',
+      'https://abc.supabase.co.evil.com/x.png',
+      'http://abc.supabase.co/x.png',
+      'https://user:pw@abc.supabase.co/x.png',
+      'http://127.0.0.1:4317/claude',
+      'file:///etc/passwd',
+      'not a url',
+    ]) {
+      expect(bridge.isAllowedDownload(url), url).toBe(false)
+    }
+  })
+
+  it('allows exact extra hosts from SQUASH_DOWNLOAD_HOSTS', () => {
+    const extra = bridge.parseHosts(' cdn.example.com , Files.Example.org. ,')
+    expect(extra).toEqual(['cdn.example.com', 'files.example.org'])
+    expect(bridge.isAllowedDownload('https://cdn.example.com/x.png', extra)).toBe(true)
+    expect(bridge.isAllowedDownload('https://files.example.org/x.png', extra)).toBe(true)
+    expect(bridge.isAllowedDownload('https://sub.cdn.example.com/x.png', extra)).toBe(false)
+    expect(bridge.isAllowedDownload('http://cdn.example.com/x.png', extra)).toBe(false)
+  })
+})
+
+describe('fetchAllowed', () => {
+  const redirect = (location: string) => new Response(null, { status: 302, headers: { location } })
+
+  it('follows redirects that stay on allowed hosts', async () => {
+    const calls: string[] = []
+    const fetchImpl = (async (url: string) => {
+      calls.push(url)
+      return calls.length === 1 ? redirect('/next.png') : new Response('ok')
+    }) as unknown as typeof fetch
+    const res = await bridge.fetchAllowed('https://a.supabase.co/x.png', [], fetchImpl)
+    expect(await res.text()).toBe('ok')
+    expect(calls).toEqual(['https://a.supabase.co/x.png', 'https://a.supabase.co/next.png'])
+  })
+
+  it('refuses to follow a redirect to a host that is not allowed', async () => {
+    const calls: string[] = []
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      calls.push(url)
+      expect(init.redirect).toBe('manual')
+      return redirect('http://169.254.169.254/latest/meta-data')
+    }) as unknown as typeof fetch
+    await expect(
+      bridge.fetchAllowed('https://a.supabase.co/x.png', [], fetchImpl),
+    ).rejects.toMatchObject({ status: 400 })
+    expect(calls).toEqual(['https://a.supabase.co/x.png'])
+  })
+
+  it('never fetches a disallowed first URL and stops after a few redirects', async () => {
+    let calls = 0
+    const fetchImpl = (async () => {
+      calls++
+      return redirect('https://a.supabase.co/loop.png')
+    }) as unknown as typeof fetch
+    await expect(bridge.fetchAllowed('https://example.com/x.png', [], fetchImpl)).rejects.toThrow()
+    expect(calls).toBe(0)
+    await expect(bridge.fetchAllowed('https://a.supabase.co/x.png', [], fetchImpl)).rejects.toThrow(
+      /302/,
+    )
+    expect(calls).toBe(4)
+  })
+})
+
+describe('readCapped', () => {
+  /** A body of `chunks` chunks of `size` bytes that records how many chunks were pulled. */
+  function body(chunks: number, size: number) {
+    const state = { pulled: 0, cancelled: false }
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (state.pulled === chunks) return controller.close()
+        state.pulled++
+        controller.enqueue(new Uint8Array(size).fill(state.pulled))
+      },
+      cancel() {
+        state.cancelled = true
+      },
+    })
+    return { stream, state }
+  }
+
+  it('returns the whole body when it fits', async () => {
+    const { stream } = body(3, 4)
+    const data = await bridge.readCapped(new Response(stream), 12)
+    expect(data.length).toBe(12)
+    expect([...data]).toEqual([1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3])
+  })
+
+  it('rejects up front when Content-Length is over the limit, without reading', async () => {
+    const { stream, state } = body(100, 4)
+    const res = new Response(stream, { headers: { 'content-length': '400' } })
+    await expect(bridge.readCapped(res, 100)).rejects.toThrow('Screenshot too large')
+    expect(state.pulled).toBeLessThanOrEqual(1)
+    expect(state.cancelled).toBe(true)
+  })
+
+  it('stops streaming as soon as the limit is passed when the size is not declared', async () => {
+    const { stream, state } = body(1000, 10)
+    await expect(bridge.readCapped(new Response(stream), 25)).rejects.toThrow(
+      'Screenshot too large',
+    )
+    expect(state.pulled).toBeLessThan(10)
+    expect(state.cancelled).toBe(true)
+  })
+
+  it('does not trust a small Content-Length', async () => {
+    const { stream } = body(10, 10)
+    const res = new Response(stream, { headers: { 'content-length': '5' } })
+    await expect(bridge.readCapped(res, 50)).rejects.toThrow('Screenshot too large')
+  })
+})
+
+describe('createLaunchLimiter', () => {
+  it('allows at most maxRunning runs at once and frees a slot on release', () => {
+    const limiter = bridge.createLaunchLimiter({ maxRunning: 3, now: () => 0 })
+    const slots = [limiter.acquire(), limiter.acquire(), limiter.acquire()]
+    expect(slots.every(Boolean)).toBe(true)
+    expect(limiter.acquire()).toBeNull()
+    slots[1]!.release()
+    expect(limiter.acquire()).not.toBeNull()
+    expect(limiter.acquire()).toBeNull()
+  })
+
+  it('frees a slot once its run has finished or grown too old', () => {
+    let t = 0
+    const done = new Set<string>()
+    const limiter = bridge.createLaunchLimiter({
+      maxRunning: 2,
+      now: () => t,
+      isRunning: (dir, ageMs) => ageMs < 1000 && !(dir && done.has(dir)),
+    })
+    limiter.acquire()!.track('/a')
+    limiter.acquire()!.track('/b')
+    expect(limiter.acquire()).toBeNull()
+    done.add('/a')
+    expect(limiter.acquire()).not.toBeNull()
+    expect(limiter.acquire()).toBeNull()
+    t = 1000
+    expect(limiter.acquire()).not.toBeNull()
+    expect(limiter.running).toBe(1)
+  })
+
+  it('allows at most maxLaunches per window, even when runs finish', () => {
+    let t = 0
+    const limiter = bridge.createLaunchLimiter({
+      maxRunning: 3,
+      maxLaunches: 20,
+      windowMs: 600_000,
+      now: () => t,
+    })
+    for (let i = 0; i < 20; i++) {
+      t = i * 1000
+      const slot = limiter.acquire()
+      expect(slot, `launch ${i}`).not.toBeNull()
+      slot!.release()
+    }
+    t = 599_999
+    expect(limiter.acquire()).toBeNull()
+    t = 600_000
+    expect(limiter.acquire()).not.toBeNull()
+  })
+
+  it('counts a refused launch against neither limit', () => {
+    const limiter = bridge.createLaunchLimiter({ maxRunning: 1, maxLaunches: 2, now: () => 0 })
+    const first = limiter.acquire()
+    expect(limiter.acquire()).toBeNull()
+    first!.release()
+    expect(limiter.acquire()).not.toBeNull()
   })
 })

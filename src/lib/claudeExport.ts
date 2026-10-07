@@ -238,6 +238,8 @@ export const BRIDGE_VERSION = 2
 export const PROGRESS_VERSION = 3
 /** Oldest bridge that runs Claude unattended and resolves bugs from its results. */
 export const AUTO_RESOLVE_VERSION = 4
+/** Oldest bridge that limits downloads to Supabase storage and caps concurrent Claude runs. */
+export const HARDENED_VERSION = 5
 
 export interface BridgeStatus {
   version: number
@@ -277,6 +279,12 @@ async function bridgeRequest<T>(path: string, body?: unknown): Promise<T> {
   })
   const json = (await res.json().catch(() => null)) as
     (T & { error?: string; code?: string }) | null
+  if (res.status === 429) {
+    throw new BridgeError(
+      'Claude is already working on several runs on this computer. Try again in a few minutes.',
+      'busy',
+    )
+  }
   if (!res.ok || !json) {
     throw new BridgeError(json?.error ?? `Claude bridge failed (${res.status})`, json?.code)
   }

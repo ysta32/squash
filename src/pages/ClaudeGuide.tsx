@@ -6,6 +6,7 @@ import {
   BRIDGE_VERSION,
   PROGRESS_VERSION,
   AUTO_RESOLVE_VERSION,
+  HARDENED_VERSION,
   installCommand,
   pingBridge,
   type BridgeStatus,
@@ -111,10 +112,15 @@ function HelperCheck() {
                     'bg-warning',
                     `Helper v${status.version} is running. Run the command below to update it so Claude resolves bugs on its own when it finishes.`,
                   ]
-                : [
-                    'bg-success',
-                    `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
-                  ]
+                : status.version < HARDENED_VERSION
+                  ? [
+                      'bg-warning',
+                      `Helper v${status.version} is running. Run the command below to update it: the new helper only downloads screenshots from Squash’s storage and limits how many Claude runs start at once.`,
+                    ]
+                  : [
+                      'bg-success',
+                      `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
+                    ]
 
   return (
     <div className="mt-6 rounded-xl border border-border p-4">
@@ -325,8 +331,8 @@ export default function ClaudeGuide() {
                 <code className={cn(code, 'break-all')}>
                   curl -H "Origin: {origin}" {BRIDGE_URL}/health
                 </code>
-                . A working helper answers with its version, which should be {AUTO_RESOLVE_VERSION}{' '}
-                or higher.
+                . A working helper answers with its version, which should be {HARDENED_VERSION} or
+                higher.
               </div>
             </details>
             <details className="py-3">

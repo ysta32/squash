@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Security
+
+- The Claude Code helper (v5) only downloads screenshots from Squash's storage (Supabase, plus any hosts in `SQUASH_DOWNLOAD_HOSTS`), including across redirects, stops a download as soon as it passes 15 MiB, runs at most 3 Claude sessions at once and starts at most 20 per 10 minutes (more get a "busy" reply), and keeps the prompts, screenshots and run records it writes readable only by you. Rerun the install command from the Claude page to update the helper.
+
 ## v1.5.0 — 2026-10-07
 
 A design pass over the whole app and a new landing page.
