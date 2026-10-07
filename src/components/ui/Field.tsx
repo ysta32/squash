@@ -14,8 +14,9 @@ export interface FieldProps {
   /** Helper text under the control. */
   hint?: ReactNode
   error?: string | null
-  /** Renders the control; receives the id and the ids that describe it. */
-  children: (ids: { id: string; describedBy: string | undefined }) => ReactNode
+  /** Renders the control; receives its id, the ids that describe it, and whether it is invalid
+   * (pass that on as aria-invalid so the input shows its error border). */
+  children: (ids: { id: string; describedBy: string | undefined; invalid: boolean }) => ReactNode
   className?: string
 }
 
@@ -27,12 +28,12 @@ export function Field({ label, hint, error, children, className }: FieldProps) {
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
   return (
     <div className={cn('space-y-1.5', className)}>
-      <label htmlFor={id} className="block text-sm font-medium text-fg">
+      <label htmlFor={id} className="block text-sm font-medium text-ink">
         {label}
       </label>
-      {children({ id, describedBy })}
+      {children({ id, describedBy, invalid: Boolean(error) })}
       {hint && (
-        <p id={hintId} className="text-xs text-muted">
+        <p id={hintId} className="text-xs text-ink-3">
           {hint}
         </p>
       )}

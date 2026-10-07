@@ -1,14 +1,17 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/utils'
+import { labelClass } from './styles'
 
 export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
 
+// Specimen-label chips: mono uppercase on a hairline. Status colors are text and border only;
+// the accent is the one tone with a (same-hue) tint behind its text.
 const TONE: Record<BadgeTone, string> = {
-  neutral: 'border border-border bg-bg-subtle text-muted',
-  accent: 'bg-accent/12 text-accent',
-  success: 'bg-success/12 text-success',
-  warning: 'bg-warning/12 text-warning',
-  danger: 'bg-danger/12 text-danger',
+  neutral: 'border-line-2 text-ink-2',
+  accent: 'border-transparent bg-accent-tint text-accent',
+  success: 'border-success/40 text-success',
+  warning: 'border-warning/40 text-warning',
+  danger: 'border-danger/40 text-danger',
 }
 
 export function Badge({
@@ -23,9 +26,12 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11px] leading-none font-medium whitespace-nowrap',
+        'inline-flex h-5 items-center gap-1 rounded-sm border px-1.5 leading-none whitespace-nowrap',
+        labelClass,
         TONE[tone],
         className,
+        // Labels are always uppercase, even when a caller asks for `capitalize`.
+        'uppercase!',
       )}
     >
       {children}
