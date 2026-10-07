@@ -20,7 +20,8 @@
     "gen:og": "node scripts/gen-og.mjs",
     "test": "vitest run",
     "test:db": "node scripts/db-test/run.mjs",
-    "screenshots": "node scripts/screenshots/capture.mjs"
+    "screenshots": "node scripts/screenshots/capture.mjs",
+    "a11y": "node scripts/a11y/run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
@@ -40,6 +41,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "axe-core": "4.14.0",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
