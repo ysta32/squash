@@ -24,11 +24,12 @@ import type {
   Severity,
   WorkspaceMember,
 } from '../lib/types'
-import { KIND_LABEL, SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
+import { KIND_LABEL } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { AssigneePicker } from './AssigneePicker'
 import { Avatar } from './Avatar'
+import { SeverityPicker } from './SeverityPicker'
 import { ClaudeProgress } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
@@ -314,31 +315,13 @@ function BugBody({
               {KIND_LABEL[bug.kind].one}
             </button>
             <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
-            <div role="group" aria-label="Severity" className="flex items-center">
-              {SEVERITIES.map((s) => {
-                const active = s === bug.severity
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={!editable}
-                    aria-label={`Severity: ${SEVERITY_LABEL[s]}`}
-                    aria-pressed={active}
-                    title={SEVERITY_LABEL[s]}
-                    onClick={() => setSeverity(s)}
-                    className="t focus-ring inline-flex h-7 w-6 items-center justify-center rounded-md hover:bg-bg-subtle disabled:cursor-default disabled:hover:bg-transparent"
-                  >
-                    <span
-                      className={cn(
-                        't block rounded-full',
-                        SEVERITY_COLOR[s],
-                        active ? 'h-2.5 w-2.5' : 'h-2 w-2 opacity-25',
-                      )}
-                    />
-                  </button>
-                )
-              })}
-            </div>
+            <SeverityPicker
+              value={bug.severity}
+              onChange={setSeverity}
+              size="sm"
+              align="start"
+              disabled={!editable}
+            />
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">

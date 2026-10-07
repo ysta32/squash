@@ -367,9 +367,10 @@ describe('BugDetail', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('updates severity from the inline dots', async () => {
+  it('updates severity from the labelled picker', async () => {
     const { onUpdate } = setup(makeBug())
-    fireEvent.click(screen.getByRole('button', { name: 'Severity: Critical' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Severity: High' }))
+    fireEvent.click(screen.getByRole('option', { name: /Critical/ }))
     await act(async () => {})
     expect(onUpdate).toHaveBeenCalledWith('b1', { severity: 'critical' })
   })
