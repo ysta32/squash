@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Logo } from './ui'
+import { SkipLink } from './SkipLink'
 
 export function AuthLayout({
   title,
@@ -14,7 +15,9 @@ export function AuthLayout({
   footer?: ReactNode
 }) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg-subtle px-4 py-12 text-fg">
+    <>
+      <SkipLink />
+    <main id="main" tabIndex={-1} className="flex min-h-dvh flex-col items-center justify-center bg-bg-subtle px-4 py-12 text-fg focus:outline-none">
       <Link to="/" aria-label="Squash home" className="t focus-ring mb-8 rounded-md text-fg">
         <Logo />
       </Link>
@@ -44,5 +47,6 @@ export function AuthLayout({
         </Link>
       </nav>
     </main>
+    </>
   )
 }

@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
 import { Logo } from '../components/ui'
+import { SkipLink } from '../components/SkipLink'
 
 export default function Privacy() {
   return (
     <div className="min-h-screen bg-bg text-fg">
+      <SkipLink />
       <header className="border-b border-border">
         <nav aria-label="Main navigation" className="mx-auto flex h-14 max-w-2xl items-center px-6">
           <Link to="/" aria-label="Squash home" className="focus-ring rounded-md">
@@ -11,7 +13,7 @@ export default function Privacy() {
           </Link>
         </nav>
       </header>
-      <main className="mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14">
+      <main id="main" tabIndex={-1} className="focus:outline-none mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14">
         <h1 className="text-3xl font-semibold tracking-tight">Privacy</h1>
         <p className="mt-3 text-sm text-muted">
           Last updated: <time dateTime="2026-10-07">October 7, 2026</time>

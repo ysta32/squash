@@ -1,3 +1,4 @@
+import { SkipLink } from '../components/SkipLink'
 import { ArrowRight, Check, ChevronDown, Command, Keyboard } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -195,6 +196,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <SkipLink />
       <header
         className={cn(
           't sticky top-0 z-40 border-b',
@@ -236,7 +238,7 @@ export default function Landing() {
         </div>
       </header>
 
-      <main>
+      <main id="main" tabIndex={-1} className="focus:outline-none">
         <section aria-labelledby="hero-heading" className="relative isolate">
           <div
             aria-hidden="true"
