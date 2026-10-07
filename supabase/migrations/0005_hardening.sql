@@ -126,6 +126,11 @@ create index if not exists comments_author_created_idx on public.comments (autho
 -- that author's budget, which is acceptable for a per-minute limit. The server
 -- owns comments.created_at from now on (as bugs_guard does for bugs), so a
 -- client cannot backdate comments to slip under the limit.
+-- The limit is only checked for a signed-in member commenting as themselves.
+-- Any other insert (spoofed author_id, outsider, missing bug) is left for the
+-- RLS WITH CHECK to reject, so the error never depends on another user's count
+-- (no cross-workspace oracle) and nobody can take another user's lock.
+-- Inserts without a signed-in user (service role / dashboard) are not limited.
 create or replace function public.comments_rate_limit()
 returns trigger
 language plpgsql
@@ -133,12 +138,17 @@ security definer
 set search_path = public
 as $$
 begin
+  new.created_at := now();
+  if auth.uid() is null or new.author_id is distinct from auth.uid()
+     or not exists (select 1 from public.bugs b
+                    where b.id = new.bug_id and public.is_member(b.workspace_id)) then
+    return new;
+  end if;
   perform pg_advisory_xact_lock(hashtext('squash:comments:' || new.author_id::text));
   if (select count(*) from public.comments c
       where c.author_id = new.author_id and c.created_at > now() - interval '60 seconds') >= 30 then
     raise exception using message = 'rate_limited', errcode = 'P0001';
   end if;
-  new.created_at := now();
   return new;
 end;
 $$;

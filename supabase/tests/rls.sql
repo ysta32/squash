@@ -582,6 +582,30 @@ do $$ declare b uuid; i int; ts timestamptz; begin
     raise exception 'FAIL[67]: 31st comment in a minute accepted';
   exception when others then if sqlerrm <> 'rate_limited' then raise; end if; end;
 end $$;
+-- [69] an outsider spoofing a rate-limited user's author_id gets the RLS denial, never rate_limited
+:as_c
+do $$ declare b uuid; begin
+  select id into b from public.bugs where filed_by = '10000000-0000-0000-0000-000000000014' order by number limit 1;
+  begin
+    insert into public.comments (bug_id, author_id, body) values (b, '10000000-0000-0000-0000-000000000014', 'probe');
+    raise exception 'FAIL[69]: outsider inserted a comment as another user';
+  exception when others then if sqlstate <> '42501' then
+    raise exception 'FAIL[69]: outsider spoofing author_id got % (%), expected RLS denial', sqlerrm, sqlstate; end if;
+  end;
+end $$;
+-- [70] a member of another workspace spoofing the rate-limited user's author_id on their own bug also
+-- gets the RLS denial
+:as_b
+do $$ begin
+  begin
+    insert into public.comments (bug_id, author_id, body)
+      values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000014', 'probe');
+    raise exception 'FAIL[70]: member inserted a comment as another user';
+  exception when others then if sqlstate <> '42501' then
+    raise exception 'FAIL[70]: spoofed author_id got % (%), expected RLS denial', sqlerrm, sqlstate; end if;
+  end;
+end $$;
+:as_r
 -- [68] deleting a workspace that has bugs and deletion log rows still works and removes its log
 do $$ declare w uuid; b uuid; begin
   select workspace_id, id into w, b from public.bugs where filed_by = '10000000-0000-0000-0000-000000000014' order by number limit 1;
