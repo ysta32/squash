@@ -229,10 +229,10 @@ export function BugList({
           <GettingStarted
             workspaceId={workspaceId}
             steps={{
-              filed: counts.all > 0,
+              filed: bugs.some((b) => !b.optimistic),
               invited: members.length > 1,
               claude: !!claudeConnected,
-              resolved: counts.resolved > 0,
+              resolved: bugs.some((b) => b.status === 'resolved'),
             }}
             onInvite={onInvite}
             onClaudeSetup={onClaudeSetup}

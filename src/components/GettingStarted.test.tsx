@@ -154,7 +154,7 @@ describe('BugList getting started integration', () => {
     expect(localStorage.getItem('squash:getting-started:one')).toBe('true')
   })
 
-  it('derives progress from counts, membership, and the Claude connection', () => {
+  it('derives progress from membership and the Claude connection', () => {
     const members = ['founder', 'teammate'].map((user_id) => ({
       workspace_id: 'one',
       user_id,
@@ -168,17 +168,11 @@ describe('BugList getting started integration', () => {
         created_at: '2026-10-01T00:00:00Z',
       },
     }))
-    const { rerender } = render(
-      <RoutedList counts={{ open: 1, resolved: 0, all: 1 }} members={members.slice(0, 1)} />,
-    )
-    expect(screen.getByText('1 of 4')).toBeInTheDocument()
-    expect(screen.getByText('File your first bug', { selector: 'span' })).toHaveClass(
-      'line-through',
-    )
-    rerender(
-      <RoutedList counts={{ open: 1, resolved: 1, all: 2 }} members={members} claudeConnected />,
-    )
-    expect(screen.queryByRole('list', { name: 'Getting started' })).not.toBeInTheDocument()
+    const { rerender } = render(<RoutedList members={members.slice(0, 1)} />)
+    expect(screen.getByText('0 of 4')).toBeInTheDocument()
+    rerender(<RoutedList members={members} claudeConnected />)
+    expect(screen.getByText('2 of 4')).toBeInTheDocument()
+    expect(screen.getByText('Invite a teammate', { selector: 'span' })).toHaveClass('line-through')
   })
 
   it('waits for the list to finish loading', () => {
