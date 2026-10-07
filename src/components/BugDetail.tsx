@@ -32,7 +32,7 @@ import { ClaudeProgress } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
 import { ResolvePopover } from './ResolvePopover'
-import { Kbd } from './ui'
+import { Kbd, buttonClass } from './ui'
 
 export type BugPatch = Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>
 
@@ -144,6 +144,7 @@ function BugBody({
   onPopover,
 }: BugBodyProps) {
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
   const [descDraft, setDescDraft] = useState<string | null>(null)
   const [descFocused, setDescFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -162,6 +163,13 @@ function BugBody({
 
   const description = descDraft ?? bug.description
   const showRendered = !descFocused && description.trim() !== ''
+  useLayoutEffect(() => {
+    const el = titleRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [titleDraft, bug.title])
+
   useLayoutEffect(() => {
     const el = descRef.current
     if (!el) return
@@ -359,7 +367,7 @@ function BugBody({
             onClick={() => setConfirmDelete(true)}
             aria-label={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
             title={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
-            className="-mr-2 rounded-md p-2 text-muted hover:bg-bg-subtle hover:text-red-500 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
+            className="-mr-2 rounded-md p-2 text-muted hover:bg-bg-subtle hover:text-danger disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -374,7 +382,9 @@ function BugBody({
       )}
 
       <section className="px-6 pt-3 pb-4">
-        <input
+        <textarea
+          ref={titleRef}
+          rows={1}
           value={titleDraft ?? bug.title}
           readOnly={!editable}
           aria-label="Title"
@@ -392,7 +402,7 @@ function BugBody({
               cancelRef.current = false
             }
           }}
-          className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none"
+          className="block w-full resize-none overflow-hidden bg-transparent text-xl font-semibold tracking-tight outline-none"
         />
         <div className="mt-2 space-y-1 text-xs text-muted">
           <p className="flex items-center gap-1.5">
@@ -433,7 +443,7 @@ function BugBody({
           )}
         </div>
         {error && (
-          <p role="alert" className="mt-2 flex items-center gap-1 text-xs text-red-500">
+          <p role="alert" className="mt-2 flex items-center gap-1 text-xs text-danger">
             <AlertCircle className="h-3.5 w-3.5" />
             {error}
           </p>
@@ -581,7 +591,7 @@ function DeleteDialog({
           cannot be undone. To keep a record, resolve it instead.
         </p>
         {error && (
-          <p role="alert" className="text-red-500">
+          <p role="alert" className="text-danger">
             {error}
           </p>
         )}
@@ -594,11 +604,7 @@ function DeleteDialog({
           >
             Cancel
           </button>
-          <button
-            autoFocus
-            disabled={busy}
-            className="rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-          >
+          <button autoFocus disabled={busy} className={buttonClass('danger')}>
             {busy ? 'Deleting…' : `Delete ${noun}`}
           </button>
         </div>
@@ -707,7 +713,7 @@ function PendingThumb({
           </span>
         )}
         {upload.error && (
-          <span className="absolute right-1 bottom-1 left-1 rounded bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+          <span className="absolute right-1 bottom-1 left-1 rounded bg-danger px-1.5 py-0.5 text-center text-xs font-medium text-white">
             Upload failed
           </span>
         )}
@@ -718,7 +724,7 @@ function PendingThumb({
           aria-label="Retry upload"
           title="Retry upload"
           onClick={onRetry}
-          className="absolute top-1 right-1 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-black/85"
+          className="absolute top-1 right-1 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white hover:bg-black/85"
         >
           <RotateCw size={10} aria-hidden="true" />
           Retry
