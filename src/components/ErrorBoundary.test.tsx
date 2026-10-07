@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { MemoryRouter, Link, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChunkReloadReset, ErrorBoundary } from './ErrorBoundary'
+import { ErrorBoundary } from './ErrorBoundary'
 
 function Boom({ message }: { message: string }): never {
   throw new Error(message)
@@ -121,14 +121,44 @@ describe('ErrorBoundary', () => {
     expect(heading).toHaveFocus()
   })
 
-  it('clears the reload flag once content commits, and tolerates broken storage', () => {
-    sessionStorage.setItem('squash:chunk-reload', '1')
-    const { unmount } = render(<ChunkReloadReset />)
-    expect(sessionStorage.getItem('squash:chunk-reload')).toBeNull()
-    unmount()
-    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+  it('reloads again for a chunk error more than 5 minutes after the last reload', () => {
+    const chunk = 'error loading dynamically imported module'
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    render(
+      <ErrorBoundary>
+        <Boom message={chunk} />
+      </ErrorBoundary>,
+    )
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(sessionStorage.getItem('squash:chunk-reload-at')).toBe('1000000')
+    cleanup()
+    now.mockReturnValue(1_000_000 + 4 * 60 * 1000)
+    render(
+      <ErrorBoundary>
+        <Boom message={chunk} />
+      </ErrorBoundary>,
+    )
+    expect(reload).toHaveBeenCalledTimes(1)
+    cleanup()
+    now.mockReturnValue(1_000_000 + 5 * 60 * 1000 + 1)
+    render(
+      <ErrorBoundary>
+        <Boom message={chunk} />
+      </ErrorBoundary>,
+    )
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not reload and shows the fallback when storage throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('denied')
     })
-    expect(() => render(<ChunkReloadReset />)).not.toThrow()
+    render(
+      <ErrorBoundary>
+        <Boom message="Importing a module script failed" />
+      </ErrorBoundary>,
+    )
+    expect(reload).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
   })
 })

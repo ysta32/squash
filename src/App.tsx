@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
-import { ChunkReloadReset, ErrorBoundary } from './components/ErrorBoundary'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/auth'
 import Landing from './pages/Landing'
@@ -84,7 +84,6 @@ export function App() {
           <PrefetchWorkspace />
           <RoutedBoundary>
             <Suspense fallback={<DelayedSkeleton />}>
-              <ChunkReloadReset />
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/privacy" element={<Privacy />} />

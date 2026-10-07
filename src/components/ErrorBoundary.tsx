@@ -1,9 +1,10 @@
-import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Bug } from 'lucide-react'
 
 const CHUNK_ERROR =
   /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i
-const RELOAD_FLAG = 'squash:chunk-reload'
+const RELOAD_KEY = 'squash:chunk-reload-at'
+const RELOAD_WINDOW_MS = 5 * 60 * 1000
 
 function isChunkLoadError(error: unknown): boolean {
   return error instanceof Error && CHUNK_ERROR.test(error.message)
@@ -13,21 +14,6 @@ interface Props {
   children: ReactNode
   /** When this changes while the fallback is showing, the boundary retries its children. */
   resetKey?: string
-}
-
-/**
- * Render inside Suspense next to the routes: once real content has committed, a later deploy
- * may auto-reload again, so the reload-once flag is cleared.
- */
-export function ChunkReloadReset() {
-  useEffect(() => {
-    try {
-      sessionStorage.removeItem(RELOAD_FLAG)
-    } catch {
-      // Storage unavailable: nothing to clear.
-    }
-  }, [])
-  return null
 }
 
 interface State {
@@ -56,8 +42,10 @@ export class ErrorBoundary extends Component<Props, State> {
     // A deploy replaced the chunk we asked for: reload once to pick up the new build.
     let shouldReload = false
     try {
-      if (sessionStorage.getItem(RELOAD_FLAG) !== '1') {
-        sessionStorage.setItem(RELOAD_FLAG, '1')
+      const last = Number(sessionStorage.getItem(RELOAD_KEY))
+      const now = Date.now()
+      if (!last || now - last > RELOAD_WINDOW_MS) {
+        sessionStorage.setItem(RELOAD_KEY, String(now))
         shouldReload = true
       }
     } catch {
