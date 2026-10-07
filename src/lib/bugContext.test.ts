@@ -46,6 +46,22 @@ describe('extractUrl', () => {
   })
 })
 
+describe('review follow-ups', () => {
+  it('rounds the pixel ratio and strips invisible bidi characters', () => {
+    const ctx = sanitizeContext({
+      viewport: { w: 1440, h: 900, dpr: 1.100000023841858 },
+      browser: 'Chrome\u202e131\u2066',
+    })
+    expect(ctx.viewport?.dpr).toBe(1.1)
+    expect(ctx.browser).toBe('Chrome131')
+  })
+
+  it('trims punctuation after closing brackets', () => {
+    expect(extractUrl('(see https://example.com/x.)')).toBe('https://example.com/x')
+    expect(extractUrl('[link](https://example.com/a_(b)).')).toBe('https://example.com/a_(b)')
+  })
+})
+
 describe('collectEnvContext', () => {
   it.each([
     [

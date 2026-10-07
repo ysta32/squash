@@ -19,6 +19,8 @@ export function sanitizeContext(value: unknown): BugContext {
         .split('')
         .map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char))
         .join('')
+        // C1 controls and invisible bidi/line-separator characters could reorder the label.
+        .replace(/[\u0080-\u009f\u200e\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069]/g, '')
         .trim()
         .slice(0, 128)
       if (text) result[key] = text
@@ -40,21 +42,24 @@ export function sanitizeContext(value: unknown): BugContext {
       w: Math.max(1, Math.min(100000, Math.round(viewport.w))),
       h: Math.max(1, Math.min(100000, Math.round(viewport.h))),
     }
-    if (positive(viewport.dpr)) result.viewport.dpr = Math.min(16, viewport.dpr)
+    if (positive(viewport.dpr))
+      result.viewport.dpr = Math.round(Math.min(16, viewport.dpr) * 100) / 100
   }
   return result
 }
 
 export function extractUrl(text: string): string | undefined {
   for (const match of text.matchAll(/https?:\/\/[^\s<>"'`]+/gi)) {
-    let candidate = match[0].replace(/[.,;:!?]+$/, '')
-    while (
-      candidate.endsWith(')') &&
-      (candidate.match(/\)/g)?.length ?? 0) > (candidate.match(/\(/g)?.length ?? 0)
-    ) {
-      candidate = candidate.slice(0, -1)
+    let candidate = match[0]
+    for (let previous = ''; previous !== candidate;) {
+      previous = candidate
+      candidate = candidate.replace(/[.,;:!?]+$/, '').replace(/[\]}]+$/, '')
+      if (
+        candidate.endsWith(')') &&
+        (candidate.match(/\)/g)?.length ?? 0) > (candidate.match(/\(/g)?.length ?? 0)
+      )
+        candidate = candidate.slice(0, -1)
     }
-    candidate = candidate.replace(/[\]}]+$/, '')
     const url = sanitizeContext({ url: candidate }).url
     if (url && (typeof window === 'undefined' || new URL(url).origin !== window.location.origin))
       return url
