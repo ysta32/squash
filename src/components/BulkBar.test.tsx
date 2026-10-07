@@ -191,6 +191,7 @@ describe('BulkBar', () => {
           filters={{
             kind: 'bug',
             tab: 'open',
+            sort: 'newest',
             query: '',
             filedBy: null,
             resolvedBy: null,
