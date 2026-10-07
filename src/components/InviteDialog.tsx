@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Copy, RefreshCw, Share2, X } from 'lucide-react'
 import { inviteUrl, friendlyError } from '../hooks/useWorkspaces'
 import type { Workspace } from '../lib/types'
+import { Button, Field, Input } from './ui'
 
 interface InviteDialogProps {
   workspace: Workspace
@@ -79,103 +80,89 @@ export function InviteDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Invite people"
-        className="w-full max-w-md rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-xl"
+        className="w-full max-w-md rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-elevated"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold">Invite to {workspace.name}</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">Anyone with this link can join.</p>
+            <p className="mt-1 text-sm text-muted">Anyone with this link can join.</p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label="Close"
             onClick={onClose}
-            className="rounded p-1 text-[var(--muted)] hover:text-[var(--fg)]"
+            className="w-7 px-0"
           >
             <X size={16} />
-          </button>
+          </Button>
         </div>
 
-        <input
-          readOnly
-          value={url}
-          aria-label="Invite link"
-          onFocus={(e) => e.currentTarget.select()}
-          className="mt-4 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
-        />
+        <Field label="Invite link" className="mt-4">
+          {({ id, describedBy }) => (
+            <Input
+              id={id}
+              aria-describedby={describedBy}
+              readOnly
+              value={url}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          )}
+        </Field>
 
         <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={() => void copy()}
-            className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white"
-          >
+          <Button variant="primary" onClick={() => void copy()} className="flex-1">
             {copied ? <Check size={16} /> : <Copy size={16} />}
             {copied ? 'Copied' : 'Copy link'}
-          </button>
+          </Button>
           {canShare && (
-            <button
-              type="button"
-              aria-label="Share"
-              onClick={() => void share()}
-              className="rounded-md border border-[var(--border)] px-4 py-3"
-            >
+            <Button aria-label="Share" onClick={() => void share()}>
               <Share2 size={16} />
-            </button>
+            </Button>
           )}
         </div>
+        <p role="status" className="sr-only">
+          {copied ? 'Link copied to clipboard' : ''}
+        </p>
 
         <div className="mt-5 text-center">
-          <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Invite code</div>
+          <div className="text-xs uppercase tracking-wide text-muted">Invite code</div>
           <div className="mt-1 font-mono text-3xl font-semibold tracking-widest">{code}</div>
         </div>
 
         {canRegenerate && onRegenerate && (
-          <div className="mt-5 border-t border-[var(--border)] pt-4 text-sm">
+          <div className="mt-5 border-t border-border pt-4 text-sm">
             {confirming ? (
               <div>
-                <p className="text-[var(--muted)]">
-                  This invalidates the current link and code. Continue?
-                </p>
+                <p className="text-muted">This invalidates the current link and code. Continue?</p>
                 <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void regenerate()}
-                    className="rounded-md bg-red-500 px-3 py-1.5 text-white disabled:opacity-50"
-                  >
+                  <Button variant="danger" disabled={busy} onClick={() => void regenerate()}>
                     Yes, regenerate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirming(false)}
-                    className="rounded-md border border-[var(--border)] px-3 py-1.5"
-                  >
-                    Cancel
-                  </button>
+                  </Button>
+                  <Button onClick={() => setConfirming(false)}>Cancel</Button>
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                className="flex items-center gap-1.5 text-[var(--muted)] hover:text-[var(--fg)]"
-              >
+              <Button variant="ghost" onClick={() => setConfirming(true)}>
                 <RefreshCw size={14} /> Regenerate
-              </button>
+              </Button>
             )}
           </div>
         )}
 
-        {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   )

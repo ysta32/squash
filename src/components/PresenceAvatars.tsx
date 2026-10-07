@@ -28,7 +28,7 @@ export function PresenceAvatars({ online, members, selfId }: PresenceAvatarsProp
         </span>
       ))}
       {extra > 0 && (
-        <span className="z-10 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-zinc-200 px-1 text-[10px] font-semibold text-zinc-700 ring-2 ring-white dark:bg-zinc-700 dark:text-zinc-200 dark:ring-zinc-900">
+        <span className="z-10 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-bg-subtle px-1 text-xs font-semibold text-muted ring-2 ring-bg">
           +{extra}
         </span>
       )}
