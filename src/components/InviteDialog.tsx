@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Check, Copy, RefreshCw, Share2, X } from 'lucide-react'
 import { inviteUrl, friendlyError } from '../hooks/useWorkspaces'
 import type { Workspace } from '../lib/types'
-import { Button, Field, Input } from './ui'
+import { cn } from '../lib/utils'
+import { Button, Field, Input, dialogOverlayClass, dialogPanelClass } from './ui'
 
 interface InviteDialogProps {
   workspace: Workspace
@@ -80,33 +81,32 @@ export function InviteDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className={cn(dialogOverlayClass, 'flex items-center justify-center p-4')}
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Invite people"
-        className="w-full max-w-md rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-elevated"
+        className={cn(dialogPanelClass, 'max-w-md p-5 text-fg')}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold">Invite to {workspace.name}</h2>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold">Invite to {workspace.name}</h2>
             <p className="mt-1 text-sm text-muted">Anyone with this link can join.</p>
           </div>
           <Button
             variant="ghost"
-            size="sm"
             aria-label="Close"
             onClick={onClose}
-            className="w-7 px-0"
+            className="-mt-1 -mr-1 size-8 px-0"
           >
-            <X size={16} />
+            <X className="size-4" aria-hidden="true" />
           </Button>
         </div>
 
-        <Field label="Invite link" className="mt-4">
+        <Field label="Invite link" className="mt-5">
           {({ id, describedBy }) => (
             <Input
               id={id}
@@ -120,12 +120,16 @@ export function InviteDialog({
 
         <div className="mt-3 flex gap-2">
           <Button variant="primary" onClick={() => void copy()} className="flex-1">
-            {copied ? <Check size={16} /> : <Copy size={16} />}
+            {copied ? (
+              <Check className="size-4" aria-hidden="true" />
+            ) : (
+              <Copy className="size-4" aria-hidden="true" />
+            )}
             {copied ? 'Copied' : 'Copy link'}
           </Button>
           {canShare && (
-            <Button aria-label="Share" onClick={() => void share()}>
-              <Share2 size={16} />
+            <Button aria-label="Share" onClick={() => void share()} className="w-9 px-0">
+              <Share2 className="size-4" aria-hidden="true" />
             </Button>
           )}
         </div>
@@ -133,26 +137,40 @@ export function InviteDialog({
           {copied ? 'Link copied to clipboard' : ''}
         </p>
 
-        <div className="mt-5 text-center">
-          <div className="text-xs uppercase tracking-wide text-muted">Invite code</div>
-          <div className="mt-1 font-mono text-3xl font-semibold tracking-widest">{code}</div>
+        <div className="mt-4 rounded-lg border border-border bg-bg-subtle px-4 py-3 text-center">
+          <div className="text-[11px] font-medium tracking-wide text-muted uppercase">
+            Invite code
+          </div>
+          <div className="mt-1 font-mono text-2xl font-semibold tracking-[0.2em]">{code}</div>
         </div>
 
         {canRegenerate && onRegenerate && (
-          <div className="mt-5 border-t border-border pt-4 text-sm">
+          <div className="-mx-5 mt-5 -mb-5 rounded-b-xl border-t border-border bg-bg-subtle/60 px-5 py-3 text-sm">
             {confirming ? (
               <div>
                 <p className="text-muted">This invalidates the current link and code. Continue?</p>
-                <div className="mt-2 flex gap-2">
-                  <Button variant="danger" disabled={busy} onClick={() => void regenerate()}>
+                <div className="mt-2 flex justify-end gap-2">
+                  <Button size="sm" onClick={() => setConfirming(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => void regenerate()}
+                  >
                     Yes, regenerate
                   </Button>
-                  <Button onClick={() => setConfirming(false)}>Cancel</Button>
                 </div>
               </div>
             ) : (
-              <Button variant="ghost" onClick={() => setConfirming(true)}>
-                <RefreshCw size={14} /> Regenerate
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirming(true)}
+                className="-ml-2.5"
+              >
+                <RefreshCw className="size-3.5" aria-hidden="true" /> Regenerate
               </Button>
             )}
           </div>

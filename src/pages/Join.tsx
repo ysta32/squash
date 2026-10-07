@@ -29,9 +29,11 @@ export default function Join() {
     void (async () => {
       const { data, error: err } = await supabase.rpc('workspace_preview', { p_code: code })
       if (cancelled) return
+      // The RPC can resolve with null data (e.g. no rows under some PostgREST setups); treat it as invalid.
+      const row = Array.isArray(data) ? data[0] : undefined
       if (err) setError(friendlyError(err))
-      else if (data.length === 0) setError(INVALID)
-      else setPreview(data[0])
+      else if (!row) setError(INVALID)
+      else setPreview(row)
       setLoading(false)
     })()
     return () => {

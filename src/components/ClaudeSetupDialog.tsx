@@ -11,7 +11,15 @@ import {
 } from '../lib/claudeExport'
 import type { BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
-import { Badge, Button, Input, Kbd, proseLinkClass } from './ui'
+import {
+  Badge,
+  Button,
+  Input,
+  Kbd,
+  dialogOverlayClass,
+  dialogPanelClass,
+  proseLinkClass,
+} from './ui'
 
 export interface ClaudeSetupDialogProps {
   open: boolean
@@ -118,20 +126,23 @@ export function ClaudeSetupDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
+      className={cn(dialogOverlayClass, 'flex items-center justify-center p-4')}
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Connect Claude Code"
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-bg-elevated p-6 text-fg shadow-elevated"
+        className={cn(
+          dialogPanelClass,
+          'max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto p-5 text-fg',
+        )}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-base font-semibold">
-              <Bot size={18} aria-hidden="true" /> Send bugs to Claude Code
+              <Bot className="size-4 text-muted" aria-hidden="true" /> Send bugs to Claude Code
             </h2>
             <p className="mt-1 text-sm text-muted">
               One press runs Claude Code in your project on the bug and its screenshots. When it is
@@ -143,10 +154,9 @@ export function ClaudeSetupDialog({
             aria-label="Close"
             onClick={onClose}
             variant="ghost"
-            size="sm"
-            className="px-2"
+            className="-mt-1 -mr-1 size-8 px-0"
           >
-            <X size={16} />
+            <X className="size-4" aria-hidden="true" />
           </Button>
         </div>
 
@@ -288,7 +298,7 @@ export function ClaudeSetupDialog({
           </Button>
         )}
 
-        <p className="mt-5 border-t border-border pt-3 text-xs text-muted">
+        <p className="-mx-5 mt-5 -mb-5 border-t border-border bg-bg-subtle/60 px-5 py-3 text-xs leading-relaxed text-muted">
           The helper listens at <code className="font-mono">127.0.0.1:4317</code> and accepts
           requests from configured Squash origins. It saves the bugs and screenshots you send in
           your project and starts Claude Code there with your Claude Code permissions. To remove it,

@@ -20,22 +20,32 @@ export function Section({
   return (
     <section
       className={cn(
-        'overflow-hidden rounded-xl border bg-bg',
+        'overflow-hidden rounded-xl border bg-bg shadow-xs',
         tone === 'danger' ? 'border-danger/40' : 'border-border',
         className,
       )}
     >
-      <div className="space-y-4 p-5">
+      <div className="space-y-5 p-5">
         <header className="space-y-1">
-          <h2 className={cn('text-base font-semibold', tone === 'danger' && 'text-danger')}>
+          <h2
+            className={cn(
+              'text-[15px] leading-6 font-semibold tracking-tight',
+              tone === 'danger' && 'text-danger',
+            )}
+          >
             {title}
           </h2>
-          {description && <p className="text-sm text-muted">{description}</p>}
+          {description && <p className="text-sm leading-relaxed text-muted">{description}</p>}
         </header>
         {children}
       </div>
       {footer && (
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-bg-subtle px-5 py-3">
+        <div
+          className={cn(
+            'flex min-h-12 flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t px-5 py-2.5',
+            tone === 'danger' ? 'border-danger/30 bg-danger/5' : 'border-border bg-bg-subtle/60',
+          )}
+        >
           {footer}
         </div>
       )}

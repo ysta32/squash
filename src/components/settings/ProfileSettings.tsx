@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Check } from 'lucide-react'
 import { Button, Field, Input, Section } from '../ui'
 import { Avatar } from '../Avatar'
 import { useAuth } from '../../lib/auth'
@@ -68,13 +69,36 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
         title="Profile"
         description="Choose how your name and avatar appear to your team."
         footer={
-          <Button type="submit" variant="primary" disabled={busy || !name.trim() || !dirty}>
-            {busy ? 'Saving…' : saved ? 'Saved' : 'Save'}
-          </Button>
+          <>
+            {error && (
+              <p role="alert" className="mr-auto text-sm text-danger">
+                {error}
+              </p>
+            )}
+            {saved && (
+              <p role="status" className="mr-auto text-sm text-muted">
+                Profile saved.
+              </p>
+            )}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={busy || !name.trim() || !dirty}
+            >
+              {busy ? 'Saving…' : saved ? 'Saved' : 'Save'}
+            </Button>
+          </>
         }
       >
         <div className="space-y-5">
-          <Avatar profile={{ ...profile, display_name: name, avatar_color: color }} size="lg" />
+          <div className="flex items-center gap-3">
+            <Avatar profile={{ ...profile, display_name: name, avatar_color: color }} size="lg" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{name.trim() || 'Your name'}</p>
+              <p className="text-xs text-muted">Preview</p>
+            </div>
+          </div>
           <Field label="Display name">
             {({ id, describedBy }) => (
               <Input
@@ -92,8 +116,8 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
             )}
           </Field>
           <fieldset disabled={busy}>
-            <legend className="mb-3">Avatar color</legend>
-            <div className="flex flex-wrap gap-3">
+            <legend className="mb-2 text-sm font-medium text-fg">Avatar color</legend>
+            <div className="flex flex-wrap gap-2.5">
               {AVATAR_COLORS.map((value) => (
                 <button
                   key={value}
@@ -101,29 +125,23 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
                   aria-label={`Avatar color ${value}`}
                   aria-pressed={color === value}
                   style={{ backgroundColor: value }}
-                  className={`focus-ring h-7 w-7 rounded-full border-2 border-bg hover:scale-110 ${color === value ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''}`}
+                  className={`t focus-ring flex size-7 items-center justify-center rounded-full ring-offset-2 ring-offset-bg disabled:cursor-not-allowed ${color === value ? 'ring-2 ring-fg' : 'hover:ring-2 hover:ring-border'}`}
                   onClick={() => {
                     setColor(value)
                     setSaved(false)
                   }}
-                />
+                >
+                  {color === value && (
+                    <Check className="size-3.5 text-white" strokeWidth={3} aria-hidden="true" />
+                  )}
+                </button>
               ))}
             </div>
-            <p className="mt-3 text-sm text-muted">
+            <p className="mt-2.5 text-xs text-muted">
               Your Google photo is used when available; otherwise, your initials appear in this
               color.
             </p>
           </fieldset>
-          {error && (
-            <p role="alert" className="text-danger">
-              {error}
-            </p>
-          )}
-          {saved && (
-            <p role="status" className="text-muted">
-              Profile saved.
-            </p>
-          )}
         </div>
       </Section>
     </form>

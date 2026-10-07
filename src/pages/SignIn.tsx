@@ -4,11 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { safeNext } from '../lib/authRedirect'
 import { AuthLayout } from '../components/AuthLayout'
+import { ArrowLeft } from 'lucide-react'
 import { Button, Field, Input } from '../components/ui'
 
 function GoogleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true" className="shrink-0">
       <path
         fill="#FFC107"
         d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"
@@ -92,13 +93,14 @@ export default function SignIn() {
         }
       >
         <Button
-          variant="ghost"
+          variant="secondary"
           onClick={() => {
             setSentTo(null)
             setEmail('')
           }}
           className="w-full"
         >
+          <ArrowLeft className="size-4" aria-hidden="true" />
           Use a different email
         </Button>
       </AuthLayout>
@@ -108,17 +110,12 @@ export default function SignIn() {
   return (
     <AuthLayout title="Sign in to Squash" description="Use Google or get a one-time link by email.">
       <div className="space-y-4">
-        <Button
-          size="lg"
-          onClick={() => void handleGoogle()}
-          disabled={googleBusy}
-          className="w-full"
-        >
+        <Button onClick={() => void handleGoogle()} disabled={googleBusy} className="w-full">
           <GoogleIcon />
           {googleBusy ? 'Redirecting…' : 'Continue with Google'}
         </Button>
 
-        <div className="flex items-center gap-3 text-xs text-muted">
+        <div className="flex items-center gap-3 text-[11px] font-medium tracking-wide text-muted uppercase">
           <div className="h-px flex-1 bg-border" />
           or
           <div className="h-px flex-1 bg-border" />
@@ -143,7 +140,6 @@ export default function SignIn() {
           <Button
             type="submit"
             variant="primary"
-            size="lg"
             disabled={sending || !email.trim()}
             className="w-full"
           >

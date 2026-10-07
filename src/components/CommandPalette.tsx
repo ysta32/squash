@@ -1,5 +1,17 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Search } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Bug,
+  CircleHelp,
+  CornerDownLeft,
+  Lightbulb,
+  Search,
+  Settings2,
+  Share,
+  SlidersHorizontal,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { cn } from '../lib/utils'
 import { Kbd } from './ui'
@@ -10,7 +22,24 @@ export interface Command {
   group: string
   hint?: string
   keywords?: string[]
+  /** Leading icon; defaults to the icon of the command's group. */
+  icon?: LucideIcon
   run: () => void
+}
+
+const GROUP_ICON: Record<string, LucideIcon> = {
+  Actions: Zap,
+  Export: Share,
+  Bugs: Bug,
+  Features: Lightbulb,
+  'Switch workspace': ArrowLeftRight,
+  Workspace: Settings2,
+  Help: CircleHelp,
+  Preferences: SlidersHorizontal,
+}
+
+function commandIcon(command: Command): LucideIcon {
+  return command.icon ?? GROUP_ICON[command.group] ?? CornerDownLeft
 }
 
 export interface CommandPaletteProps {
@@ -137,7 +166,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
   let index = -1
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[20vh]"
+      className="fixed inset-0 z-50 flex animate-fade items-start justify-center bg-black/40 p-4 pt-[12vh] backdrop-blur-[2px] sm:pt-[18vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -149,9 +178,9 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
         onMouseDown={(e) => {
           if (e.target !== inputRef.current) e.preventDefault()
         }}
-        className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-bg-elevated text-fg shadow-elevated"
+        className="w-full max-w-xl animate-in overflow-hidden rounded-xl border border-border bg-bg-elevated text-fg shadow-elevated"
       >
-        <div className="flex items-center gap-2 border-b border-border px-3">
+        <div className="flex items-center gap-2.5 border-b border-border px-4">
           <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
           <input
             ref={inputRef}
@@ -179,10 +208,10 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
           id={listId}
           role="listbox"
           aria-label="Commands"
-          className="max-h-80 overflow-y-auto p-1.5"
+          className="max-h-[min(22rem,60vh)] scroll-py-2 overflow-y-auto p-1.5"
         >
           {flat.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-muted">No matching commands</p>
+            <p className="px-3 py-8 text-center text-sm text-muted">No matching commands</p>
           ) : (
             groups.map((group, g) => (
               <div
@@ -193,7 +222,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
               >
                 <div
                   id={`${baseId}-group-${g}`}
-                  className="px-2.5 pt-1 pb-1.5 text-xs font-medium text-muted"
+                  className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase"
                 >
                   {group.name}
                 </div>
@@ -201,6 +230,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                   index += 1
                   const i = index
                   const selected = i === activeIndex
+                  const Icon = commandIcon(command)
                   return (
                     <div
                       key={command.id}
@@ -212,11 +242,16 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                       }}
                       onClick={() => runCommand(command)}
                       className={cn(
-                        'flex cursor-pointer items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm',
-                        selected ? 'bg-bg-subtle text-fg' : 'text-fg/90',
+                        'relative flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm select-none',
+                        "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:content-['']",
+                        selected ? 'bg-bg-subtle text-fg before:bg-accent' : 'text-fg/90',
                       )}
                     >
-                      <span className="truncate">{command.label}</span>
+                      <Icon
+                        aria-hidden="true"
+                        className={cn('size-4 shrink-0', selected ? 'text-fg' : 'text-muted')}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{command.label}</span>
                       {command.hint && <Kbd className="shrink-0">{command.hint}</Kbd>}
                     </div>
                   )

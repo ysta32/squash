@@ -20,6 +20,10 @@
   --success: #16a34a;
   --warning: #d97706;
   --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -6px rgb(0 0 0 / 0.12);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px -2px rgb(0 0 0 / 0.05);
+  /* Hover/pressed accent: mixed toward black in light, toward white in dark. */
+  --accent-mix: #000000;
   color-scheme: light;
 }
 
@@ -37,6 +41,9 @@
   --success: #4ade80;
   --warning: #fbbf24;
   --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 4px 12px -4px rgb(0 0 0 / 0.35);
+  --accent-mix: #ffffff;
   color-scheme: dark;
 }
 
@@ -122,6 +129,8 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
+  --color-accent-hover: color-mix(in oklab, var(--accent) 88%, var(--accent-mix));
+  --color-ring: var(--accent);
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -130,6 +139,10 @@
   --color-sev-high: var(--sev-high);
   --color-sev-critical: var(--sev-critical);
   --shadow-elevated: var(--shadow-elevated);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-card: var(--shadow-card);
+  --animate-in: fade-in-scale 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade: fade-in 150ms ease-out;
 }
 
 @layer base {
@@ -163,6 +176,34 @@
   transition-property: color, background-color, border-color, opacity, box-shadow, transform;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Popover / menu surface. Mirrors panelClass in components/ui/styles.ts. */
+@utility panel {
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background-color: var(--bg-elevated);
+  box-shadow: var(--shadow-elevated);
+}
+
+@keyframes fade-in-scale {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes toast-in {
