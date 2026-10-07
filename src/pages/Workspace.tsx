@@ -159,6 +159,54 @@ export default function Workspace() {
     [assignBug],
   )
 
+  function toastUndo(message: string, undo: () => Promise<void>) {
+    toast(message, {
+      tone: 'success',
+      action: {
+        label: 'Undo',
+        onAction: () => {
+          void undo().catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'Could not undo the change.', {
+              tone: 'error',
+            })
+          })
+        },
+      },
+    })
+  }
+
+  async function resolveWithUndo(id: string, note: string | null) {
+    const before = bugs.find((bug) => bug.id === id)
+    await resolveBug(id, note)
+    if (before && before.status === 'open')
+      toastUndo(`Resolved #${before.number}`, () => reopenBug(id, before.resolution_note))
+  }
+
+  async function reopenWithUndo(id: string, note: string | null) {
+    const before = bugs.find((bug) => bug.id === id)
+    await reopenBug(id, note)
+    if (before && before.status === 'resolved')
+      toastUndo(`Reopened #${before.number}`, () => resolveBug(id, before.resolution_note))
+  }
+
+  async function assignWithUndo(id: string, userId: string | null) {
+    const before = bugs.find((bug) => bug.id === id)
+    await assign(id, userId)
+    if (before && before.assignee_id !== userId)
+      toastUndo(`${userId ? 'Assigned' : 'Unassigned'} #${before.number}`, () =>
+        assign(id, before.assignee_id),
+      )
+  }
+
+  async function updateWithUndo(id: string, patch: Parameters<typeof updateBug>[1]) {
+    const before = bugs.find((bug) => bug.id === id)
+    await updateBug(id, patch)
+    if (before && patch.severity !== undefined && patch.severity !== before.severity)
+      toastUndo(`Changed severity of #${before.number}`, () =>
+        updateBug(id, { severity: before.severity }),
+      )
+  }
+
   // Replaced per workspace (and on unmount) so pending assigner lookups go quiet.
   const announceLive = useRef({ current: true })
   useEffect(() => {
@@ -489,10 +537,10 @@ export default function Workspace() {
     opts,
   )
   const unassign = (bug: Bug) => {
-    assign(bug.id, null).then(
-      () => toast(`Unassigned #${bug.number}`),
-      (err: unknown) =>
-        toast(err instanceof Error ? err.message : 'Could not change the assignee.'),
+    void assignWithUndo(bug.id, null).catch((err: unknown) =>
+      toast(err instanceof Error ? err.message : 'Could not change the assignee.', {
+        tone: 'error',
+      }),
     )
   }
   const toggleSelfAssign = (bug: Bug) => {
@@ -500,10 +548,10 @@ export default function Workspace() {
       unassign(bug)
       return
     }
-    assign(bug.id, selfId).then(
-      () => toast(`Assigned #${bug.number} to you`),
-      (err: unknown) =>
-        toast(err instanceof Error ? err.message : 'Could not change the assignee.'),
+    void assignWithUndo(bug.id, selfId).catch((err: unknown) =>
+      toast(err instanceof Error ? err.message : 'Could not change the assignee.', {
+        tone: 'error',
+      }),
     )
   }
   useShortcut(
@@ -710,10 +758,10 @@ export default function Workspace() {
         bug={selected}
         members={ws.members}
         selfId={selfId}
-        onUpdate={updateBug}
-        onResolve={resolveBug}
-        onReopen={reopenBug}
-        onAssign={assign}
+        onUpdate={updateWithUndo}
+        onResolve={resolveWithUndo}
+        onReopen={reopenWithUndo}
+        onAssign={assignWithUndo}
         assignRequest={assignRequest}
         onDelete={deleteAndDeselect}
         onBack={deselect}

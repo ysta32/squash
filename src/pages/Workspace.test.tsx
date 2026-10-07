@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   getBugByNumber: vi.fn(),
   fileBug: vi.fn(),
   assignBug: vi.fn(),
+  resolveBug: vi.fn(),
+  reopenBug: vi.fn(),
+  updateBug: vi.fn(),
   assigner: null as string | null,
   /** Overrides the assigner lookup's response while set. */
   lookup: null as Promise<unknown> | null,
@@ -109,9 +112,9 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
         reload: mocks.reload,
         counts: { open: mocks.bugs.length, resolved: 0, all: mocks.bugs.length },
         fileBug: mocks.fileBug,
-        updateBug: vi.fn(),
-        resolveBug: vi.fn(),
-        reopenBug: vi.fn(),
+        updateBug: mocks.updateBug,
+        resolveBug: mocks.resolveBug,
+        reopenBug: mocks.reopenBug,
         assignBug: mocks.assignBug,
         retryUploads: vi.fn(),
         getBugByNumber: mocks.getBugByNumber,
@@ -238,6 +241,9 @@ beforeEach(() => {
   mocks.onRemoteInsert = null
   mocks.assigner = null
   mocks.lookup = null
+  mocks.resolveBug.mockResolvedValue(undefined)
+  mocks.reopenBug.mockResolvedValue(undefined)
+  mocks.updateBug.mockResolvedValue(undefined)
   mocks.assignBug.mockResolvedValue(undefined)
   mocks.getBugByNumber.mockResolvedValue(null)
 })
@@ -248,6 +254,62 @@ afterEach(() => {
 })
 
 describe('Workspace', () => {
+  it('undoes a severity change without touching other fields', async () => {
+    show('/app/ws/bug/2')
+    fireEvent.click(screen.getByRole('button', { name: 'Severity: Medium' }))
+    fireEvent.click(screen.getByRole('option', { name: /Critical/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(mocks.updateBug).toHaveBeenNthCalledWith(1, 'b2', { severity: 'critical' })
+    expect(mocks.updateBug).toHaveBeenNthCalledWith(2, 'b2', { severity: 'medium' })
+  })
+
+  it('does not offer Undo when resolving fails', async () => {
+    mocks.resolveBug.mockRejectedValueOnce(new Error('Resolve denied'))
+    show('/app/ws/bug/2')
+    press('r')
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    await act(async () => {})
+    expect(mocks.resolveBug).toHaveBeenCalledExactlyOnceWith('b2', null)
+    expect(screen.getAllByText('Resolve denied').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+  })
+
+  it('undoes a keyboard resolve even after navigating to another bug', async () => {
+    mocks.bugs = [makeBug(2, { resolution_note: 'Previous reopen' }), makeBug(1)]
+    show('/app/ws/bug/2')
+    press('r')
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    await screen.findByText('Resolved #2')
+    expect(mocks.resolveBug).toHaveBeenCalledWith('b2', null)
+    press('j')
+    fireEvent.keyDown(document.body, {
+      key: 'z',
+      ...(isMac ? { metaKey: true } : { ctrlKey: true }),
+    })
+    expect(mocks.reopenBug).toHaveBeenCalledExactlyOnceWith('b2', 'Previous reopen')
+    expect(screen.queryByText('Resolved #2')).not.toBeInTheDocument()
+  })
+
+  it('undoes reopen using resolve with the previous resolution note', async () => {
+    mocks.bugs = [makeBug(2, { status: 'resolved', resolution_note: 'Original fix' })]
+    show('/app/ws/bug/2')
+    press('o')
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen without note' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(mocks.resolveBug).toHaveBeenCalledExactlyOnceWith('b2', 'Original fix')
+  })
+
+  it('restores the previous assignee and reports an undo failure as an error toast', async () => {
+    mocks.bugs = [makeBug(2, { assignee_id: 'u2' })]
+    show('/app/ws/bug/2')
+    press('i')
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+    mocks.assignBug.mockRejectedValueOnce(new Error('Undo denied'))
+    fireEvent.click(undo)
+    expect(mocks.assignBug).toHaveBeenLastCalledWith('b2', 'u2')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Undo denied')
+  })
+
   it.each(['tab', 'query'])('prunes bulk picks hidden by a %s change', (change) => {
     show('/app/ws')
     fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
@@ -550,7 +612,7 @@ describe('Workspace', () => {
     expect(screen.getByText('Grace filed #4')).toBeInTheDocument()
     const row = screen.getByRole('option', { name: '#4 Bug number 4' })
     expect(row).toHaveClass('bg-accent/10')
-    act(() => vi.advanceTimersByTime(4000))
+    act(() => vi.advanceTimersByTime(5000))
     expect(screen.queryByText('Grace filed #4')).toBeNull()
     expect(row).not.toHaveClass('bg-accent/10')
   })

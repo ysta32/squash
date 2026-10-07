@@ -52,8 +52,30 @@ export function BulkBar({
       const results = await Promise.allSettled(targets.map(async (bug) => update(bug.id)))
       const failed = results.filter((result) => result.status === 'rejected').length
       const succeeded = results.length - failed
-      if (succeeded)
-        toast(`${done} ${succeeded} ${succeeded === 1 ? 'item' : 'items'}.`, { tone: 'success' })
+      if (succeeded) {
+        const previous = targets.filter((_, index) => results[index].status === 'fulfilled')
+        toast(`${done} ${succeeded} ${succeeded === 1 ? 'bug' : 'bugs'}`, {
+          tone: 'success',
+          action: {
+            label: 'Undo',
+            onAction: () => {
+              void Promise.allSettled(
+                previous.map(async (bug) => {
+                  if (verb === 'assign') await onAssign(bug.id, bug.assignee_id)
+                  else if (bug.status === 'open') await onReopen(bug.id, bug.resolution_note)
+                  else await onResolve(bug.id, bug.resolution_note)
+                }),
+              ).then((undone) => {
+                const failures = undone.filter((result) => result.status === 'rejected').length
+                if (failures)
+                  toast(`Could not undo ${failures} ${failures === 1 ? 'bug' : 'bugs'}.`, {
+                    tone: 'error',
+                  })
+              })
+            },
+          },
+        })
+      }
       if (failed)
         toast(`Could not ${verb} ${failed} ${failed === 1 ? 'item' : 'items'}.`, { tone: 'error' })
     } finally {

@@ -70,6 +70,46 @@ function setup(overrides: Partial<BulkBarProps> = {}) {
 afterEach(cleanup)
 
 describe('BulkBar', () => {
+  it('undoes only successful resolves and restores each previous note', async () => {
+    const first = { ...bug('1'), resolution_note: 'previous reopen' }
+    const props = setup({
+      bugs: [first, bug('2'), bug('3')],
+      onResolve: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Denied'))
+        .mockResolvedValueOnce(undefined),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(props.onReopen).toHaveBeenCalledTimes(2))
+    expect(props.onReopen).toHaveBeenCalledWith('1', 'previous reopen')
+    expect(props.onReopen).toHaveBeenCalledWith('3', null)
+    expect(props.onReopen).not.toHaveBeenCalledWith('2', expect.anything())
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+  })
+
+  it('undoes reopen with the previous resolution note and reports undo failure', async () => {
+    const props = setup({
+      bugs: [{ ...bug('1', 'resolved'), resolution_note: 'Fixed originally' }],
+      onResolve: vi.fn().mockRejectedValue(new Error('Denied')),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not undo 1 bug.')
+    expect(props.onResolve).toHaveBeenCalledExactlyOnceWith('1', 'Fixed originally')
+  })
+
+  it('restores each previous assignee', async () => {
+    const props = setup({ bugs: [{ ...bug('1'), assignee_id: 'previous' }, bug('2')] })
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee: Unassigned' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Assign to me' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(props.onAssign).toHaveBeenCalledTimes(4))
+    expect(props.onAssign).toHaveBeenNthCalledWith(3, '1', 'previous')
+    expect(props.onAssign).toHaveBeenNthCalledWith(4, '2', null)
+  })
+
   it('shows the selected count and hides with no selection', () => {
     const { rerender } = render(
       <ToastProvider>
@@ -104,7 +144,7 @@ describe('BulkBar', () => {
   it('resolves every selected open item and reports the count', async () => {
     const props = setup({ bugs: [bug('1'), bug('2'), bug('3', 'resolved')] })
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Resolved 2 items.'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Resolved 2 bugs'))
     expect(props.onResolve).toHaveBeenCalledTimes(2)
     expect(props.onResolve).toHaveBeenCalledWith('1', null)
     expect(props.onResolve).toHaveBeenCalledWith('2', null)
@@ -114,7 +154,7 @@ describe('BulkBar', () => {
   it('reopens only selected resolved items', async () => {
     const props = setup({ bugs: [bug('1'), bug('2', 'resolved')] })
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Reopened 1 item.'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Reopened 1 bug'))
     expect(props.onReopen).toHaveBeenCalledExactlyOnceWith('2', null)
     expect(props.onClear).toHaveBeenCalledOnce()
   })
@@ -123,7 +163,7 @@ describe('BulkBar', () => {
     const props = setup()
     fireEvent.click(screen.getByRole('button', { name: 'Assignee: Unassigned' }))
     fireEvent.click(screen.getByRole('option', { name: 'Assign to me' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Assigned 2 items.'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Assigned 2 bugs'))
     expect(props.onAssign).toHaveBeenCalledTimes(2)
     expect(props.onAssign).toHaveBeenCalledWith('1', 'ada')
     expect(props.onAssign).toHaveBeenCalledWith('2', 'ada')
@@ -140,7 +180,7 @@ describe('BulkBar', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Could not resolve 1 item.'),
     )
-    expect(screen.getByRole('status')).toHaveTextContent('Resolved 1 item.')
+    expect(screen.getByRole('status')).toHaveTextContent('Resolved 1 bug')
     expect(onResolve).toHaveBeenCalledTimes(2)
     expect(props.onClear).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled()
