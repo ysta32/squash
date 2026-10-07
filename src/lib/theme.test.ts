@@ -109,4 +109,30 @@ describe('useTheme', () => {
     a.unmount()
     b.unmount()
   })
+
+  it('recovers from a failed storage write when another tab changes the theme', () => {
+    const { result, unmount } = renderHook(() => useTheme())
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota')
+    })
+    try {
+      act(() => result.current.setTheme('dark'))
+      expect(result.current.theme).toBe('dark')
+    } finally {
+      setItem.mockRestore()
+    }
+
+    localStorage.setItem('squash:theme', 'light')
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'squash:theme', newValue: 'light' }))
+    })
+    expect(result.current.theme).toBe('light')
+
+    localStorage.clear()
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: null }))
+    })
+    expect(result.current.theme).toBe('system')
+    unmount()
+  })
 })

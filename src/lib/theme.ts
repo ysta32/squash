@@ -107,7 +107,9 @@ function getThemeSnapshot(): Theme {
 function subscribeTheme(listener: () => void): () => void {
   themeListeners.add(listener)
   const onStorage = (e: StorageEvent) => {
-    if (e.key === THEME_KEY || e.key === null) listener()
+    if (e.key !== THEME_KEY && e.key !== null) return
+    unstoredTheme = null
+    listener()
   }
   window.addEventListener('storage', onStorage)
   return () => {
