@@ -19,6 +19,10 @@ export interface AssigneePickerProps {
   disabled?: boolean
   /** Counter bumped by the keyboard shortcut to open the picker (initial value is ignored). */
   openRequest?: number
+  /** compact: inline text trigger; toolbar: property control for the bug detail toolbar. */
+  variant?: 'compact' | 'toolbar'
+  /** Which edge of the trigger the menu aligns to. */
+  align?: 'start' | 'end'
 }
 
 interface Option {
@@ -36,6 +40,8 @@ export function AssigneePicker({
   selfId,
   disabled = false,
   openRequest,
+  variant = 'compact',
+  align = 'end',
 }: AssigneePickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -153,26 +159,49 @@ export function AssigneePicker({
         aria-label={`Assignee: ${current ? current.profile.display_name : 'Unassigned'}`}
         title="Assignee (A)"
         onClick={() => (open ? close() : show())}
-        className="t focus-ring -mx-1 inline-flex h-6 items-center gap-1.5 rounded-md px-1 text-xs hover:bg-bg-subtle disabled:pointer-events-none disabled:opacity-50"
+        className={cn(
+          't focus-ring inline-flex items-center rounded-md hover:bg-surface-3 disabled:pointer-events-none disabled:opacity-60',
+          variant === 'toolbar'
+            ? 'h-8 gap-2 px-2 text-sm font-medium pointer-coarse:h-11'
+            : '-mx-1 h-6 gap-1.5 px-1 text-xs',
+          open && 'bg-surface-3',
+        )}
       >
         {current ? (
           <>
-            <span className="text-muted">Assigned to</span>
+            {variant === 'compact' && <span className="text-ink-3">Assigned to</span>}
             <span aria-hidden="true" className="inline-flex">
               <Avatar profile={current.profile} size="xs" />
             </span>
-            <span className="max-w-32 truncate text-fg">{current.profile.display_name}</span>
+            <span className="max-w-40 truncate text-ink">{current.profile.display_name}</span>
           </>
         ) : (
           <>
-            <UserPlus size={14} aria-hidden="true" className="text-muted" />
-            <span className="text-muted">Assign</span>
+            <UserPlus
+              size={16}
+              strokeWidth={1.5}
+              absoluteStrokeWidth
+              aria-hidden="true"
+              className="text-ink-3"
+            />
+            <span className="text-ink-2">Assign</span>
           </>
         )}
-        <ChevronDown size={12} aria-hidden="true" className="text-muted" />
+        <ChevronDown
+          size={14}
+          strokeWidth={1.5}
+          absoluteStrokeWidth
+          aria-hidden="true"
+          className={cn('t text-ink-3', open && 'rotate-180')}
+        />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated">
+        <div
+          className={cn(
+            'panel absolute top-full z-30 mt-1 w-56 animate-in p-1',
+            align === 'end' ? 'right-0' : 'left-0',
+          )}
+        >
           {filterable && (
             <input
               ref={inputRef}
@@ -200,7 +229,7 @@ export function AssigneePicker({
             onKeyDown={onKeyDown}
             className="max-h-64 overflow-y-auto outline-none"
           >
-            {options.length === 0 && <p className="px-2 py-1.5 text-xs text-muted">No matches</p>}
+            {options.length === 0 && <p className="px-2 py-1.5 text-xs text-ink-3">No matches</p>}
             {options.map((option, index) => {
               const selected = option.userId !== null && option.userId === value
               return (
@@ -212,19 +241,33 @@ export function AssigneePicker({
                   onPointerMove={() => setActive(index)}
                   onClick={() => pick(option)}
                   className={cn(
-                    'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm',
-                    index === activeIndex && 'bg-bg-subtle',
+                    'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-11',
+                    index === activeIndex && 'bg-surface-3',
                   )}
                 >
                   {option.userId === null ? (
-                    <UserMinus size={14} aria-hidden="true" className="text-muted" />
+                    <UserMinus
+                      size={16}
+                      strokeWidth={1.5}
+                      absoluteStrokeWidth
+                      aria-hidden="true"
+                      className="text-ink-3"
+                    />
                   ) : (
                     <span aria-hidden="true" className="inline-flex">
                       <Avatar profile={option.profile} size="xs" />
                     </span>
                   )}
                   <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  {selected && <Check size={14} aria-hidden="true" className="text-accent" />}
+                  {selected && (
+                    <Check
+                      size={16}
+                      strokeWidth={1.5}
+                      absoluteStrokeWidth
+                      aria-hidden="true"
+                      className="text-ink-2"
+                    />
+                  )}
                 </div>
               )
             })}

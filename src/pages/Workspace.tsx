@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { BugDetail } from '../components/BugDetail'
+import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
 import { BugList } from '../components/BugList'
 import { CaptureBar } from '../components/CaptureBar'
 import { Header } from '../components/Header'
@@ -791,14 +791,7 @@ export default function Workspace() {
       </div>
     )
   } else {
-    detail = (
-      <div role="status" aria-label="Loading bug" className="max-w-3xl space-y-4 p-6">
-        <div className="h-4 w-24 animate-pulse rounded bg-bg-subtle" />
-        <div className="h-7 w-2/3 animate-pulse rounded-md bg-bg-subtle" />
-        <div className="h-4 w-1/3 animate-pulse rounded bg-bg-subtle" />
-        <div className="h-28 animate-pulse rounded-lg bg-bg-subtle" />
-      </div>
-    )
+    detail = <BugDetailSkeleton />
   }
 
   return (

@@ -1,13 +1,29 @@
 import { useState } from 'react'
-import { Pencil, SendHorizontal, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useBug } from '../hooks/useBug'
-import type { Comment, Profile, WorkspaceMember } from '../lib/types'
+import type { BugEvent, Comment, Profile, WorkspaceMember } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
-import { ActivityTimeline } from './ActivityTimeline'
+import { ActivityEntry, TIMELINE_ITEM, TimelineRail } from './ActivityTimeline'
 import { Avatar } from './Avatar'
 import { MentionInput } from './MentionInput'
 import { Button, Kbd } from './ui'
+
+type Entry =
+  { kind: 'event'; at: string; event: BugEvent } | { kind: 'comment'; at: string; comment: Comment }
+
+/**
+ * Activity and comments as one chronological timeline. "commented" events are dropped: the
+ * comment itself is the entry. Ties keep activity before comments (the sort is stable).
+ */
+function mergeTimeline(events: BugEvent[], comments: Comment[]): Entry[] {
+  return [
+    ...events
+      .filter((e) => e.type !== 'commented')
+      .map((event): Entry => ({ kind: 'event', at: event.created_at, event })),
+    ...comments.map((comment): Entry => ({ kind: 'comment', at: comment.created_at, comment })),
+  ].sort((a, b) => a.at.localeCompare(b.at))
+}
 
 export interface CommentThreadProps {
   /** null while the bug is still optimistic (not yet persisted). */
@@ -49,89 +65,102 @@ export function CommentThread({ bugId, members, selfId = null }: CommentThreadPr
 
   const canSend = bugId !== null && draft.trim() !== '' && !sending
 
+  const names = new Map(members.map((m) => [m.user_id, m.profile.display_name]))
+  const entries = mergeTimeline(events, comments)
+
   return (
-    <>
-      <section className="min-w-0">
-        <h2 className={SECTION_HEADING}>Activity</h2>
-        {loading && events.length === 0 ? (
-          <p className="text-xs text-muted">Loading…</p>
-        ) : (
-          <ActivityTimeline events={events} members={members} />
-        )}
-      </section>
-      <section className="min-w-0">
-        <h2 className={SECTION_HEADING}>
-          Comments
-          {comments.length > 0 && <span className="ml-1 tabular-nums">{comments.length}</span>}
-        </h2>
+    <section aria-labelledby="timeline-heading" className="min-w-0">
+      <h2 id="timeline-heading" className={SECTION_HEADING}>
+        Timeline
         {comments.length > 0 && (
-          <ul className="mb-5 space-y-5">
-            {comments.map((c) => {
-              const own = selfId !== null && c.author_id === selfId
-              return (
-                <CommentItem
-                  key={c.id}
-                  comment={c}
-                  profile={byId.get(c.author_id) ?? null}
-                  members={members}
-                  canEdit={own}
-                  canDelete={own || selfIsOwner}
-                  onEdit={(body) => editComment(c.id, body)}
-                  onDelete={() => deleteComment(c.id)}
-                />
-              )
-            })}
-          </ul>
+          <span className="text-ink-3">
+            {' '}
+            · {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+          </span>
         )}
-        <div
-          className={cn(
-            't rounded-lg border border-border bg-bg focus-within:border-accent/60 focus-within:ring-3 focus-within:ring-accent/15',
-            !bugId && 'opacity-60',
-          )}
-        >
-          <MentionInput
-            value={draft}
-            onChange={setDraft}
-            onSubmit={() => void send()}
-            members={members}
-            disabled={!bugId}
-            ariaLabel="Comment"
-            placeholder={bugId ? 'Leave a comment…' : 'Comments open once the bug is saved'}
-          />
-          <div className="flex items-center justify-between gap-2 py-2 pr-2 pl-3">
-            <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
-              {sending ? (
-                'Sending…'
-              ) : (
-                <span className="hidden items-center gap-1 sm:inline-flex">
-                  <Kbd>↵</Kbd> to send
-                  <span aria-hidden="true" className="px-0.5">
-                    ·
-                  </span>
-                  <Kbd>⇧</Kbd>
-                  <Kbd>↵</Kbd> new line
-                </span>
-              )}
-            </span>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!canSend}
-              onClick={() => void send()}
-              title="Send comment (Enter)"
-            >
-              <SendHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-              Comment
-            </Button>
-          </div>
+      </h2>
+      {loading && entries.length === 0 ? (
+        <div role="status" aria-label="Loading timeline" className="space-y-3">
+          <div className="h-4 w-1/2 animate-skeleton rounded-sm bg-surface-3" />
+          <div className="h-4 w-1/3 animate-skeleton rounded-sm bg-surface-3" />
         </div>
-        {error && (
-          <p role="alert" className="mt-2 text-xs text-danger">
-            {error}
-          </p>
+      ) : entries.length === 0 ? (
+        <p className="text-xs text-ink-3">No activity yet.</p>
+      ) : (
+        <ol aria-label="Timeline">
+          {entries.map((entry, i) => {
+            const last = i === entries.length - 1
+            if (entry.kind === 'event') {
+              return (
+                <ActivityEntry key={entry.event.id} event={entry.event} names={names} last={last} />
+              )
+            }
+            const c = entry.comment
+            const own = selfId !== null && c.author_id === selfId
+            return (
+              <CommentItem
+                key={c.id}
+                comment={c}
+                profile={byId.get(c.author_id) ?? null}
+                members={members}
+                canEdit={own}
+                canDelete={own || selfIsOwner}
+                onEdit={(body) => editComment(c.id, body)}
+                onDelete={() => deleteComment(c.id)}
+                last={last}
+              />
+            )
+          })}
+        </ol>
+      )}
+      <div
+        className={cn(
+          't mt-6 rounded-lg border border-line-input bg-surface-2 focus-within:border-focus',
+          !bugId && 'opacity-60',
         )}
-      </section>
-    </>
+      >
+        <MentionInput
+          value={draft}
+          onChange={setDraft}
+          onSubmit={() => void send()}
+          members={members}
+          disabled={!bugId}
+          ariaLabel="Comment"
+          placeholder={bugId ? 'Leave a comment…' : 'Comments open once the bug is saved'}
+        />
+        <div className="flex items-center justify-between gap-2 py-2 pr-2 pl-3">
+          <span className="flex min-w-0 items-center gap-1 text-xs text-ink-3">
+            {sending ? (
+              'Sending…'
+            ) : (
+              <span className="hidden items-center gap-1 sm:inline-flex">
+                <Kbd>↵</Kbd> to send
+                <span aria-hidden="true" className="px-0.5">
+                  ·
+                </span>
+                <Kbd>⇧</Kbd>
+                <Kbd>↵</Kbd> new line
+              </span>
+            )}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!canSend}
+            onClick={() => void send()}
+            title="Send comment (Enter)"
+            className="pointer-coarse:h-11 pointer-coarse:px-4"
+          >
+            Comment
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -143,6 +172,7 @@ interface CommentItemProps {
   canDelete: boolean
   onEdit: (body: string) => Promise<void>
   onDelete: () => Promise<void>
+  last?: boolean
 }
 
 function CommentItem({
@@ -153,6 +183,7 @@ function CommentItem({
   canDelete,
   onEdit,
   onDelete,
+  last = false,
 }: CommentItemProps) {
   const [draft, setDraft] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -192,18 +223,21 @@ function CommentItem({
   }
 
   return (
-    <li className="group flex gap-3">
-      <Avatar profile={profile} size="sm" />
+    <li className={cn(TIMELINE_ITEM, 'group', !last && 'pb-6')}>
+      {!last && <TimelineRail />}
+      <span className="relative inline-flex">
+        <Avatar profile={profile} size="xs" />
+      </span>
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted">
-          <span className="truncate font-medium text-fg">
+        <div className="flex min-h-5 min-w-0 items-center gap-1.5 text-xs text-ink-3">
+          <span className="truncate text-sm font-medium text-ink">
             {profile?.display_name ?? 'Deleted user'}
           </span>
           <span aria-hidden="true">·</span>
           <time
             dateTime={c.created_at}
             title={new Date(c.created_at).toLocaleString()}
-            className="shrink-0"
+            className="shrink-0 font-mono"
           >
             {relativeTime(c.created_at)}
           </time>
@@ -213,7 +247,7 @@ function CommentItem({
             </span>
           )}
           {!editing && !confirming && (canEdit || canDelete) && (
-            <span className="ml-auto flex shrink-0 items-center gap-0.5">
+            <span className="t ml-auto flex shrink-0 items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
               {canEdit && (
                 <button
                   type="button"
@@ -225,7 +259,7 @@ function CommentItem({
                   title="Edit comment"
                   className={COMMENT_ACTION}
                 >
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Pencil size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
                 </button>
               )}
               {canDelete && (
@@ -239,7 +273,7 @@ function CommentItem({
                   title="Delete comment"
                   className={cn(COMMENT_ACTION, 'hover:bg-danger/10 hover:text-danger')}
                 >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Trash2 size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
                 </button>
               )}
             </span>
@@ -255,7 +289,7 @@ function CommentItem({
               e.preventDefault()
               setDraft(null)
             }}
-            className="t mt-1 rounded-lg border border-border bg-bg focus-within:border-accent/60 focus-within:ring-3 focus-within:ring-accent/15"
+            className="t mt-2 rounded-lg border border-line-input bg-surface-2 focus-within:border-focus"
           >
             <MentionInput
               value={draft}
@@ -280,7 +314,9 @@ function CommentItem({
             </div>
           </div>
         ) : (
-          <Markdown source={c.body} className="mt-1 [overflow-wrap:anywhere]" />
+          <div className="mt-1 max-w-[68ch] text-ink [&>div]:text-read [&>div]:leading-[1.7143rem]">
+            <Markdown source={c.body} className="[overflow-wrap:anywhere]" />
+          </div>
         )}
         {confirming && (
           <div
@@ -288,7 +324,7 @@ function CommentItem({
             aria-label="Confirm delete"
             className="mt-2 flex flex-wrap items-center gap-2 text-xs"
           >
-            <span className="text-muted">Delete this comment? This cannot be undone.</span>
+            <span className="text-ink-2">Delete this comment? This cannot be undone.</span>
             <Button size="sm" variant="danger" disabled={busy} onClick={() => void remove()}>
               {busy ? 'Deleting…' : 'Delete'}
             </Button>
@@ -308,6 +344,6 @@ function CommentItem({
 }
 
 const COMMENT_ACTION =
-  't focus-ring inline-flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-fg/5 hover:text-fg'
+  't focus-ring inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:h-11 pointer-coarse:w-11'
 
-const SECTION_HEADING = 'mb-3 text-xs font-medium tracking-wide text-muted uppercase'
+const SECTION_HEADING = 'specimen-label mb-4 text-ink-3'

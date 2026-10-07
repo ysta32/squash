@@ -81,6 +81,21 @@ function attachment(id: string) {
   }
 }
 
+/** Opens the … menu and returns the named item (or null when `optional` and it is absent). */
+function menuItem(name: string, optional = false): HTMLElement | null {
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  const menu = screen.getByRole('menu', { name: 'More actions' })
+  return optional
+    ? within(menu).queryByRole('menuitem', { name })
+    : within(menu).getByRole('menuitem', { name })
+}
+
+function openMenuItem(name: string) {
+  const item = menuItem(name)
+  if (!item) throw new Error(`no menu item ${name}`)
+  fireEvent.click(item)
+}
+
 function setup(bug: BugWithMeta | null, extra: Partial<Parameters<typeof BugDetail>[0]> = {}) {
   const handlers = {
     onUpdate: vi.fn(),
@@ -138,7 +153,7 @@ describe('BugDetail', () => {
     })
     const onDelete = vi.fn<(id: string) => Promise<void>>().mockResolvedValue()
     setup(makeBug(), { onDelete })
-    fireEvent.click(screen.getByRole('button', { name: 'Delete bug' }))
+    openMenuItem('Delete bug')
     const dialog = screen.getByRole('dialog', { name: 'Delete bug #42?' })
     expect(dialog).toHaveTextContent('Login button broken')
 
@@ -146,7 +161,7 @@ describe('BugDetail', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(onDelete).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete bug' }))
+    openMenuItem('Delete bug')
     await act(async () => {
       fireEvent.click(
         within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
@@ -166,7 +181,7 @@ describe('BugDetail', () => {
       .fn<(id: string) => Promise<void>>()
       .mockRejectedValue(new Error('Could not delete the bug. Try again.'))
     setup(makeBug({ kind: 'feature' }), { onDelete })
-    fireEvent.click(screen.getByRole('button', { name: 'Delete feature' }))
+    openMenuItem('Delete feature')
     const dialog = screen.getByRole('dialog', { name: 'Delete feature #42?' })
     await act(async () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Delete feature' }))
@@ -176,24 +191,24 @@ describe('BugDetail', () => {
 
   it('disables delete for an optimistic bug and hides it without a handler', () => {
     setup(makeBug({ number: 0, optimistic: true }), { onDelete: vi.fn() })
-    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeDisabled()
+    expect(menuItem('Delete bug')).toBeDisabled()
     cleanup()
     setup(makeBug())
-    expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
+    expect(menuItem('Delete bug', true)).toBeNull()
   })
 
   it('offers delete only to the filer and the workspace owner', () => {
     // Filer who is not the owner (u2 filed it).
     setup(makeBug({ filed_by: 'u2' }), { onDelete: vi.fn(), selfId: 'u2' })
-    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeEnabled()
+    expect(menuItem('Delete bug')).toBeEnabled()
     cleanup()
     // Workspace owner (u1) on someone else's bug.
     setup(makeBug({ filed_by: 'u2' }), { onDelete: vi.fn(), selfId: 'u1' })
-    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeEnabled()
+    expect(menuItem('Delete bug')).toBeEnabled()
     cleanup()
     // Ordinary member (u2) on a bug they did not file.
     setup(makeBug({ filed_by: 'u1' }), { onDelete: vi.fn(), selfId: 'u2' })
-    expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
+    expect(menuItem('Delete bug', true)).toBeNull()
   })
 
   it('shows a placeholder when no bug is selected', () => {
@@ -206,8 +221,8 @@ describe('BugDetail', () => {
     expect((screen.getByLabelText('Title') as HTMLTextAreaElement).value).toBe(
       'Login button broken',
     )
-    expect(screen.getByText('#42')).toBeTruthy()
-    expect(screen.getByText(/Filed by/).textContent).toMatch(/Filed by Ada Lovelace · just now/)
+    expect(screen.getByText('No. 042')).toBeTruthy()
+    expect(screen.getByText(/Coll\./).closest('p')?.textContent).toMatch(/^Coll\. Ada Lovelace · /)
   })
 
   it('shows Claude progress only when a run is passed', () => {
@@ -236,7 +251,7 @@ describe('BugDetail', () => {
 
   it('shows "#…" for optimistic bugs', () => {
     setup(makeBug({ number: 0, optimistic: true }))
-    expect(screen.getByText('#…')).toBeTruthy()
+    expect(screen.getByText('No. …')).toBeTruthy()
   })
 
   it('opens the resolve popover and confirms with a note', async () => {
@@ -360,6 +375,37 @@ describe('BugDetail', () => {
     expect(onUpdate).toHaveBeenCalledTimes(2)
     // Draft cleared: the input shows the prop title again (parent hasn't updated it in this test).
     expect(input.value).toBe('Login button broken')
+  })
+
+  it('offers Retry inline when an action fails, and retries that action', async () => {
+    const onResolve = vi
+      .fn<(id: string, note: string | null) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Could not resolve #42.'))
+      .mockResolvedValueOnce()
+    setup(makeBug(), { onResolve })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    await act(async () => {})
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Could not resolve #42.')
+    await act(async () => {
+      fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    })
+    expect(onResolve).toHaveBeenCalledTimes(2)
+    expect(onResolve).toHaveBeenLastCalledWith('b1', null)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('keeps Send to Claude Code and the Claude copy prompt reachable', () => {
+    const onSend = vi.fn()
+    const onCopy = vi.fn()
+    setup(makeBug(), { onSend, onCopy })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Claude Code' }))
+    expect(onSend).toHaveBeenCalledTimes(1)
+    fireEvent.click(menuItem('Copy prompt for Claude Code')!)
+    expect(onCopy).toHaveBeenCalledTimes(1)
+    fireEvent.click(menuItem('Send to Claude Code')!)
+    expect(onSend).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the description draft when the save fails', async () => {

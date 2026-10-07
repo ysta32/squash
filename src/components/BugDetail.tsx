@@ -3,17 +3,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   AlertCircle,
   ArrowLeft,
-  Bot,
-  Bug as BugIcon,
+  ArrowRightLeft,
   Check,
   Copy,
-  Lightbulb,
+  Ellipsis,
   Mic,
   MousePointerClick,
   RotateCcw,
   RotateCw,
   Trash2,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import { useDismiss } from '../hooks/useDismiss'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { ClaudeRun } from '../lib/claudeExport'
@@ -25,17 +27,16 @@ import type {
   Severity,
   WorkspaceMember,
 } from '../lib/types'
-import { KIND_LABEL } from '../lib/types'
+import { KIND_LABEL, SEVERITY_LABEL } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { AssigneePicker } from './AssigneePicker'
-import { Avatar } from './Avatar'
 import { SeverityPicker } from './SeverityPicker'
-import { ClaudeProgress } from './ClaudeProgress'
+import { ClaudeProgress, SparkMark, StatusGlyph } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
 import { ResolvePopover } from './ResolvePopover'
-import { Kbd, buttonClass } from './ui'
+import { Kbd, buttonClass, menuItemClass } from './ui'
 
 export type BugPatch = Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>
 
@@ -103,12 +104,25 @@ export function BugDetail(props: BugDetailProps) {
 
   if (!bug) {
     return (
-      <div className="hidden h-full flex-col items-center justify-center gap-2 px-6 text-center md:flex">
-        <MousePointerClick className="h-6 w-6 text-muted" aria-hidden="true" />
-        <p className="text-sm text-muted">Select a bug to see its details</p>
-        <p className="text-xs text-muted">
-          <Kbd>J</Kbd>/<Kbd>K</Kbd> to move, <Kbd>N</Kbd> to file one
-        </p>
+      <div className="relative hidden h-full overflow-hidden md:block">
+        <div aria-hidden="true" className={RULED_PAPER} />
+        <div className="relative max-w-[760px] px-[32px] pt-16">
+          <MousePointerClick
+            size={20}
+            strokeWidth={1.5}
+            absoluteStrokeWidth
+            className="text-ink-3"
+            aria-hidden="true"
+          />
+          <p className="mt-4 text-base font-medium text-ink">Select a bug to see its details</p>
+          <p className="mt-1 flex flex-wrap items-center gap-1 text-sm text-ink-2">
+            <Kbd>J</Kbd>
+            <Kbd>K</Kbd>
+            <span className="mr-2">to move</span>
+            <Kbd>N</Kbd>
+            <span>to file one</span>
+          </p>
+        </div>
       </div>
     )
   }
@@ -161,6 +175,14 @@ function BugBody({
   const [descDraft, setDescDraft] = useState<string | null>(null)
   const [descFocused, setDescFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** The last action that failed, so the inline error can offer Retry. */
+  const [failed, setFailed] = useState<{
+    action: () => void | Promise<void>
+    onSuccess?: () => void
+  } | null>(null)
+  const strikeRef = useRef<HTMLDivElement>(null)
+  const stampRef = useRef<HTMLSpanElement>(null)
+  const prevStatus = useRef(bug.status)
   const [signed, setSigned] = useState<Record<string, string>>({})
   const [lightboxKey, setLightboxKey] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -215,13 +237,38 @@ function BugBody({
     el.style.height = `${el.scrollHeight}px`
   }, [description, showRendered])
 
+  // The resolve moment (DESIGN.md section 8): when this bug goes open → resolved while shown,
+  // the title strikethrough draws left to right over 220ms and the check pin stamps in
+  // (scale 1.15 → 1). Reduced motion, or a bug that was already resolved, shows the end state.
+  useLayoutEffect(() => {
+    const was = prevStatus.current
+    prevStatus.current = bug.status
+    if (was !== 'open' || bug.status !== 'resolved') return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return
+    const easing = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+    strikeRef.current?.animate?.([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], {
+      duration: 220,
+      easing,
+    })
+    stampRef.current?.animate?.(
+      [
+        { transform: 'scale(1.15)', opacity: 0 },
+        { transform: 'scale(1)', opacity: 1 },
+      ],
+      { duration: 220, delay: 160, easing, fill: 'backwards' },
+    )
+  }, [bug.status])
+
   function run(action: () => void | Promise<void>, onSuccess?: () => void) {
     setError(null)
+    setFailed(null)
     Promise.resolve()
       .then(action)
       .then(onSuccess, (err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Something went wrong.'
+        const msg =
+          err instanceof Error ? err.message : 'Could not save changes. Check your connection.'
         setError(msg)
+        setFailed({ action, onSuccess })
         onToast?.(msg)
       })
   }
@@ -270,7 +317,6 @@ function BugBody({
   }
 
   const otherKind = bug.kind === 'feature' ? 'bug' : 'feature'
-  const KindIcon = bug.kind === 'feature' ? Lightbulb : BugIcon
 
   function confirmPopover(note: string | null) {
     onPopover(null)
@@ -290,137 +336,241 @@ function BugBody({
     ...pending.map((p) => ({ key: p.localId, url: p.previewUrl })),
   ]
   const viewable = gallery.filter((g): g is { key: string; url: string } => g.url !== null)
-  const context = sanitizeContext(bug.context)
-  const environment = formatContext({ ...context, url: undefined })
   const lightboxIndex = lightboxKey ? viewable.findIndex((g) => g.key === lightboxKey) : -1
 
+  const title = titleDraft ?? bug.title
+  const noun = KIND_LABEL[bug.kind].one.toLowerCase()
+  const menuItems: MenuItem[] = [
+    ...(onSend
+      ? [
+          {
+            key: 'send',
+            label: 'Send to Claude Code',
+            icon: <SparkMark className="text-accent" />,
+            onSelect: () => onSend(bug),
+            disabled: !editable,
+            // Shown as its own button once the pane is wide enough (see the toolbar).
+            className: '@xl:hidden',
+          },
+        ]
+      : []),
+    ...(onCopy
+      ? [
+          {
+            key: 'copy',
+            label: 'Copy prompt for Claude Code',
+            icon: <MenuIcon icon={Copy} />,
+            onSelect: () => onCopy(bug),
+            disabled: !editable,
+          },
+        ]
+      : []),
+    {
+      key: 'kind',
+      label: `Move to ${KIND_LABEL[otherKind].many}`,
+      icon: <MenuIcon icon={ArrowRightLeft} />,
+      onSelect: () => run(() => onUpdate(bug.id, { kind: otherKind })),
+      disabled: !editable,
+    },
+    ...(onDelete && canDelete
+      ? [
+          {
+            key: 'delete',
+            label: `Delete ${noun}`,
+            icon: <MenuIcon icon={Trash2} />,
+            onSelect: () => setConfirmDelete(true),
+            disabled: !editable,
+            danger: true,
+          },
+        ]
+      : []),
+  ]
+
   return (
-    <div className="h-full min-w-0 overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl min-w-0 px-4 pb-12 sm:px-6">
-        {formatContext(context) && (
-          <p aria-label="Bug context" className="pt-4 font-mono text-xs break-words text-muted">
-            {context.url && (
-              <a
-                href={context.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="focus-ring underline"
-              >
-                {context.url.replace(/^https?:\/\//, '')}
-              </a>
-            )}
-            {context.url && environment && ' · '}
-            {environment}
-          </p>
-        )}
-        <header className="flex flex-wrap items-center gap-2 pt-4">
-          <div className="flex min-w-0 items-center gap-1">
+    <div className="@container h-full min-w-0 overflow-y-auto [scrollbar-gutter:stable]">
+      <article
+        aria-label={`${KIND_LABEL[bug.kind].one} ${bug.optimistic ? '' : `#${bug.number}`}`.trim()}
+        className="w-full max-w-[760px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[32px] @xl:pt-8 sm:pb-16"
+      >
+        <header className="border-b border-line pb-6">
+          <div className="flex items-start gap-2">
             <button
               type="button"
               onClick={onBack}
               aria-label="Back"
-              title="Back"
-              className="t focus-ring -ml-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg md:hidden"
+              title="Back (Esc)"
+              className="t focus-ring -ml-3 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink md:hidden"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
             </button>
-            <span className="px-1 font-mono text-xs font-medium text-muted tabular-nums">
-              #{bug.optimistic ? '…' : bug.number}
-            </span>
-            <button
-              type="button"
-              disabled={!editable}
-              onClick={() => run(() => onUpdate(bug.id, { kind: otherKind }))}
-              aria-label={`${KIND_LABEL[bug.kind].one}: move to ${KIND_LABEL[otherKind].many}`}
-              title={`Move to ${KIND_LABEL[otherKind].many}`}
-              className="t focus-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted hover:bg-bg-subtle hover:text-fg disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted"
-            >
-              <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              {KIND_LABEL[bug.kind].one}
-            </button>
-            <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
-            <SeverityPicker
-              value={bug.severity}
-              onChange={setSeverity}
-              size="sm"
-              align="start"
-              disabled={!editable}
-            />
+            <SpecimenLabel bug={bug} filer={filer?.display_name ?? 'Deleted user'} />
           </div>
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {(onSend || onCopy) && (
-              <div className="inline-flex h-8 items-stretch rounded-md border border-border bg-bg">
-                {onSend && (
-                  <button
-                    type="button"
-                    disabled={!editable}
-                    onClick={() => onSend(bug)}
-                    aria-label="Send to Claude"
-                    title="Open Claude Code on this bug (C)"
-                    className={cn(
-                      't focus-ring inline-flex w-[30px] items-center justify-center gap-1.5 text-sm font-medium whitespace-nowrap text-fg hover:bg-bg-subtle disabled:pointer-events-none disabled:opacity-50 sm:w-auto sm:px-2.5',
-                      onCopy ? 'rounded-l-[5px]' : 'rounded-[5px]',
-                    )}
-                  >
-                    <Bot className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="hidden sm:inline">Send to Claude</span>
-                  </button>
+          <div className="relative mt-5">
+            <textarea
+              ref={titleRef}
+              rows={1}
+              value={title}
+              readOnly={!editable}
+              aria-label="Title"
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  cancelRef.current = true
+                  setTitleDraft(null)
+                  e.currentTarget.blur()
+                  cancelRef.current = false
+                }
+              }}
+              className={cn(
+                TITLE_TYPE,
+                't focus-ring block w-full resize-none overflow-hidden rounded-md bg-transparent',
+                editable && 'hover:bg-surface-3/60 focus:bg-surface-2',
+                isOpen ? 'text-ink' : 'text-ink-2',
+              )}
+            />
+            {!isOpen && (
+              <div
+                ref={strikeRef}
+                aria-hidden="true"
+                className={cn(
+                  TITLE_TYPE,
+                  'pointer-events-none absolute inset-0 origin-left text-transparent line-through decoration-ink-3 decoration-[1.5px] select-none',
                 )}
-                {onSend && onCopy && <span aria-hidden="true" className="w-px bg-border" />}
-                {onCopy && (
-                  <button
-                    type="button"
-                    disabled={!editable}
-                    onClick={() => onCopy(bug)}
-                    aria-label="Copy for Claude"
-                    title="Copy a prompt to paste into Claude Code"
-                    className={cn(
-                      't focus-ring inline-flex w-[30px] items-center justify-center text-muted hover:bg-bg-subtle hover:text-fg disabled:pointer-events-none disabled:opacity-50',
-                      onSend ? 'rounded-r-[5px]' : 'rounded-[5px]',
-                    )}
-                  >
-                    <Copy className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
+              >
+                {title}
               </div>
             )}
-            <div className="relative">
-              <button
-                type="button"
-                disabled={!editable}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => onPopover(popover ? null : isOpen ? 'resolve' : 'reopen')}
-                title={isOpen ? 'Resolve (R)' : 'Reopen'}
-                className={buttonClass(isOpen ? 'primary' : 'secondary', 'md', 'h-8 gap-1.5 px-3')}
-              >
-                {isOpen ? (
-                  <Check className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          </div>
+
+          {!isOpen && (
+            <div className="mt-3 flex items-start gap-2 text-sm text-ink-2">
+              <span ref={stampRef} className="mt-0.5 inline-flex text-status-resolved">
+                <StatusGlyph kind="done" />
+              </span>
+              <div className="min-w-0">
+                <p>
+                  Resolved by{' '}
+                  <span className="font-medium text-ink">
+                    {resolver?.display_name ?? 'Deleted user'}
+                  </span>
+                  {bug.resolved_at && (
+                    <>
+                      {' · '}
+                      <time
+                        dateTime={bug.resolved_at}
+                        title={new Date(bug.resolved_at).toLocaleString()}
+                        className="font-mono text-xs text-ink-3"
+                      >
+                        {relativeTime(bug.resolved_at)}
+                      </time>
+                    </>
+                  )}
+                </p>
+                {bug.resolution_note && (
+                  <blockquote className="mt-1 max-w-[68ch] [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">
+                    “{bug.resolution_note}”
+                  </blockquote>
                 )}
-                {isOpen ? 'Resolve' : 'Reopen'}
-              </button>
-              <ResolvePopover
-                mode={isOpen ? 'resolve' : 'reopen'}
-                open={popover !== null && editable}
-                onClose={() => onPopover(null)}
-                onConfirm={confirmPopover}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-x-1 gap-y-2">
+            <div className="-ml-2 flex min-w-0 flex-wrap items-center gap-1">
+              <SeverityPicker
+                value={bug.severity}
+                onChange={setSeverity}
+                size="quiet"
+                align="start"
+                disabled={!editable}
+              />
+              <span aria-hidden="true" className="h-4 w-px bg-line" />
+              <AssigneePicker
+                members={members}
+                value={bug.assignee_id}
+                selfId={selfId}
+                variant="toolbar"
+                align="start"
+                disabled={!editable || !onAssign}
+                openRequest={assignRequest}
+                onChange={(userId) => {
+                  if (onAssign) run(() => onAssign(bug.id, userId))
+                }}
               />
             </div>
-            {onDelete && canDelete && (
-              <button
-                type="button"
-                disabled={!editable}
-                onClick={() => setConfirmDelete(true)}
-                aria-label={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
-                title={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
-                className="t focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
+
+            {/* One action cluster: inline at the end of the toolbar, and a bottom action bar on
+                phones so Resolve is a full-width thumb target. */}
+            <div className="ml-auto flex items-center gap-2 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-20 max-sm:border-t max-sm:border-line max-sm:bg-surface-2 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-elev-2">
+              {onSend && (
+                <button
+                  type="button"
+                  disabled={!editable}
+                  onClick={() => onSend(bug)}
+                  title="Open Claude Code on this bug (C)"
+                  className={buttonClass('secondary', 'md', 'h-8 px-3 @max-xl:hidden')}
+                >
+                  <SparkMark className="text-accent" />
+                  Send to Claude Code
+                </button>
+              )}
+              <div className="relative max-sm:flex-1">
+                <button
+                  type="button"
+                  disabled={!editable}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => onPopover(popover ? null : isOpen ? 'resolve' : 'reopen')}
+                  title={isOpen ? 'Resolve (R)' : 'Reopen'}
+                  aria-expanded={popover !== null && editable}
+                  className={buttonClass(
+                    isOpen ? 'primary' : 'secondary',
+                    'md',
+                    'h-8 px-3.5 max-sm:h-11 max-sm:w-full',
+                  )}
+                >
+                  {isOpen ? (
+                    <Check size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+                  ) : (
+                    <RotateCcw size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+                  )}
+                  {isOpen ? 'Resolve' : 'Reopen'}
+                </button>
+                <ResolvePopover
+                  mode={isOpen ? 'resolve' : 'reopen'}
+                  open={popover !== null && editable}
+                  onClose={() => onPopover(null)}
+                  onConfirm={confirmPopover}
+                  placement="responsive"
+                />
+              </div>
+              <MoreMenu items={menuItems} />
+            </div>
           </div>
+
+          {error && (
+            <div
+              role="alert"
+              className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-danger"
+            >
+              <AlertCircle size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+              <span className="min-w-0 [overflow-wrap:anywhere]">{error}</span>
+              {failed && (
+                <button
+                  type="button"
+                  onClick={() => run(failed.action, failed.onSuccess)}
+                  className="t focus-ring rounded-sm font-medium text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
         </header>
         {onDelete && canDelete && confirmDelete && (
           <DeleteDialog
@@ -430,91 +580,7 @@ function BugBody({
           />
         )}
 
-        <div className="mt-5">
-          <textarea
-            ref={titleRef}
-            rows={1}
-            value={titleDraft ?? bug.title}
-            readOnly={!editable}
-            aria-label="Title"
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                e.currentTarget.blur()
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                cancelRef.current = true
-                setTitleDraft(null)
-                e.currentTarget.blur()
-                cancelRef.current = false
-              }
-            }}
-            className="block w-full resize-none overflow-hidden bg-transparent text-xl leading-snug font-semibold tracking-tight break-words outline-none sm:text-2xl"
-          />
-          <div className="mt-3 space-y-2 text-xs text-muted">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <p className="flex min-w-0 items-center gap-1.5">
-                <Avatar profile={filer} size="xs" />
-                <span className="min-w-0 truncate">
-                  Filed by <span className="text-fg">{filer?.display_name ?? 'Deleted user'}</span>{' '}
-                  ·{' '}
-                  <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
-                    {relativeTime(bug.created_at)}
-                  </time>
-                </span>
-              </p>
-              <AssigneePicker
-                members={members}
-                value={bug.assignee_id}
-                selfId={selfId}
-                disabled={!editable || !onAssign}
-                openRequest={assignRequest}
-                onChange={(userId) => {
-                  if (onAssign) run(() => onAssign(bug.id, userId))
-                }}
-              />
-            </div>
-            {bug.status === 'resolved' && (
-              <>
-                <p className="flex items-center gap-1.5">
-                  <Avatar profile={resolver} size="xs" />
-                  <span>
-                    Resolved by{' '}
-                    <span className="text-fg">{resolver?.display_name ?? 'Deleted user'}</span>
-                    {bug.resolved_at && (
-                      <>
-                        {' · '}
-                        <time
-                          dateTime={bug.resolved_at}
-                          title={new Date(bug.resolved_at).toLocaleString()}
-                        >
-                          {relativeTime(bug.resolved_at)}
-                        </time>
-                      </>
-                    )}
-                  </span>
-                </p>
-                {bug.resolution_note && (
-                  <blockquote className="ml-2 border-l-2 border-border pl-3 [overflow-wrap:anywhere] whitespace-pre-wrap italic">
-                    “{bug.resolution_note}”
-                  </blockquote>
-                )}
-              </>
-            )}
-          </div>
-          {error && (
-            <p role="alert" className="mt-3 flex items-center gap-1.5 text-xs text-danger">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {error}
-            </p>
-          )}
-        </div>
-
-        <div className="mt-8 space-y-8">
-          {claudeRun && <ClaudeProgress run={claudeRun} />}
-
+        <div className="mt-8 space-y-12">
           <section className="relative min-w-0">
             <h2 className={SECTION_HEADING}>Description</h2>
             <textarea
@@ -544,7 +610,7 @@ function BugBody({
               className={
                 showRendered
                   ? 'sr-only'
-                  : 'block w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted'
+                  : 't focus-ring -mx-2 block w-full max-w-[calc(68ch+1rem)] resize-none overflow-hidden rounded-md bg-transparent px-2 text-read text-ink placeholder:text-ink-3 hover:bg-surface-3/60 focus:bg-surface-2'
               }
             />
             {showRendered && (
@@ -552,35 +618,35 @@ function BugBody({
                 onClick={(e) => {
                   if (editable && !(e.target as HTMLElement).closest('a')) descRef.current?.focus()
                 }}
-                className={cn('min-w-0 [overflow-wrap:anywhere]', editable && 'cursor-text')}
+                className={cn(READ_TEXT, editable && 'cursor-text')}
               >
-                <Markdown source={description} />
+                <Markdown source={description} className="[overflow-wrap:anywhere]" />
               </div>
             )}
             {bug.transcript !== null && (
-              <div className="mt-4 rounded-lg border border-border bg-bg-subtle px-3 py-2.5 text-xs text-muted">
-                <p className="mb-1 flex items-center gap-1.5 font-medium text-fg">
-                  <Mic className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+              <figure className="mt-6 max-w-[68ch] border-l-2 border-line-2 pl-4">
+                <figcaption className="specimen-label flex items-center gap-1.5 text-ink-3">
+                  <Mic size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
                   Voice transcript
-                </p>
-                <p className="leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
+                </figcaption>
+                <p className="mt-2 text-sm [overflow-wrap:anywhere] whitespace-pre-wrap text-ink-2">
                   {bug.transcript}
                 </p>
-              </div>
+              </figure>
             )}
           </section>
 
           {gallery.length > 0 && (
-            <section className="min-w-0">
-              <h2 className={SECTION_HEADING}>
-                Attachments <span className="ml-1 tabular-nums">{gallery.length}</span>
+            <section aria-labelledby={`shots-${bug.id}`} className="min-w-0">
+              <h2 id={`shots-${bug.id}`} className={SECTION_HEADING}>
+                Screenshots <span className="nums text-ink-3">{gallery.length}</span>
               </h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-5 @2xl:grid-cols-3">
                 {bug.attachments.map((a, i) => (
                   <AttachmentThumb
                     key={a.id}
                     attachment={a}
-                    caption={`Screenshot ${i + 1}`}
+                    figure={i + 1}
                     label={`Open screenshot ${i + 1}`}
                     onSigned={onSigned}
                     onOpen={() => setLightboxKey(a.id)}
@@ -590,14 +656,17 @@ function BugBody({
                   <PendingThumb
                     key={p.localId}
                     upload={p}
+                    figure={bug.attachments.length + i + 1}
                     label={`Open screenshot ${bug.attachments.length + i + 1}`}
                     onOpen={() => setLightboxKey(p.localId)}
                     onRetry={onRetryUploads}
                   />
                 ))}
-              </div>
+              </ul>
             </section>
           )}
+
+          {claudeRun && <ClaudeProgress run={claudeRun} />}
 
           <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} selfId={selfId} />
         </div>
@@ -610,12 +679,251 @@ function BugBody({
             onIndex={(i) => setLightboxKey(viewable[i]?.key ?? null)}
           />
         )}
-      </div>
+      </article>
     </div>
   )
 }
 
-const SECTION_HEADING = 'mb-3 text-xs font-medium tracking-wide text-muted uppercase'
+const TITLE_TYPE =
+  '-mx-2 px-2 py-0.5 text-xl font-semibold break-words whitespace-pre-wrap [width:calc(100%+1rem)]'
+const SECTION_HEADING = 'specimen-label mb-3 text-ink-3'
+const READ_TEXT =
+  'max-w-[68ch] min-w-0 text-ink [&>div]:text-read [&>div]:leading-[1.7143rem] [&>div]:space-y-3'
+/** Faint ruled-paper lines (1px every 24px) fading out to the bottom right. */
+const RULED_PAPER =
+  'absolute inset-0 bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_23px,var(--border-1)_23px,var(--border-1)_24px)] [mask-image:linear-gradient(160deg,black_10%,transparent_65%)] opacity-70'
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** `07 Oct 2026 14:02` in local time (shown uppercase in the specimen label). */
+function labelDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const SEVERITY_TEXT = {
+  low: 'text-sev-low',
+  medium: 'text-sev-medium',
+  high: 'text-sev-high',
+  critical: 'text-sev-critical',
+} as const
+
+/**
+ * The specimen label (DESIGN.md section 3): accession number, kind, severity and status on the
+ * top line; collector, date and the captured page context under a hairline.
+ */
+function SpecimenLabel({ bug, filer }: { bug: BugWithMeta; filer: string }) {
+  const context = sanitizeContext(bug.context)
+  const environment = formatContext({ ...context, url: undefined })
+  const hasContext = formatContext(context) !== ''
+  const number = bug.optimistic ? '…' : String(bug.number).padStart(3, '0')
+  const sep = (
+    <span aria-hidden="true" className="text-ink-3">
+      {' · '}
+    </span>
+  )
+
+  return (
+    <div className="specimen-label w-fit max-w-full min-w-0 rounded-xs border border-line-2 bg-surface-1 text-ink-2">
+      <p className="border-b border-line px-3 py-1.5">
+        <span className="font-medium text-ink">No. {number}</span>
+        {sep}
+        {KIND_LABEL[bug.kind].one}
+        {sep}
+        <span className={SEVERITY_TEXT[bug.severity]}>{SEVERITY_LABEL[bug.severity]}</span>
+        {bug.status === 'resolved' && (
+          <>
+            {sep}
+            <span className="text-status-resolved">Resolved</span>
+          </>
+        )}
+      </p>
+      <p className="px-3 py-1.5 [overflow-wrap:anywhere]">
+        <abbr title="Collected by" className="no-underline">
+          Coll.
+        </abbr>{' '}
+        {filer}
+        {sep}
+        <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
+          {labelDate(bug.created_at)}
+        </time>
+        {hasContext && (
+          <>
+            {sep}
+            <span role="group" aria-label="Bug context" className="normal-case">
+              {context.url && (
+                <a
+                  href={context.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="focus-ring rounded-xs text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink"
+                >
+                  {context.url.replace(/^https?:\/\//, '')}
+                </a>
+              )}
+              {context.url && environment && ' · '}
+              {environment}
+            </span>
+          </>
+        )}
+      </p>
+    </div>
+  )
+}
+
+interface MenuItem {
+  key: string
+  label: string
+  icon: ReactNode
+  onSelect: () => void
+  disabled?: boolean
+  danger?: boolean
+  className?: string
+}
+
+/** The `…` menu: secondary actions (copy, move, delete) kept out of the toolbar. */
+function MoreMenu({ items }: { items: MenuItem[] }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(rootRef, close, open)
+
+  /** Enabled items, minus any hidden by a container query (e.g. Send when it has a button). */
+  const focusable = useCallback((): HTMLButtonElement[] => {
+    const all = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ??
+        [],
+    )
+    const shown = all.filter((el) => el.getClientRects().length > 0)
+    return shown.length > 0 ? shown : all
+  }, [])
+
+  useEffect(() => {
+    if (open) focusable()[0]?.focus()
+  }, [open, focusable])
+
+  function onKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    const all = focusable()
+    const at = all.indexOf(document.activeElement as HTMLButtonElement)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (all.length === 0) return
+      const next = (at + (e.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length
+      all[next]?.focus()
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault()
+      all[e.key === 'Home' ? 0 : all.length - 1]?.focus()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      setOpen(false)
+      triggerRef.current?.focus()
+    } else if (e.key === 'Tab') {
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="More actions"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          't focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink max-sm:h-11 max-sm:w-11 max-sm:border max-sm:border-line-2',
+          open && 'bg-surface-3 text-ink',
+        )}
+      >
+        <Ellipsis size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="More actions"
+          onKeyDown={onKeyDown}
+          className="panel absolute right-0 bottom-full z-30 mb-2 w-64 animate-in p-1 sm:top-full sm:bottom-auto sm:mt-1 sm:mb-0"
+        >
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              onClick={() => {
+                setOpen(false)
+                triggerRef.current?.focus()
+                item.onSelect()
+              }}
+              className={cn(
+                menuItemClass,
+                'focus-ring-inset pointer-coarse:h-11',
+                item.danger && 'text-danger hover:text-danger [&>svg]:text-danger',
+                item.className,
+              )}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuIcon({ icon: Icon }: { icon: LucideIcon }) {
+  return <Icon size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+}
+
+/** Static placeholder that matches the detail layout: label, title, toolbar, description, shots. */
+export function BugDetailSkeleton() {
+  const block = 'animate-skeleton bg-surface-3'
+  return (
+    <div role="status" aria-label="Loading bug" className="@container h-full min-w-0">
+      <span className="sr-only">Loading…</span>
+      <div className="w-full max-w-[760px] px-[16px] pt-4 @xl:px-[32px] @xl:pt-8">
+        <div className="border-b border-line pb-6">
+          <div className="w-72 max-w-full rounded-xs border border-line-2 bg-surface-1">
+            <div className="border-b border-line px-3 py-[9px]">
+              <div className={cn(block, 'h-[10px] w-40 rounded-xs')} />
+            </div>
+            <div className="px-3 py-[9px]">
+              <div className={cn(block, 'h-[10px] w-56 max-w-full rounded-xs')} />
+            </div>
+          </div>
+          <div className={cn(block, 'mt-6 h-6 w-3/4 rounded-sm')} />
+          <div className="mt-5 flex items-center gap-3">
+            <div className={cn(block, 'h-6 w-24 rounded-md')} />
+            <div className={cn(block, 'h-6 w-28 rounded-md')} />
+            <div className={cn(block, 'ml-auto h-8 w-24 rounded-md max-sm:hidden')} />
+          </div>
+        </div>
+        <div className="mt-8 max-w-[68ch] space-y-3">
+          <div className={cn(block, 'mb-5 h-[10px] w-24 rounded-xs')} />
+          <div className={cn(block, 'h-4 w-full rounded-sm')} />
+          <div className={cn(block, 'h-4 w-11/12 rounded-sm')} />
+          <div className={cn(block, 'h-4 w-2/3 rounded-sm')} />
+        </div>
+        <div className="mt-12">
+          <div className={cn(block, 'mb-4 h-[10px] w-28 rounded-xs')} />
+          <div className="grid grid-cols-2 gap-4 @2xl:grid-cols-3">
+            <div className={cn(block, 'aspect-[4/3] rounded-lg')} />
+            <div className={cn(block, 'aspect-[4/3] rounded-lg')} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function DeleteDialog({
   bug,
@@ -651,7 +959,7 @@ function DeleteDialog({
         if (!busy) onCancel()
       }}
       aria-labelledby="delete-bug-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg-elevated p-6 text-fg shadow-elevated backdrop:bg-black/50"
+      className="m-auto w-[calc(100%-2rem)] max-w-md animate-dialog rounded-xl border border-line bg-surface-2 p-6 text-ink shadow-elev-3 backdrop:bg-scrim"
     >
       <form
         onSubmit={(event) => {
@@ -660,10 +968,10 @@ function DeleteDialog({
         }}
         className="space-y-4 text-sm"
       >
-        <h3 id="delete-bug-title" className="text-base font-semibold">
+        <h3 id="delete-bug-title" className="text-lg font-semibold">
           Delete {noun} #{bug.number}?
         </h3>
-        <p className="text-muted">
+        <p className="text-ink-2">
           “{bug.title}” and its screenshots, comments and activity will be permanently removed. This
           cannot be undone. To keep a record, resolve it instead.
         </p>
@@ -681,7 +989,15 @@ function DeleteDialog({
           >
             Cancel
           </button>
-          <button autoFocus disabled={busy} className={buttonClass('danger')}>
+          <button
+            autoFocus
+            disabled={busy}
+            className={buttonClass(
+              'danger',
+              'md',
+              'border-danger bg-danger text-bg hover:bg-danger hover:opacity-90',
+            )}
+          >
             {busy ? 'Deleting…' : `Delete ${noun}`}
           </button>
         </div>
@@ -690,18 +1006,28 @@ function DeleteDialog({
   )
 }
 
+/** A screenshot laid on paper: 4:3, 8px radius, specimen-drawer shadow and a 1px inner edge. */
 const THUMB_CLASS =
-  't focus-ring group relative block aspect-video w-full overflow-hidden rounded-lg border border-border bg-bg-subtle hover:-translate-y-0.5 hover:border-fg/20 hover:shadow-elevated'
+  't focus-ring group relative block aspect-[4/3] w-full overflow-hidden rounded-lg bg-surface-3 shadow-elev-3 after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--border-1)] hover:-translate-y-0.5'
+
+function FigureCaption({ figure, size }: { figure: number; size?: string }) {
+  return (
+    <figcaption className="specimen-label mt-2 flex items-center justify-between gap-2 text-ink-3">
+      <span>Fig. {figure}</span>
+      {size && <span>{size}</span>}
+    </figcaption>
+  )
+}
 
 function AttachmentThumb({
   attachment,
-  caption,
+  figure,
   label,
   onSigned,
   onOpen,
 }: {
   attachment: BugAttachment
-  caption: string
+  figure: number
   label: string
   onSigned: (path: string, url: string | null) => void
   onOpen: () => void
@@ -712,45 +1038,46 @@ function AttachmentThumb({
   }, [attachment.storage_path, url, onSigned])
 
   return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={!url}
-      onClick={onOpen}
-      className={cn(
-        THUMB_CLASS,
-        'cursor-zoom-in disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-none',
-      )}
-    >
-      {url ? (
-        <>
-          <img src={url} alt="" className="h-full w-full object-cover" />
-          <span
-            aria-hidden="true"
-            className="t absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-          >
-            <span className="truncate">{caption}</span>
-            {attachment.width > 0 && attachment.height > 0 && (
-              <span className="shrink-0 text-white/70 tabular-nums">
-                {attachment.width}×{attachment.height}
-              </span>
-            )}
-          </span>
-        </>
-      ) : (
-        <span className="absolute inset-0 animate-pulse bg-bg-subtle" />
-      )}
-    </button>
+    <li className="min-w-0">
+      <figure>
+        <button
+          type="button"
+          aria-label={label}
+          disabled={!url}
+          onClick={onOpen}
+          className={cn(
+            THUMB_CLASS,
+            'cursor-zoom-in disabled:cursor-default disabled:hover:translate-y-0',
+          )}
+        >
+          {url ? (
+            <img src={url} alt="" className="h-full w-full object-cover object-left-top" />
+          ) : (
+            <span className="absolute inset-0 animate-skeleton bg-surface-3" />
+          )}
+        </button>
+        <FigureCaption
+          figure={figure}
+          size={
+            attachment.width > 0 && attachment.height > 0
+              ? `${attachment.width}×${attachment.height}`
+              : undefined
+          }
+        />
+      </figure>
+    </li>
   )
 }
 
 function PendingThumb({
   upload,
+  figure,
   label,
   onOpen,
   onRetry,
 }: {
   upload: PendingUpload
+  figure: number
   label: string
   onOpen: () => void
   onRetry?: () => void
@@ -761,70 +1088,73 @@ function PendingThumb({
   const shown = Math.max(0.25, Math.min(1, upload.progress))
 
   return (
-    <div className="relative min-w-0">
-      <button
-        type="button"
-        aria-label={label}
-        onClick={onOpen}
-        className={cn(THUMB_CLASS, 'cursor-zoom-in')}
-      >
-        <img
-          src={upload.previewUrl}
-          alt=""
-          className={cn('h-full w-full object-cover', uploading && 'opacity-60')}
-        />
-        {uploading && (
-          <span className="absolute inset-0 flex items-center justify-center">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-6 w-6 animate-spin"
-              role="progressbar"
-              aria-label="Uploading"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(upload.progress * 100)}
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r={r}
-                fill="none"
-                stroke="white"
-                strokeOpacity="0.35"
-                strokeWidth="3"
-              />
-              <circle
-                cx="12"
-                cy="12"
-                r={r}
-                fill="none"
-                stroke="white"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={`${shown * circumference} ${circumference}`}
-                transform="rotate(-90 12 12)"
-              />
-            </svg>
-          </span>
-        )}
-        {upload.error && (
-          <span className="absolute right-1.5 bottom-1.5 left-1.5 rounded-md bg-danger px-1.5 py-0.5 text-center text-xs font-medium text-white">
-            Upload failed
-          </span>
-        )}
-      </button>
+    <li className="relative min-w-0">
+      <figure>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onOpen}
+          className={cn(THUMB_CLASS, 'cursor-zoom-in')}
+        >
+          <img
+            src={upload.previewUrl}
+            alt=""
+            className={cn('h-full w-full object-cover object-left-top', uploading && 'opacity-60')}
+          />
+          {uploading && (
+            <span className="absolute inset-0 flex items-center justify-center text-accent">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-6 w-6 animate-spin rounded-full bg-surface-2 shadow-elev-2"
+                role="progressbar"
+                aria-label="Uploading"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(upload.progress * 100)}
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r={r}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeOpacity="0.25"
+                  strokeWidth="2"
+                />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r={r}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeDasharray={`${shown * circumference} ${circumference}`}
+                  transform="rotate(-90 12 12)"
+                />
+              </svg>
+            </span>
+          )}
+          {upload.error && (
+            <span className="absolute right-2 bottom-2 left-2 rounded-md bg-surface-2 px-2 py-1 text-left text-xs font-medium text-danger shadow-elev-2">
+              Upload failed
+            </span>
+          )}
+        </button>
+        <FigureCaption figure={figure} />
+      </figure>
       {upload.error && onRetry && (
         <button
           type="button"
           aria-label="Retry upload"
           title="Retry upload"
           onClick={onRetry}
-          className="t focus-ring absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white hover:bg-black/85"
+          className="t focus-ring absolute top-2 right-2 inline-flex h-7 items-center gap-1 rounded-md bg-surface-2 px-2 text-xs font-medium text-ink shadow-elev-2 hover:text-accent pointer-coarse:h-11"
         >
-          <RotateCw size={10} aria-hidden="true" />
+          <RotateCw size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           Retry
         </button>
       )}
-    </div>
+    </li>
   )
 }

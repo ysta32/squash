@@ -207,14 +207,14 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
+    <div className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-scrim p-3">
       <div
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
         aria-modal="true"
         aria-label={`Mark up ${file.name}`}
-        className="flex max-h-full max-w-full flex-col gap-3 overflow-auto rounded-xl border border-border bg-bg-elevated p-3 text-fg shadow-elevated"
+        className="flex max-h-full max-w-full animate-dialog flex-col gap-3 overflow-auto rounded-xl border border-line bg-surface-2 p-3 text-ink shadow-elev-3"
       >
         <div
           className="flex flex-wrap items-center gap-2"
@@ -242,7 +242,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
               aria-pressed={color === entry.value}
               disabled={saving || discard}
               onClick={() => setColor(entry.value)}
-              className="focus-ring flex h-7 w-7 items-center justify-center rounded-full border border-border aria-pressed:border-accent aria-pressed:ring-2 aria-pressed:ring-accent"
+              className="focus-ring flex h-7 w-7 items-center justify-center rounded-full border border-line-2 aria-pressed:border-ink aria-pressed:ring-2 aria-pressed:ring-ink pointer-coarse:h-11 pointer-coarse:w-11"
             >
               <span className="h-4 w-4 rounded-full" style={{ backgroundColor: entry.value }} />
             </button>
@@ -268,7 +268,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
           aria-label="Image annotation canvas"
           width={image?.naturalWidth ?? 0}
           height={image?.naturalHeight ?? 0}
-          className="max-h-[80vh] max-w-[90vw] shrink-0 self-center object-contain"
+          className="max-h-[80vh] max-w-[90vw] shrink-0 self-center rounded-lg object-contain shadow-elev-3"
           style={{ width: 'auto', height: 'auto', touchAction: 'none', cursor: 'crosshair' }}
           onPointerDown={(event) => {
             if (!image || saving || discard || dragRef.current || event.button !== 0) return

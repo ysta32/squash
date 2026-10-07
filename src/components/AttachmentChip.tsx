@@ -20,19 +20,19 @@ export function AttachmentChip({
   progress,
 }: AttachmentChipProps) {
   return (
-    <div className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-bg-subtle">
+    <div className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-line-2 bg-surface-3 shadow-elev-1">
       {onEdit ? (
         <button
           type="button"
           aria-label={`Mark up ${name}`}
           onClick={onEdit}
           title={`Mark up ${name}`}
-          className="group/edit block h-full w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+          className="group/edit block h-full w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
           <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
           <span
             aria-hidden="true"
-            className="t pointer-events-none absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded bg-black/70 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+            className="t pointer-events-none absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-sm bg-surface-2 text-ink shadow-elev-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <Pencil size={11} />
           </span>
@@ -44,7 +44,7 @@ export function AttachmentChip({
         <svg
           aria-hidden="true"
           viewBox="0 0 32 32"
-          className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 bg-black/30"
+          className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 bg-scrim"
         >
           <circle
             cx="16"
@@ -64,7 +64,7 @@ export function AttachmentChip({
         aria-label={`Remove ${name}`}
         onClick={onRemove}
         title={`Remove ${name}`}
-        className="t absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white opacity-0 outline-none hover:bg-black/85 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-white group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+        className="t absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-ink shadow-elev-2 opacity-0 outline-none hover:text-danger focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-focus group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
       >
         <X size={12} aria-hidden="true" />
       </button>

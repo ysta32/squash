@@ -2,22 +2,33 @@ import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { Button } from './ui'
-import { isMac } from '../lib/utils'
+import { cn, isMac } from '../lib/utils'
 
 export interface ResolvePopoverProps {
   mode: 'resolve' | 'reopen'
   open: boolean
   onClose: () => void
   onConfirm: (note: string | null) => void
+  /**
+   * Where the popover opens relative to its (relatively positioned) parent. `responsive` opens
+   * above on phones, where the trigger lives in the bottom action bar, and below from `sm` up.
+   */
+  placement?: 'below' | 'responsive'
 }
 
-/** Popover anchored below its (relatively positioned) parent. */
-export function ResolvePopover({ mode, open, onClose, onConfirm }: ResolvePopoverProps) {
+/** Popover anchored to its (relatively positioned) parent. */
+export function ResolvePopover({
+  mode,
+  open,
+  onClose,
+  onConfirm,
+  placement = 'below',
+}: ResolvePopoverProps) {
   if (!open) return null
-  return <PopoverBody mode={mode} onClose={onClose} onConfirm={onConfirm} />
+  return <PopoverBody mode={mode} onClose={onClose} onConfirm={onConfirm} placement={placement} />
 }
 
-function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'open'>) {
+function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopoverProps, 'open'>) {
   const [note, setNote] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   useFocusTrap(rootRef)
@@ -65,7 +76,12 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
       ref={rootRef}
       role="dialog"
       aria-label={`${verb} bug`}
-      className="absolute top-full right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-bg-elevated p-3 shadow-elevated"
+      className={cn(
+        'panel absolute right-0 z-30 w-80 max-w-[calc(100vw-2rem)] animate-in p-3',
+        placement === 'responsive'
+          ? 'bottom-full mb-2 sm:top-full sm:bottom-auto sm:mt-2 sm:mb-0'
+          : 'top-full mt-2',
+      )}
     >
       <textarea
         data-autofocus
@@ -75,7 +91,7 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
         rows={3}
         placeholder="Add a note (optional)"
         aria-label="Note"
-        className="t block w-full resize-none rounded-md border border-border bg-bg px-2.5 py-2 text-sm leading-relaxed outline-none placeholder:text-muted hover:border-fg/20 focus:border-accent/60 focus:ring-3 focus:ring-accent/15"
+        className="t block w-full resize-none rounded-md border border-line-input bg-surface-2 px-2.5 py-2 text-sm leading-relaxed text-ink outline-none placeholder:text-ink-3 focus:border-focus focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       />
       <div className="mt-3 flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={() => confirm(false)}>
@@ -88,7 +104,7 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
           title={`${isMac ? '⌘' : 'Ctrl'}+Enter`}
         >
           {verb}
-          <span aria-hidden="true" className="-mr-0.5 text-[11px] opacity-70">
+          <span aria-hidden="true" className="-mr-0.5 font-mono text-[11px] opacity-80">
             {isMac ? '⌘↵' : 'Ctrl↵'}
           </span>
         </Button>

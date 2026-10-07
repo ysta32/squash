@@ -5,12 +5,36 @@ import { useDismiss } from '../hooks/useDismiss'
 import { SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import type { Severity } from '../lib/types'
 import { cn } from '../lib/utils'
+import { Kbd } from './ui'
+
+const TICKS: Record<Severity, number> = { low: 1, medium: 2, high: 3, critical: 4 }
+
+/**
+ * Field-notebook tally for a severity: 1–4 vertical ticks (2px wide, 8px tall, 2px gap) in the
+ * severity's colour, so it never relies on colour alone. Always 14px wide to sit in a column.
+ */
+export function SeverityTicks({ severity, className }: { severity: Severity; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-ticks={TICKS[severity]}
+      className={cn('inline-flex h-[8px] w-[14px] shrink-0 items-stretch gap-[2px]', className)}
+    >
+      {Array.from({ length: TICKS[severity] }, (_, i) => (
+        <span key={i} className={cn('w-[2px] rounded-xs', SEVERITY_COLOR[severity])} />
+      ))}
+    </span>
+  )
+}
 
 interface SeverityPickerProps {
   value: Severity
   onChange: (value: Severity) => void
-  /** sm: h-7 trigger for dense headers; md: h-8 trigger matching toolbar icon buttons. */
-  size?: 'sm' | 'md'
+  /**
+   * sm: h-7 trigger for dense headers; md: h-8 trigger matching toolbar icon buttons;
+   * quiet: borderless property control (bug detail toolbar), 44px tall on touch.
+   */
+  size?: 'sm' | 'md' | 'quiet'
   disabled?: boolean
   /** Which edge of the trigger the menu aligns to. */
   align?: 'start' | 'end'
@@ -116,17 +140,24 @@ export function SeverityPicker({
         onClick={() => (open ? close() : show())}
         onKeyDown={onTriggerKeyDown}
         className={cn(
-          't focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-bg font-medium text-fg hover:bg-bg-subtle disabled:pointer-events-none disabled:opacity-50',
-          size === 'sm' ? 'h-7 px-2 text-xs' : 'h-8 px-2.5 text-xs',
-          open && 'bg-bg-subtle',
+          't focus-ring inline-flex shrink-0 items-center gap-2 rounded-md font-medium text-ink hover:bg-surface-3 disabled:pointer-events-none disabled:text-ink-3',
+          size === 'quiet'
+            ? 'h-8 px-2 text-sm pointer-coarse:h-11'
+            : cn(
+                'border border-line-input bg-surface-2 text-xs',
+                size === 'sm' ? 'h-7 px-2' : 'h-8 px-2.5',
+              ),
+          open && 'bg-surface-3',
         )}
       >
-        <span aria-hidden="true" className={cn('h-2 w-2 rounded-full', SEVERITY_COLOR[value])} />
+        <SeverityTicks severity={value} />
         <span>{SEVERITY_LABEL[value]}</span>
         <ChevronDown
-          size={12}
+          size={14}
+          strokeWidth={1.5}
+          absoluteStrokeWidth
           aria-hidden="true"
-          className={cn('t -mr-0.5 text-muted', open && 'rotate-180')}
+          className={cn('t -mr-0.5 text-ink-3', open && 'rotate-180')}
         />
       </button>
       {open && (
@@ -139,7 +170,7 @@ export function SeverityPicker({
           aria-activedescendant={optionId(active)}
           onKeyDown={onListKeyDown}
           className={cn(
-            'absolute top-full z-30 mt-1 w-40 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated outline-none',
+            'panel absolute top-full z-30 mt-1 w-44 animate-in p-1 outline-none',
             align === 'end' ? 'right-0' : 'left-0',
           )}
         >
@@ -154,22 +185,24 @@ export function SeverityPicker({
                 onPointerMove={() => setActive(i)}
                 onClick={() => pick(s)}
                 className={cn(
-                  'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-fg',
-                  i === active && 'bg-bg-subtle',
+                  'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-11',
+                  i === active && 'bg-surface-3',
                 )}
               >
-                <span
-                  aria-hidden="true"
-                  className={cn('h-2 w-2 shrink-0 rounded-full', SEVERITY_COLOR[s])}
-                />
-                <span className="flex-1">{SEVERITY_LABEL[s]}</span>
-                {selected && <Check size={14} aria-hidden="true" className="text-muted" />}
-                <kbd
-                  aria-hidden="true"
-                  className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-bg px-1 font-sans text-[11px] font-medium text-muted"
-                >
-                  {i + 1}
-                </kbd>
+                <SeverityTicks severity={s} />
+                <span className={cn('flex-1', selected && 'font-medium')}>{SEVERITY_LABEL[s]}</span>
+                {selected && (
+                  <Check
+                    size={16}
+                    strokeWidth={1.5}
+                    absoluteStrokeWidth
+                    aria-hidden="true"
+                    className="text-ink-2"
+                  />
+                )}
+                <span aria-hidden="true">
+                  <Kbd>{i + 1}</Kbd>
+                </span>
               </div>
             )
           })}

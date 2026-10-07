@@ -55,22 +55,26 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Screenshot viewer"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      className="glass-scrim fixed inset-0 z-50 flex animate-fade items-center justify-center p-4 sm:p-16"
       onClick={onClose}
     >
-      <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white tabular-nums">
-        {safeIndex + 1} / {count}
-      </div>
+      <p className="specimen-label glass absolute top-4 left-4 z-10 rounded-md px-3 py-2 text-ink shadow-elev-2">
+        Fig.{' '}
+        <span>
+          {safeIndex + 1} / {count}
+        </span>
+      </p>
       <button
         type="button"
         aria-label="Close"
+        title="Close (Esc)"
         onClick={(e) => {
           e.stopPropagation()
           onClose()
         }}
-        className="t focus-ring absolute top-3 right-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 hover:bg-white/10 hover:text-white"
+        className={cn(CHROME_BUTTON, 'top-4 right-4')}
       >
-        <X className="h-5 w-5" />
+        <X size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
       </button>
       {count > 1 && (
         <>
@@ -81,9 +85,10 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
               e.stopPropagation()
               onIndex((safeIndex - 1 + count) % count)
             }}
-            className="t focus-ring absolute left-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            title="Previous (←)"
+            className={cn(CHROME_BUTTON, 'top-1/2 left-4 -translate-y-1/2')}
           >
-            <ChevronLeft className="h-6 w-6" />
+            <ChevronLeft size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -92,9 +97,10 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
               e.stopPropagation()
               onIndex((safeIndex + 1) % count)
             }}
-            className="t focus-ring absolute right-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            title="Next (→)"
+            className={cn(CHROME_BUTTON, 'top-1/2 right-4 -translate-y-1/2')}
           >
-            <ChevronRight className="h-6 w-6" />
+            <ChevronRight size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           </button>
         </>
       )}
@@ -107,6 +113,9 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
     document.body,
   )
 }
+
+const CHROME_BUTTON =
+  't focus-ring glass absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-ink shadow-elev-2 hover:text-accent'
 
 function ZoomImage({ url, alt }: { url: string; alt: string }) {
   const [zoomed, setZoomed] = useState(false)
@@ -145,7 +154,7 @@ function ZoomImage({ url, alt }: { url: string; alt: string }) {
       onWheel={onWheel}
       style={{ transform: zoomed ? 'scale(2)' : 'scale(1)', transformOrigin: origin }}
       className={cn(
-        'max-h-[90vh] max-w-[90vw] rounded-md object-contain shadow-elevated transition-transform duration-150 select-none',
+        'max-h-full max-w-full animate-dialog rounded-lg object-contain shadow-elev-3 transition-transform duration-150 select-none',
         zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
       )}
     />
