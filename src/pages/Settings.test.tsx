@@ -80,6 +80,11 @@ vi.mock('../hooks/useWorkspaces', () => ({
     refresh: mocks.refresh,
   }),
 }))
+// The deletion log has its own tests; keep its fetch out of these flows.
+vi.mock('../hooks/useDeletionLog', () => ({
+  useDeletionLog: () => ({ deletions: [], loading: false, error: null }),
+}))
+
 vi.mock('../lib/supabase', () => ({
   supabase: {
     from: (table: string) => ({
