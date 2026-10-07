@@ -223,6 +223,8 @@ export type Database = {
           author_id: string
           body: string
           created_at: string
+          /** Set by the server whenever `body` changes; null if never edited. */
+          edited_at: string | null
         }
         Insert: {
           id?: string
@@ -231,12 +233,9 @@ export type Database = {
           body: string
           created_at?: string
         }
+        /** Clients may only change `body` (column grant + comments_guard trigger). */
         Update: {
-          id?: string
-          bug_id?: string
-          author_id?: string
           body?: string
-          created_at?: string
         }
         Relationships: [
           {

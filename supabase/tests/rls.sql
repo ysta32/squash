@@ -623,6 +623,107 @@ do $$ begin
     raise exception 'FAIL[68]: bugs survived their workspace'; end if;
 end $$;
 
+-- ===== Comment edit / delete (0006_comment_edit.sql) =====
+:as_b
+-- [71] author edits the body of their own comment: edited_at set, nothing else changes
+do $$ declare c public.comments; n int; begin
+  insert into public.comments (bug_id, author_id, body, edited_at)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'original', now()) returning * into c;
+  perform set_config('t.cm_b', c.id::text, true);
+  if c.edited_at is not null then raise exception 'FAIL[71]: new comment kept a client-sent edited_at'; end if;
+  update public.comments set body = 'edited text' where id = c.id; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[71]: author could not edit own comment'; end if;
+  if not exists (select 1 from public.comments where id = c.id and body = 'edited text' and edited_at is not null
+                 and bug_id = c.bug_id and author_id = c.author_id and created_at = c.created_at) then
+    raise exception 'FAIL[71]: edit did not set edited_at or changed other columns'; end if;
+end $$;
+-- [72] author cannot change bug_id / author_id / created_at / edited_at (column privilege)
+do $$ declare b2 uuid; begin
+  begin
+    update public.comments set author_id = '10000000-0000-0000-0000-000000000001' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: author_id changed';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+  select id into b2 from public.bugs where workspace_id = current_setting('t.ws1')::uuid and id <> current_setting('t.bug1')::uuid limit 1;
+  begin
+    update public.comments set bug_id = coalesce(b2, gen_random_uuid()) where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: bug_id changed';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+  begin
+    update public.comments set created_at = now() - interval '1 day' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: created_at changed';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+  begin
+    update public.comments set edited_at = null where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: edited_at written by client';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+end $$;
+:as_a
+-- [73] other members (incl. the owner) cannot edit; a plain member cannot delete someone else's comment
+do $$ declare n int; begin
+  update public.comments set body = 'owner edit' where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[73]: owner edited another member''s comment'; end if;
+  perform set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000005","role":"authenticated"}', true);
+  update public.comments set body = 'member edit' where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[73]: member edited another member''s comment'; end if;
+  delete from public.comments where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[73]: member deleted another member''s comment'; end if;
+end $$;
+:as_c
+-- [74] outsider cannot edit or delete (same 0-row result as for a missing comment)
+do $$ declare n int; begin
+  update public.comments set body = 'outsider' where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[74]: outsider edited a comment'; end if;
+  delete from public.comments where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[74]: outsider deleted a comment'; end if;
+end $$;
+:as_pg
+-- [75] the guard holds for the service role too; a body-less update keeps edited_at
+do $$ declare e timestamptz; begin
+  begin
+    update public.comments set author_id = '10000000-0000-0000-0000-000000000001' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[75]: service role changed author_id';
+  exception when others then if sqlerrm <> 'immutable_field' then raise; end if; end;
+  begin
+    update public.comments set created_at = now() - interval '1 day' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[75]: service role changed created_at';
+  exception when others then if sqlerrm <> 'immutable_field' then raise; end if; end;
+  select edited_at into e from public.comments where id = current_setting('t.cm_b')::uuid;
+  update public.comments set body = body, edited_at = null where id = current_setting('t.cm_b')::uuid;
+  if (select edited_at from public.comments where id = current_setting('t.cm_b')::uuid) is distinct from e then
+    raise exception 'FAIL[75]: edited_at not kept on a no-op update'; end if;
+  -- a comment by member 04, who was removed from WS One in [59]
+  insert into public.comments (bug_id, author_id, body)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000004', 'left behind');
+end $$;
+:as_a
+-- [76] a removed member can no longer edit or delete their old comment
+do $$ declare n int; id4 uuid; begin
+  select id into id4 from public.comments where author_id = '10000000-0000-0000-0000-000000000004' and body = 'left behind';
+  perform set_config('t.cm_4', id4::text, true);
+  perform set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000004","role":"authenticated"}', true);
+  update public.comments set body = 'still mine' where id = id4; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[76]: removed member edited their comment'; end if;
+  delete from public.comments where id = id4; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[76]: removed member deleted their comment'; end if;
+end $$;
+:as_a
+-- [77] the workspace owner can delete any comment in the workspace
+do $$ declare n int; begin
+  delete from public.comments where id = current_setting('t.cm_4')::uuid; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[77]: owner could not delete a comment'; end if;
+end $$;
+:as_b
+-- [78] the author can delete their own comment
+do $$ declare n int; begin
+  delete from public.comments where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[78]: author could not delete own comment'; end if;
+end $$;
+:as_pg
+do $$ begin
+  if exists (select 1 from public.comments where id in (current_setting('t.cm_b')::uuid, current_setting('t.cm_4')::uuid)) then
+    raise exception 'FAIL[78]: deleted comments still present'; end if;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

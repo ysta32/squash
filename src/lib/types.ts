@@ -64,6 +64,8 @@ export interface Comment {
   author_id: string
   body: string
   created_at: string
+  /** Set by the server whenever the body changes; null if never edited. */
+  edited_at: string | null
 }
 
 export interface BugEvent {

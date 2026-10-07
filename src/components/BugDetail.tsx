@@ -580,7 +580,7 @@ function BugBody({
             </section>
           )}
 
-          <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} />
+          <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} selfId={selfId} />
         </div>
 
         {lightboxIndex >= 0 && (

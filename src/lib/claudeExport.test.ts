@@ -58,7 +58,16 @@ const base = {
   workspaceName: 'Acme',
   origin: 'https://squash.test',
   urls: { 'ws/b1/one.webp': "https://cdn.test/one.webp?token=a'b" },
-  comments: [{ id: 'c1', bug_id: 'b1', author_id: 'ada', body: 'Only on Safari', created_at: '' }],
+  comments: [
+    {
+      id: 'c1',
+      bug_id: 'b1',
+      author_id: 'ada',
+      body: 'Only on Safari',
+      created_at: '',
+      edited_at: null,
+    },
+  ],
 }
 
 describe('formatClaudePrompt', () => {

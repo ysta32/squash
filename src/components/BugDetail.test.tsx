@@ -4,10 +4,12 @@ import type { BugEvent, BugWithMeta, Comment, WorkspaceMember } from '../lib/typ
 import { BugDetail } from './BugDetail'
 
 const addComment = vi.fn<(body: string) => Promise<void>>()
+const editComment = vi.fn<(id: string, body: string) => Promise<void>>()
+const deleteComment = vi.fn<(id: string) => Promise<void>>()
 const thread: { comments: Comment[]; events: BugEvent[] } = { comments: [], events: [] }
 
 vi.mock('../hooks/useBug', () => ({
-  useBug: () => ({ ...thread, addComment, loading: false }),
+  useBug: () => ({ ...thread, addComment, editComment, deleteComment, loading: false }),
 }))
 vi.mock('../hooks/useSignedUrl', () => ({
   useSignedUrl: (path: string | null) => (path ? `https://cdn.test/${path}` : null),
@@ -441,7 +443,14 @@ describe('BugDetail', () => {
 
   it('renders comments and timeline, sends on Enter and ignores empty', async () => {
     thread.comments = [
-      { id: 'c1', bug_id: 'b1', author_id: 'u2', body: 'line1\nline2', created_at: NOW },
+      {
+        id: 'c1',
+        bug_id: 'b1',
+        author_id: 'u2',
+        body: 'line1\nline2',
+        created_at: NOW,
+        edited_at: null,
+      },
     ]
     thread.events = [
       {
