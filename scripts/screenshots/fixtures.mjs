@@ -1,7 +1,7 @@
 // HTML for the screenshots attached to the demo bugs: screens of "Lumen", a fictional analytics
 // app, each showing the problem its bug describes.
 
-const font = `font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;`
+const font = `font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;`
 
 const shell = (body, { dark = false } = {}) => `<!doctype html><html><head><style>
   * { box-sizing: border-box; margin: 0; }

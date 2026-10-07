@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const fixture = (file) =>
   fileURLToPath(new URL(`../../node_modules/.cache/squash-shots/${file}`, import.meta.url))
 
-export const SCHEMES = ['violet', 'ocean', 'forest', 'sunset', 'rose', 'graphite']
+export const SCHEMES = ['viridian', 'ocean', 'sunset', 'rose', 'graphite']
 
 export function shots({ desktop, mobile }) {
   const ws = '/app/ws-lumen'

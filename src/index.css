@@ -1,165 +1,353 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Metric-matched stand-ins shown while Plex loads (font-display: swap), so the swap barely
+   moves text. */
+@font-face {
+  font-family: 'Plex Sans Fallback';
+  src: local('Arial'), local('ArialMT'), local('Helvetica Neue'), local('Helvetica');
+  size-adjust: 100.6%;
+  ascent-override: 102.5%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Plex Mono Fallback';
+  src: local('Menlo'), local('Consolas'), local('Courier New');
+  size-adjust: 99.5%;
+  ascent-override: 102.5%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
+}
+
+/* Design tokens: see DESIGN.md section 7 ("Specimen"). Light = paper, dark = darkroom. */
 :root {
-  --bg: #ffffff;
-  --bg-subtle: #f6f6f7;
-  --bg-elevated: #ffffff;
-  --fg: #18181b;
-  --fg-muted: #68686f;
-  --muted: var(--fg-muted);
-  --border: #e4e4e7;
-  --accent: #7c3aed;
+  /* neutrals: paper */
+  --bg: #f5f3ee;
+  --surface-1: #fbfaf7;
+  --surface-2: #ffffff;
+  --surface-3: #ece9e2;
+  --text-1: #1c1b18;
+  --text-2: #57534b;
+  --text-3: #6e695f;
+  --border-1: #e2ded5;
+  --border-2: #cfcac0;
+  --border-input: #8c8679;
+  /* accent: viridian */
+  --accent: #0d6b57;
+  --accent-strong: #0a5948;
   --accent-fg: #ffffff;
-  --sev-low: #a1a1aa;
-  --sev-medium: #3b82f6;
-  --sev-high: #f59e0b;
-  --sev-critical: #ef4444;
-  --danger: #dc2626;
-  --success: #16a34a;
-  --warning: #d97706;
-  --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -6px rgb(0 0 0 / 0.12);
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px -2px rgb(0 0 0 / 0.05);
-  /* Hover/pressed accent: mixed toward black in light, toward white in dark. */
-  --accent-mix: #000000;
+  --accent-tint: #e3f0eb;
+  --focus: var(--accent);
+  /* severity */
+  --sev-low: #6c6860;
+  --sev-medium: #826400;
+  --sev-high: #ba3e0c;
+  --sev-critical: #c1121f;
+  --sev-critical-tint: #fbf0ef;
+  /* status + feedback */
+  --status-open: #57534b;
+  --status-progress: var(--accent);
+  --status-resolved: #2e772a;
+  --success: #2e772a;
+  --warning: #985a00;
+  --danger: #b42318;
+  /* motif */
+  --highlight: #f9e27d;
+  --markup: #e0321c;
+  --scrim: rgb(28 27 24 / 0.32);
+  /* paper grain: ink-colored fractal noise, about 3.5% average opacity */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.11 0 0 0 0 0.106 0 0 0 0 0.094 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+  /* elevation */
+  --elev-1: 0 1px 0 rgb(28 27 24 / 0.04), 0 1px 2px rgb(28 27 24 / 0.06);
+  --elev-2:
+    0 0 0 1px rgb(28 27 24 / 0.06), 0 2px 4px rgb(28 27 24 / 0.04),
+    0 8px 20px -4px rgb(28 27 24 / 0.12);
+  --elev-3:
+    0 0 0 1px rgb(28 27 24 / 0.06), 0 4px 8px rgb(28 27 24 / 0.04),
+    0 24px 48px -12px rgb(28 27 24 / 0.24);
+  /* motion */
+  --dur-micro: 90ms;
+  --dur-standard: 160ms;
+  --dur-emphasis: 280ms;
+  /* temporary aliases for raw var() uses in components: delete after migration */
+  --fg: var(--text-1);
+  --fg-muted: var(--text-3);
+  --muted: var(--text-3);
+  --border: var(--border-1);
+  --bg-subtle: var(--surface-1);
+  --bg-elevated: var(--surface-2);
   color-scheme: light;
 }
 
 .dark {
-  --bg: #1b1b20;
-  --bg-subtle: #232329;
-  --bg-elevated: #2a2a31;
-  --fg: #ededf0;
-  --fg-muted: #a1a1ab;
-  --muted: var(--fg-muted);
-  --border: #35353d;
-  --accent: #a78bfa;
-  --accent-fg: #1b1b20;
-  --danger: #f87171;
-  --success: #4ade80;
-  --warning: #fbbf24;
-  --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 4px 12px -4px rgb(0 0 0 / 0.35);
-  --accent-mix: #ffffff;
+  --bg: #141412;
+  --surface-1: #1a1917;
+  --surface-2: #22211e;
+  --surface-3: #2d2b27;
+  --text-1: #edeae3;
+  --text-2: #b5b0a5;
+  --text-3: #9a9589;
+  --border-1: #2f2d29;
+  --border-2: #3f3c36;
+  --border-input: #716c62;
+  --accent: #4cc4a3;
+  --accent-strong: #6fd3b8;
+  --accent-fg: #0b1f1a;
+  --accent-tint: #12302a;
+  --sev-low: #9a9589;
+  --sev-medium: #e3b341;
+  --sev-high: #fb8c4a;
+  --sev-critical: #ff6b6b;
+  --sev-critical-tint: #3a1716;
+  --status-open: #b5b0a5;
+  --status-resolved: #6cc46a;
+  --success: #6cc46a;
+  --warning: #e9a23b;
+  --danger: #ff7a70;
+  --highlight: #4a4116;
+  --scrim: rgb(0 0 0 / 0.6);
+  /* slate grain: pale noise, about 2% average opacity */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.92 0 0 0 0 0.89 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  --elev-1: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 1px 2px rgb(0 0 0 / 0.4);
+  --elev-2:
+    inset 0 1px 0 rgb(255 255 255 / 0.05), 0 0 0 1px rgb(0 0 0 / 0.5),
+    0 12px 28px -6px rgb(0 0 0 / 0.6);
+  --elev-3:
+    inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 1px rgb(0 0 0 / 0.6),
+    0 28px 56px -12px rgb(0 0 0 / 0.7);
   color-scheme: dark;
 }
 
-/* Color schemes: [data-scheme] on <html> swaps the accent and tints the neutrals.
-   Violet is the default (no attribute). Keep the list in sync with COLOR_SCHEMES in lib/theme.ts. */
+/* Schemes override the accent only. Keep IDs in sync with COLOR_SCHEMES in lib/theme.ts.
+   The default (Viridian) has no attribute; lib/theme.ts maps the retired 'violet' and
+   'forest' IDs to it on read. */
 [data-scheme='ocean'] {
-  --bg-subtle: #f3f6fa;
-  --border: #dfe5ee;
-  --accent: #2563eb;
+  --accent: #1f5fa8;
+  --accent-strong: #184c87;
+  --accent-fg: #ffffff;
 }
 .dark[data-scheme='ocean'] {
-  --bg: #161b24;
-  --bg-subtle: #1d2430;
-  --bg-elevated: #232c3a;
-  --border: #303b4d;
-  --accent: #60a5fa;
-  --accent-fg: #161b24;
+  --accent: #7db0f0;
+  --accent-strong: #a3c7f5;
+  --accent-fg: #0d1a2b;
 }
-
-[data-scheme='forest'] {
-  --bg-subtle: #f3f7f4;
-  --border: #dfe8e2;
-  --accent: #059669;
-}
-.dark[data-scheme='forest'] {
-  --bg: #151c19;
-  --bg-subtle: #1b2420;
-  --bg-elevated: #222c27;
-  --border: #2f3b35;
-  --accent: #34d399;
-  --accent-fg: #151c19;
-}
-
 [data-scheme='sunset'] {
-  --bg-subtle: #faf6f2;
-  --border: #ece4dc;
-  --accent: #ea580c;
+  --accent: #b4470f;
+  --accent-strong: #93390b;
+  --accent-fg: #ffffff;
 }
 .dark[data-scheme='sunset'] {
-  --bg: #1d1916;
-  --bg-subtle: #25201c;
-  --bg-elevated: #2d2722;
-  --border: #3d352e;
-  --accent: #fb923c;
-  --accent-fg: #1d1916;
+  --accent: #f2925a;
+  --accent-strong: #f6ae83;
+  --accent-fg: #2a1407;
 }
-
 [data-scheme='rose'] {
-  --bg-subtle: #faf4f6;
-  --border: #ede2e6;
-  --accent: #e11d48;
+  --accent: #b4235a;
+  --accent-strong: #921b49;
+  --accent-fg: #ffffff;
 }
 .dark[data-scheme='rose'] {
-  --bg: #1d171a;
-  --bg-subtle: #251d21;
-  --bg-elevated: #2d2328;
-  --border: #3e3036;
-  --accent: #fb7185;
-  --accent-fg: #1d171a;
+  --accent: #f07aa3;
+  --accent-strong: #f49dbb;
+  --accent-fg: #2a0d18;
 }
-
 [data-scheme='graphite'] {
-  --bg-subtle: #f5f5f5;
-  --border: #e5e5e5;
-  --accent: #262626;
+  --accent: #1c1b18;
+  --accent-strong: #000000;
+  --accent-fg: #ffffff;
 }
 .dark[data-scheme='graphite'] {
-  --bg: #171717;
-  --bg-subtle: #1f1f1f;
-  --bg-elevated: #262626;
-  --border: #363636;
-  --accent: #e5e5e5;
-  --accent-fg: #171717;
+  --accent: #edeae3;
+  --accent-strong: #ffffff;
+  --accent-fg: #141412;
+}
+[data-scheme] {
+  --accent-tint: color-mix(in oklab, var(--accent) 12%, var(--bg));
+}
+.dark[data-scheme] {
+  --accent-tint: color-mix(in oklab, var(--accent) 22%, var(--bg));
 }
 
 @theme inline {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans:
+    'IBM Plex Sans Variable', 'IBM Plex Sans', 'Plex Sans Fallback', ui-sans-serif, system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    'IBM Plex Mono', 'Plex Mono Fallback', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
   --color-bg: var(--bg);
-  --color-bg-subtle: var(--bg-subtle);
-  --color-bg-elevated: var(--bg-elevated);
-  --color-fg: var(--fg);
-  --color-muted: var(--fg-muted);
-  --color-border: var(--border);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--text-1);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-line: var(--border-1);
+  --color-line-2: var(--border-2);
+  --color-line-input: var(--border-input);
   --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
   --color-accent-fg: var(--accent-fg);
-  --color-accent-hover: color-mix(in oklab, var(--accent) 88%, var(--accent-mix));
-  --color-ring: var(--accent);
-  --color-danger: var(--danger);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
+  --color-accent-tint: var(--accent-tint);
+  --color-focus: var(--focus);
   --color-sev-low: var(--sev-low);
   --color-sev-medium: var(--sev-medium);
   --color-sev-high: var(--sev-high);
   --color-sev-critical: var(--sev-critical);
-  --shadow-elevated: var(--shadow-elevated);
-  --shadow-xs: var(--shadow-xs);
-  --shadow-card: var(--shadow-card);
-  --animate-in: fade-in-scale 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-fade: fade-in 150ms ease-out;
+  --color-sev-critical-tint: var(--sev-critical-tint);
+  --color-status-open: var(--status-open);
+  --color-status-progress: var(--status-progress);
+  --color-status-resolved: var(--status-resolved);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-highlight: var(--highlight);
+  --color-markup: var(--markup);
+  --color-scrim: var(--scrim);
+  /* temporary aliases: delete after migration */
+  --color-fg: var(--text-1);
+  --color-muted: var(--text-3);
+  --color-bg-subtle: var(--surface-1);
+  --color-bg-elevated: var(--surface-2);
+  --color-border: var(--border-1);
+  --color-ring: var(--focus);
+  --color-accent-hover: var(--accent-strong);
+
+  /* type scale (root = 14px) */
+  --text-label: 0.7857rem;
+  --text-label--line-height: 1.1429rem;
+  --text-label--letter-spacing: 0.06em;
+  --text-xs: 0.8571rem;
+  --text-xs--line-height: 1.1429rem;
+  --text-sm: 0.9286rem;
+  --text-sm--line-height: 1.4286rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.4286rem;
+  --text-read: 1.0714rem;
+  --text-read--line-height: 1.7143rem;
+  --text-lg: 1.2857rem;
+  --text-lg--line-height: 1.7143rem;
+  --text-lg--letter-spacing: -0.01em;
+  --text-xl: 1.5714rem;
+  --text-xl--line-height: 2rem;
+  --text-xl--letter-spacing: -0.015em;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 2.4286rem;
+  --text-2xl--letter-spacing: -0.02em;
+  --text-display-s: 2.5714rem;
+  --text-display-s--line-height: 2.8571rem;
+  --text-display-s--letter-spacing: -0.025em;
+  --text-display-m: 3.4286rem;
+  --text-display-m--line-height: 3.5714rem;
+  --text-display-m--letter-spacing: -0.03em;
+  --text-display-l: 4.5714rem;
+  --text-display-l--line-height: 4.5714rem;
+  --text-display-l--letter-spacing: -0.035em;
+  --text-display-xl: 6.2857rem;
+  --text-display-xl--line-height: 6.2857rem;
+  --text-display-xl--letter-spacing: -0.04em;
+
+  /* Spacing base stays Tailwind's default (0.25rem) per D-12; DESIGN.md's 4px base lands
+     in its own task. */
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --shadow-elev-1: var(--elev-1);
+  --shadow-elev-2: var(--elev-2);
+  --shadow-elev-3: var(--elev-3);
+  /* temporary aliases */
+  --shadow-xs: var(--elev-1);
+  --shadow-card: var(--elev-1);
+  --shadow-elevated: var(--elev-2);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --animate-in: enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade: fade-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-dialog: enter 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-arrive: arrive 1200ms linear;
+  --animate-skeleton: skeleton-pulse 1.6s ease-in-out infinite;
 }
 
 @layer base {
   html {
     font-size: 14px;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-bg text-fg font-sans;
+    background-color: var(--bg);
+    background-image: var(--grain);
+    color: var(--text-1);
   }
 
   *,
   ::before,
   ::after {
-    border-color: var(--border);
+    border-color: var(--border-1);
+  }
+
+  ::selection {
+    background: var(--highlight);
+    color: var(--text-1);
+  }
+
+  /* Global keyboard focus ring; components may refine it with focus-ring / focus-ring-inset. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-2) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-2);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-3);
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  pre code {
+    font-variant-numeric: slashed-zero;
+  }
+
+  /* Timestamps and keys sit in columns: keep their digits the same width. */
+  time,
+  kbd {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -167,29 +355,79 @@
 @utility focus-ring {
   outline: none;
   &:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus);
     outline-offset: 2px;
+  }
+}
+
+/* Dense lists (rows, menu items): the ring sits inside so it isn't clipped. */
+@utility focus-ring-inset {
+  outline: none;
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
   }
 }
 
 @utility t {
   transition-property: color, background-color, border-color, opacity, box-shadow, transform;
-  transition-duration: 150ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: var(--dur-micro);
+  transition-timing-function: var(--ease-out);
 }
 
 /* Popover / menu surface. Mirrors panelClass in components/ui/styles.ts. */
 @utility panel {
-  border-radius: 0.5rem;
-  border: 1px solid var(--border);
-  background-color: var(--bg-elevated);
-  box-shadow: var(--shadow-elevated);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-1);
+  background-color: var(--surface-2);
+  box-shadow: var(--elev-2);
 }
 
-@keyframes fade-in-scale {
+@utility nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility specimen-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Depth (DESIGN.md section 8). Paper grain on the page background. */
+@utility paper-grain {
+  background-color: var(--bg);
+  background-image: var(--grain);
+}
+
+/* Desk-lamp falloff from the top left: marketing heroes and the auth panel only. */
+@utility cabinet-light {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 90% at 0% 0%, var(--surface-1) 0%, transparent 65%), var(--grain);
+}
+
+/* Translucent surface for overlays only: command palette, sticky marketing nav. */
+@utility glass {
+  background-color: color-mix(in oklab, var(--surface-2) 78%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+}
+
+/* Blurred scrim behind the lightbox and dialogs. */
+@utility glass-scrim {
+  background-color: var(--scrim);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+@keyframes enter {
   from {
     opacity: 0;
-    transform: translateY(-2px) scale(0.98);
+    transform: translateY(-4px);
   }
   to {
     opacity: 1;
@@ -213,15 +451,49 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
+@keyframes arrive {
+  from {
+    background-color: var(--highlight);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Reduced motion: drop every transform and position animation, keep feedback as short
+   opacity/color changes (Apple HIG pattern) instead of removing it. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
-    transition-duration: 0ms !important;
     animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: 90ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-in,
+  .animate-fade,
+  .animate-dialog {
+    animation-name: fade-in !important;
+    animation-duration: 90ms !important;
+  }
+  .animate-arrive {
+    animation: none !important;
+    background-color: var(--highlight);
   }
 }

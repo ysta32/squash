@@ -3,44 +3,24 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 export type Theme = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
-export const COLOR_SCHEMES = ['violet', 'ocean', 'forest', 'sunset', 'rose', 'graphite'] as const
+/** Schemes only swap the accent; neutrals are always paper (light) or darkroom (dark). */
+export const COLOR_SCHEMES = ['viridian', 'ocean', 'sunset', 'rose', 'graphite'] as const
 export type ColorScheme = (typeof COLOR_SCHEMES)[number]
+export const DEFAULT_SCHEME: ColorScheme = 'viridian'
+
+/** Page background per mode; mirrors --bg in index.css (used for the theme-color meta). */
+export const THEME_BG: Record<ResolvedTheme, string> = { light: '#f5f3ee', dark: '#141412' }
 
 /** Labels and preview swatches for the scheme picker; values mirror index.css. */
 export const SCHEME_INFO: Record<
   ColorScheme,
   { label: string; accent: Record<ResolvedTheme, string>; bg: Record<ResolvedTheme, string> }
 > = {
-  violet: {
-    label: 'Violet',
-    accent: { light: '#7c3aed', dark: '#a78bfa' },
-    bg: { light: '#ffffff', dark: '#1b1b20' },
-  },
-  ocean: {
-    label: 'Ocean',
-    accent: { light: '#2563eb', dark: '#60a5fa' },
-    bg: { light: '#ffffff', dark: '#161b24' },
-  },
-  forest: {
-    label: 'Forest',
-    accent: { light: '#059669', dark: '#34d399' },
-    bg: { light: '#ffffff', dark: '#151c19' },
-  },
-  sunset: {
-    label: 'Sunset',
-    accent: { light: '#ea580c', dark: '#fb923c' },
-    bg: { light: '#ffffff', dark: '#1d1916' },
-  },
-  rose: {
-    label: 'Rose',
-    accent: { light: '#e11d48', dark: '#fb7185' },
-    bg: { light: '#ffffff', dark: '#1d171a' },
-  },
-  graphite: {
-    label: 'Graphite',
-    accent: { light: '#262626', dark: '#e5e5e5' },
-    bg: { light: '#ffffff', dark: '#171717' },
-  },
+  viridian: { label: 'Viridian', accent: { light: '#0d6b57', dark: '#4cc4a3' }, bg: THEME_BG },
+  ocean: { label: 'Cyanotype', accent: { light: '#1f5fa8', dark: '#7db0f0' }, bg: THEME_BG },
+  sunset: { label: 'Rust', accent: { light: '#b4470f', dark: '#f2925a' }, bg: THEME_BG },
+  rose: { label: 'Madder', accent: { light: '#b4235a', dark: '#f07aa3' }, bg: THEME_BG },
+  graphite: { label: 'Ink', accent: { light: '#1c1b18', dark: '#edeae3' }, bg: THEME_BG },
 }
 
 export const THEME_KEY = 'squash:theme'
@@ -56,12 +36,19 @@ function readStored(): Theme {
   }
 }
 
+/** Maps a stored value to a current scheme. Retired IDs ('violet', 'forest') and unknown values
+ * fall back to the default so an old preference never leaves the app without an accent. */
+export function toColorScheme(value: string | null): ColorScheme {
+  return (COLOR_SCHEMES as readonly string[]).includes(value ?? '')
+    ? (value as ColorScheme)
+    : DEFAULT_SCHEME
+}
+
 function readStoredScheme(): ColorScheme {
   try {
-    const v = localStorage.getItem(SCHEME_KEY)
-    return (COLOR_SCHEMES as readonly string[]).includes(v ?? '') ? (v as ColorScheme) : 'violet'
+    return toColorScheme(localStorage.getItem(SCHEME_KEY))
   } catch {
-    return 'violet'
+    return DEFAULT_SCHEME
   }
 }
 
@@ -78,7 +65,7 @@ function apply(theme: Theme, scheme: ColorScheme = readStoredScheme()): Resolved
   const resolved = resolve(theme)
   const root = document.documentElement
   root.classList.toggle('dark', resolved === 'dark')
-  if (scheme === 'violet') root.removeAttribute('data-scheme')
+  if (scheme === DEFAULT_SCHEME) root.removeAttribute('data-scheme')
   else root.setAttribute('data-scheme', scheme)
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (!meta) {
@@ -86,7 +73,7 @@ function apply(theme: Theme, scheme: ColorScheme = readStoredScheme()): Resolved
     meta.name = 'theme-color'
     document.head.appendChild(meta)
   }
-  meta.content = SCHEME_INFO[scheme].bg[resolved]
+  meta.content = THEME_BG[resolved]
   return resolved
 }
 

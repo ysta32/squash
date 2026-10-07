@@ -328,7 +328,7 @@ describe('Settings', () => {
     expect(localStorage.getItem('squash:theme')).toBe('dark')
     expect(
       within(screen.getByRole('radiogroup', { name: 'Color scheme' })).getAllByRole('radio'),
-    ).toHaveLength(6)
+    ).toHaveLength(5)
   })
 
   it('recursively removes screenshots before deleting and clears last workspace', async () => {
@@ -410,13 +410,13 @@ describe('Settings', () => {
   it('switches and remembers the color scheme from the appearance tab', () => {
     localStorage.clear()
     show('appearance')
-    const ocean = screen.getByRole('radio', { name: 'Color scheme Ocean' })
-    expect(screen.getByRole('radio', { name: 'Color scheme Violet' })).toBeChecked()
+    const ocean = screen.getByRole('radio', { name: 'Color scheme Cyanotype' })
+    expect(screen.getByRole('radio', { name: 'Color scheme Viridian' })).toBeChecked()
     fireEvent.click(ocean)
     expect(ocean).toBeChecked()
     expect(document.documentElement.dataset.scheme).toBe('ocean')
     expect(localStorage.getItem('squash:scheme')).toBe('ocean')
-    fireEvent.click(screen.getByRole('radio', { name: 'Color scheme Violet' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Color scheme Viridian' }))
     expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
   })
 })

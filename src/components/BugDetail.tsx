@@ -324,7 +324,7 @@ function BugBody({
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <span className="px-1 font-mono text-xs text-muted tabular-nums">
+            <span className="px-1 font-mono text-xs font-medium text-muted tabular-nums">
               #{bug.optimistic ? '…' : bug.number}
             </span>
             <button

@@ -98,7 +98,9 @@ export const BugRow = memo(function BugRow({
           />
         )}
       </span>
-      <span className="min-w-9 shrink-0 font-mono text-xs tabular-nums text-muted">#{num}</span>
+      <span className="min-w-9 shrink-0 font-mono text-xs font-medium tabular-nums text-muted">
+        #{num}
+      </span>
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg" title={bug.title}>
         {bug.title}
       </span>
@@ -150,7 +152,7 @@ export const BugRow = memo(function BugRow({
         <time
           dateTime={bug.created_at}
           title={new Date(bug.created_at).toLocaleString()}
-          className="w-12 truncate text-right tabular-nums"
+          className="w-12 truncate text-right font-mono tabular-nums"
         >
           {relativeTime(bug.created_at)}
         </time>
