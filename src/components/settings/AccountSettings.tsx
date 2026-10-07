@@ -1,3 +1,4 @@
+import { Button, Field, Section, inputClass } from '../ui'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
@@ -28,27 +29,29 @@ function OwnershipTransfer({
     )
   if (role !== 'owner' || candidates.length === 0) return null
   return (
-    <div className="space-y-2 rounded-md border border-border p-3">
-      <label className="block space-y-2">
-        <span>New owner for {workspace.name}</span>
-        <select
-          value={selected}
-          disabled={busy}
-          onChange={(event) => setSelected(event.target.value)}
-          className="t block w-full rounded-md border border-border bg-bg px-3 py-2 focus:outline-accent"
-        >
-          <option value="">Choose a member</option>
-          {candidates.map((member) => (
-            <option key={member.user_id} value={member.user_id}>
-              {member.profile.display_name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
+    <div className="space-y-3 rounded-xl border border-border p-3">
+      <Field label={`New owner for ${workspace.name}`}>
+        {({ id, describedBy }) => (
+          <select
+            id={id}
+            aria-describedby={describedBy}
+            value={selected}
+            disabled={busy}
+            onChange={(event) => setSelected(event.target.value)}
+            className={inputClass}
+          >
+            <option value="">Choose a member</option>
+            {candidates.map((member) => (
+              <option key={member.user_id} value={member.user_id}>
+                {member.profile.display_name}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      <Button
         type="button"
         disabled={busy || !candidates.some((member) => member.user_id === selected)}
-        className="t rounded-md border border-border px-3 py-2 hover:bg-bg-subtle disabled:opacity-50"
         onClick={() =>
           void onTransfer(async () => {
             await transferOwnership(selected)
@@ -57,7 +60,7 @@ function OwnershipTransfer({
         }
       >
         Transfer
-      </button>
+      </Button>
     </div>
   )
 }
@@ -71,8 +74,6 @@ export function AccountSettings() {
   const [deleted, setDeleted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const button =
-    't rounded-md border border-border px-3 py-2 hover:bg-bg-subtle disabled:opacity-50'
 
   async function run(action: () => Promise<void>) {
     if (busy) return
@@ -136,22 +137,23 @@ export function AccountSettings() {
 
   return (
     <section className="space-y-6">
-      <h2 className="text-lg font-medium">Account</h2>
-      <button className={button} disabled={busy} onClick={() => void run(finishSignOut)}>
-        Sign out
-      </button>
-      {error && !open && (
-        <p role="alert" className="text-red-500">
-          {error}
-        </p>
-      )}
-      <div className="space-y-3 border-t border-border pt-6">
-        <h3 className="font-medium text-red-500">Danger zone</h3>
-        <p className="text-sm text-muted">
-          Permanently delete your account and workspaces you own alone.
-        </p>
-        <button
-          className={`${button} text-red-500`}
+      <Section title="Account" description="Manage your sign-in session.">
+        <Button disabled={busy} onClick={() => void run(finishSignOut)}>
+          Sign out
+        </Button>
+        {error && !open && (
+          <p role="alert" className="text-danger">
+            {error}
+          </p>
+        )}
+      </Section>
+      <Section
+        title="Delete account"
+        tone="danger"
+        description="Permanently delete your account and workspaces you own alone. This cannot be undone."
+      >
+        <Button
+          variant="danger"
           disabled={busy}
           onClick={() => {
             setError(null)
@@ -159,8 +161,8 @@ export function AccountSettings() {
           }}
         >
           Delete account
-        </button>
-      </div>
+        </Button>
+      </Section>
       {open && (
         <dialog
           ref={(node) => {
@@ -171,7 +173,7 @@ export function AccountSettings() {
             if (!busy) setOpen(false)
           }}
           aria-labelledby="delete-account-title"
-          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-lg border border-border bg-bg-elevated p-6 text-fg backdrop:bg-black/50"
+          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-6 text-fg backdrop:bg-fg/50"
         >
           <h3 id="delete-account-title" className="text-lg font-medium">
             Delete account permanently?
@@ -188,17 +190,12 @@ export function AccountSettings() {
               {loading && <p role="status">Loading workspaces…</p>}
               {workspaceError && (
                 <div>
-                  <p role="alert" className="text-red-500">
+                  <p role="alert" className="text-danger">
                     {workspaceError}
                   </p>
-                  <button
-                    type="button"
-                    className={button}
-                    disabled={busy}
-                    onClick={() => void run(refresh)}
-                  >
+                  <Button type="button" disabled={busy} onClick={() => void run(refresh)}>
                     Reload workspaces
-                  </button>
+                  </Button>
                 </div>
               )}
               {workspaces
@@ -214,25 +211,15 @@ export function AccountSettings() {
             </div>
           )}
           {error && (
-            <p role="alert" className="text-red-500">
+            <p role="alert" className="text-danger">
               {error}
             </p>
           )}
           <div className="flex justify-end gap-3">
-            <button
-              autoFocus
-              type="button"
-              disabled={busy}
-              className={button}
-              onClick={() => setOpen(false)}
-            >
+            <Button autoFocus type="button" disabled={busy} onClick={() => setOpen(false)}>
               Cancel
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => void deleteAccount()}
-              className="t rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-            >
+            </Button>
+            <Button disabled={busy} onClick={() => void deleteAccount()} variant="danger">
               {busy
                 ? 'Working…'
                 : deleted
@@ -240,7 +227,7 @@ export function AccountSettings() {
                   : needsTransfer
                     ? 'Retry deleting account'
                     : 'Delete account'}
-            </button>
+            </Button>
           </div>
         </dialog>
       )}

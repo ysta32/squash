@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Settings from './Settings'
 
@@ -224,7 +224,7 @@ describe('Settings', () => {
     expect(screen.getByText('Only the owner can change workspace settings')).toBeInTheDocument()
     expect(screen.getByText('Grace')).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /Delete workspace|Remove|Regenerate|Save name/ }),
+      screen.queryByRole('button', { name: /Delete workspace|Remove|Regenerate|Save/ }),
     ).not.toBeInTheDocument()
   })
 
@@ -248,7 +248,7 @@ describe('Settings', () => {
       target: { value: '  Ada Lovelace  ' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Avatar color #14b8a6' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await screen.findByText('Profile saved.')
     expect(mocks.update).toHaveBeenCalledWith({
       display_name: 'Ada Lovelace',
@@ -256,6 +256,74 @@ describe('Settings', () => {
     })
     expect(mocks.eq).toHaveBeenCalledWith('id', 'self')
     expect(mocks.refreshProfile).toHaveBeenCalledOnce()
+  })
+
+  it('enables profile save only for changes and clears the saved state briefly after success', async () => {
+    show()
+    const name = screen.getByLabelText('Display name')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: 'Ada changed' } })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    fireEvent.change(name, { target: { value: 'Ada' } })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: 'Ada changed' } })
+    vi.useFakeTimers()
+    try {
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
+      expect(screen.getByRole('button', { name: 'Saved' })).toBeDisabled()
+      act(() => vi.advanceTimersByTime(2500))
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a failed profile save dirty and available to retry', async () => {
+    mocks.eq.mockResolvedValue({ error: { message: 'Update failed' } })
+    show()
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'New name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Update failed')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(mocks.refreshProfile).not.toHaveBeenCalled()
+  })
+
+  it('enables workspace save only when dirty and resets it after saving', async () => {
+    show('workspace')
+    const name = screen.getByLabelText('Workspace name')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: 'Team workspace' } })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    fireEvent.change(name, { target: { value: 'My workspace' } })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: 'Team workspace' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('button', { name: 'Saved' })).toBeDisabled()
+    expect(mocks.rename).toHaveBeenCalledWith('Team workspace')
+    fireEvent.change(name, { target: { value: 'Another workspace' } })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  it('offers a workspace picker link when no workspace is selected', () => {
+    render(
+      <MemoryRouter initialEntries={['/settings?tab=workspace']}>
+        <Settings />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('heading', { name: 'Choose a workspace' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Choose workspace' })).toHaveAttribute('href', '/app')
+  })
+
+  it('exposes native radio groups for mode and scheme', () => {
+    show('appearance')
+    const modes = screen.getByRole('radiogroup', { name: 'Mode' })
+    expect(within(modes).getAllByRole('radio')).toHaveLength(3)
+    fireEvent.click(within(modes).getByRole('radio', { name: 'Dark' }))
+    expect(within(modes).getByRole('radio', { name: 'Dark' })).toBeChecked()
+    expect(localStorage.getItem('squash:theme')).toBe('dark')
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Color scheme' })).getAllByRole('radio'),
+    ).toHaveLength(6)
   })
 
   it('recursively removes screenshots before deleting and clears last workspace', async () => {
@@ -337,16 +405,13 @@ describe('Settings', () => {
   it('switches and remembers the color scheme from the appearance tab', () => {
     localStorage.clear()
     show('appearance')
-    const ocean = screen.getByRole('button', { name: 'Color scheme Ocean' })
-    expect(screen.getByRole('button', { name: 'Color scheme Violet' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    const ocean = screen.getByRole('radio', { name: 'Color scheme Ocean' })
+    expect(screen.getByRole('radio', { name: 'Color scheme Violet' })).toBeChecked()
     fireEvent.click(ocean)
-    expect(ocean).toHaveAttribute('aria-pressed', 'true')
+    expect(ocean).toBeChecked()
     expect(document.documentElement.dataset.scheme).toBe('ocean')
     expect(localStorage.getItem('squash:scheme')).toBe('ocean')
-    fireEvent.click(screen.getByRole('button', { name: 'Color scheme Violet' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Color scheme Violet' }))
     expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
   })
 })
