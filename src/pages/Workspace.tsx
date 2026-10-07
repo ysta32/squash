@@ -24,6 +24,8 @@ import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
 import { isOverlayOpen, useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
+import { useNotifications } from '../hooks/useNotifications'
+import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
 import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
@@ -57,6 +59,16 @@ export default function Workspace() {
   const { toast } = useToast()
   const ws = useWorkspace(workspaceId)
   const { workspaces } = useWorkspaces()
+  const { notify } = useNotifications()
+  const [unreadCount, setUnreadCount] = useState(0)
+  useUnreadTitle(unreadCount)
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') setUnreadCount(0)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [])
 
   const [highlightIds, setHighlightIds] = useState<Set<string>>(() => new Set())
   const highlightTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
@@ -72,7 +84,15 @@ export default function Workspace() {
     if (bug.filed_by !== selfId) {
       const name =
         ws.members.find((m) => m.user_id === bug.filed_by)?.profile.display_name ?? 'Someone'
-      toast(`${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
+      const title = `${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`
+      toast(title)
+      notify({
+        title,
+        body: bug.title,
+        tag: bug.id,
+        onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}`),
+      })
+      if (document.visibilityState !== 'visible') setUnreadCount((count) => count + 1)
     }
     setHighlightIds((prev) => new Set(prev).add(bug.id))
     const timers = highlightTimers.current
