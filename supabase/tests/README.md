@@ -1,8 +1,8 @@
 # Database tests
 
 `rls.sql` is a self-contained psql script that checks RLS policies, RPC auth errors, abuse limits
-(`member_limit`, `workspace_limit`, `attachment_limit`, `rate_limited`), `bug_events` triggers and the
-`screenshots` storage policies.
+(`member_limit`, `workspace_limit`, `attachment_limit`, `rate_limited` for bugs and comments), `bug_events`
+triggers, who may delete a bug and the `bug_deletions` log, and the `screenshots` storage policies.
 
 ## Run locally without a database
 

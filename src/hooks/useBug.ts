@@ -151,6 +151,9 @@ export function useBug(bugId: string | null): {
         .insert({ bug_id: bugId, author_id: authorId, body: text })
         .select()
         .single()
+      if (error?.message.includes('rate_limited')) {
+        throw new Error('Slow down — max 30 comments per minute.')
+      }
       if (error || !data) throw new Error(error?.message ?? 'Could not post comment.')
       apply(bugId, (s) => ({ ...s, comments: mergeById(s.comments, [data]) }))
     },

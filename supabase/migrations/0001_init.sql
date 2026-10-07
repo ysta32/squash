@@ -19,6 +19,8 @@
 --   workspace_limit              user already owns 5 workspaces
 --   attachment_limit             bug already has 10 attachments
 --   rate_limited                 more than 30 bugs filed by the user in the last 60 seconds
+--                                (0005_hardening.sql: also more than 30 comments by the author)
+--   Later migrations add codes in their own headers (0004: assignee_not_member).
 -- =============================================================================
 
 -- Every SECURITY DEFINER function below must bypass RLS (all tables use FORCE

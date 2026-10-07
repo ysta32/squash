@@ -153,6 +153,20 @@ describe('BugDetail', () => {
     expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
   })
 
+  it('offers delete only to the filer and the workspace owner', () => {
+    // Filer who is not the owner (u2 filed it).
+    setup(makeBug({ filed_by: 'u2' }), { onDelete: vi.fn(), selfId: 'u2' })
+    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeEnabled()
+    cleanup()
+    // Workspace owner (u1) on someone else's bug.
+    setup(makeBug({ filed_by: 'u2' }), { onDelete: vi.fn(), selfId: 'u1' })
+    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeEnabled()
+    cleanup()
+    // Ordinary member (u2) on a bug they did not file.
+    setup(makeBug({ filed_by: 'u1' }), { onDelete: vi.fn(), selfId: 'u2' })
+    expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
+  })
+
   it('shows a placeholder when no bug is selected', () => {
     setup(null)
     expect(screen.getByText('Select a bug to see its details')).toBeTruthy()

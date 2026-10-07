@@ -472,6 +472,133 @@ do $$ declare b uuid := current_setting('t.bug1')::uuid; begin
     raise exception 'FAIL[60]: unassign failed'; end if;
 end $$;
 
+-- ===== Hardening (0005_hardening.sql): delete = filer or owner; deletion log; comment rate limit =====
+:as_pg
+-- [61] re-running 0001..0005 in order ends with exactly one, restrictive, bugs DELETE policy
+do $$ begin
+  if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'bugs' and cmd = 'DELETE') <> 1 then
+    raise exception 'FAIL[61]: expected exactly one DELETE policy on bugs'; end if;
+  if (select qual from pg_policies where schemaname = 'public' and tablename = 'bugs' and policyname = 'bugs_delete')
+     not like '%is_workspace_owner%' then
+    raise exception 'FAIL[61]: bugs_delete is not the filer-or-owner policy from 0005'; end if;
+end $$;
+:as_b
+-- [62] a member who did not file the bug (B; bug1 is A's) cannot delete it
+do $$ declare n int; begin
+  delete from public.bugs where id = current_setting('t.bug1')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[62]: non-filer member deleted a bug'; end if;
+end $$;
+:as_pg
+do $$ begin
+  if not exists (select 1 from public.bugs where id = current_setting('t.bug1')::uuid) then
+    raise exception 'FAIL[62]: bug1 gone after refused delete'; end if;
+end $$;
+:as_b
+-- [63] the filer can delete their own bug; the deletion is logged with deleted_by and visible to members
+do $$ declare b uuid; num int; n int; begin
+  insert into public.bugs (workspace_id, title, description, severity, filed_by, kind)
+    values (current_setting('t.ws1')::uuid, 'Filer deletes', 'x', 'low', '10000000-0000-0000-0000-000000000002', 'feature')
+    returning id, number into b, num;
+  perform set_config('t.del_filer_num', num::text, true);
+  delete from public.bugs where id = b; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[63]: filer could not delete own bug'; end if;
+  if not exists (select 1 from public.bug_deletions
+                 where workspace_id = current_setting('t.ws1')::uuid and bug_number = num
+                   and title = 'Filer deletes' and kind = 'feature'
+                   and deleted_by = '10000000-0000-0000-0000-000000000002' and deleted_at is not null) then
+    raise exception 'FAIL[63]: deletion not logged (or not visible to the member) with deleted_by'; end if;
+  -- the refused delete in [62] logged nothing
+  if exists (select 1 from public.bug_deletions d join public.bugs x on x.number = d.bug_number and x.workspace_id = d.workspace_id
+             where x.id = current_setting('t.bug1')::uuid) then
+    raise exception 'FAIL[63]: refused delete was logged'; end if;
+  insert into public.bugs (workspace_id, title, description, severity, filed_by)
+    values (current_setting('t.ws1')::uuid, 'Owner deletes', 'x', 'low', '10000000-0000-0000-0000-000000000002')
+    returning id into b;
+  perform set_config('t.bug_owner_target', b::text, true);
+end $$;
+:as_a
+-- [64] the workspace owner can delete a bug filed by someone else
+do $$ declare n int; num int; begin
+  select number into num from public.bugs where id = current_setting('t.bug_owner_target')::uuid;
+  delete from public.bugs where id = current_setting('t.bug_owner_target')::uuid; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[64]: owner could not delete a member''s bug'; end if;
+  if not exists (select 1 from public.bug_deletions
+                 where workspace_id = current_setting('t.ws1')::uuid and bug_number = num
+                   and deleted_by = '10000000-0000-0000-0000-000000000001') then
+    raise exception 'FAIL[64]: owner deletion not logged with deleted_by = owner'; end if;
+end $$;
+:as_c
+-- [65] outsiders see no deletion log rows and cannot delete through the new policy
+do $$ begin
+  if exists (select 1 from public.bug_deletions) then
+    raise exception 'FAIL[65]: outsider sees bug_deletions'; end if;
+end $$;
+:as_anon
+do $$ declare n int; begin
+  begin select count(*) into n from public.bug_deletions;
+  exception when sqlstate '42501' then n := 0; end;
+  if n <> 0 then raise exception 'FAIL[65]: anon sees bug_deletions'; end if;
+end $$;
+:as_b
+-- [66] members cannot insert, update or delete deletion log rows
+do $$ declare n int; begin
+  begin
+    insert into public.bug_deletions (workspace_id, bug_number, title, kind, deleted_by)
+      values (current_setting('t.ws1')::uuid, 999, 'forged', 'bug', '10000000-0000-0000-0000-000000000001');
+    raise exception 'FAIL[66]: member inserted bug_deletions';
+  exception when others then if sqlstate <> '42501' then raise; end if;
+  end;
+  begin update public.bug_deletions set title = 'tamper'; get diagnostics n = row_count;
+  exception when sqlstate '42501' then n := 0; end;
+  if n <> 0 then raise exception 'FAIL[66]: member updated bug_deletions'; end if;
+  begin delete from public.bug_deletions; get diagnostics n = row_count;
+  exception when sqlstate '42501' then n := 0; end;
+  if n <> 0 then raise exception 'FAIL[66]: member deleted bug_deletions'; end if;
+end $$;
+:as_pg
+do $$ begin
+  if not exists (select 1 from public.bug_deletions
+                 where workspace_id = current_setting('t.ws1')::uuid
+                   and bug_number = current_setting('t.del_filer_num')::int and title = 'Filer deletes') then
+    raise exception 'FAIL[66]: deletion log row was changed or removed by a member'; end if;
+  -- defense in depth: no write grants at all (RLS alone does not cover TRUNCATE)
+  if has_table_privilege('authenticated', 'public.bug_deletions', 'INSERT, UPDATE, DELETE, TRUNCATE')
+     or has_table_privilege('anon', 'public.bug_deletions', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE') then
+    raise exception 'FAIL[66]: bug_deletions has client write grants (or anon access)'; end if;
+end $$;
+:as_r
+-- [67] comments: 30 per author per minute, the 31st is rejected; created_at is server-owned
+do $$ declare b uuid; i int; ts timestamptz; begin
+  select id into b from public.bugs where filed_by = '10000000-0000-0000-0000-000000000014' order by number limit 1;
+  insert into public.comments (bug_id, author_id, body, created_at)
+    values (b, '10000000-0000-0000-0000-000000000014', 'backdated', '2000-01-01')
+    returning created_at into ts;
+  if ts <> now() then raise exception 'FAIL[67]: client-supplied comments.created_at was kept'; end if;
+  for i in 2..30 loop
+    insert into public.comments (bug_id, author_id, body) values (b, '10000000-0000-0000-0000-000000000014', 'c' || i);
+  end loop;
+  begin
+    insert into public.comments (bug_id, author_id, body) values (b, '10000000-0000-0000-0000-000000000014', 'c31');
+    raise exception 'FAIL[67]: 31st comment in a minute accepted';
+  exception when others then if sqlerrm <> 'rate_limited' then raise; end if; end;
+end $$;
+-- [68] deleting a workspace that has bugs and deletion log rows still works and removes its log
+do $$ declare w uuid; b uuid; begin
+  select workspace_id, id into w, b from public.bugs where filed_by = '10000000-0000-0000-0000-000000000014' order by number limit 1;
+  delete from public.bugs where id = b;
+  if not exists (select 1 from public.bug_deletions where workspace_id = w) then
+    raise exception 'FAIL[68]: deletion in Rate WS not logged'; end if;
+  perform public.delete_workspace(w);
+  perform set_config('t.rate_ws', w::text, true);
+end $$;
+:as_pg
+do $$ begin
+  if exists (select 1 from public.bug_deletions where workspace_id = current_setting('t.rate_ws')::uuid) then
+    raise exception 'FAIL[68]: deletion log survived its workspace'; end if;
+  if exists (select 1 from public.bugs where workspace_id = current_setting('t.rate_ws')::uuid) then
+    raise exception 'FAIL[68]: bugs survived their workspace'; end if;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

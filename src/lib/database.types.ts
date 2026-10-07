@@ -284,6 +284,49 @@ export type Database = {
           },
         ]
       }
+      /**
+       * Record of deleted bugs (0005_hardening.sql). Members of the workspace can read it; written only
+       * by the bugs_log_deletion trigger (no client INSERT/UPDATE/DELETE grants).
+       */
+      bug_deletions: {
+        Row: {
+          id: string
+          workspace_id: string
+          bug_number: number
+          title: string
+          kind: BugKindEnum
+          /** null when deleted without a signed-in user (service role / dashboard). */
+          deleted_by: string | null
+          deleted_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          bug_number: number
+          title: string
+          kind: BugKindEnum
+          deleted_by?: string | null
+          deleted_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          bug_number?: number
+          title?: string
+          kind?: BugKindEnum
+          deleted_by?: string | null
+          deleted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'bug_deletions_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       /** Rate-limit log written only by the bugs_rate_limit trigger; no client access (RLS, no grants). */
       bug_filings: {
         Row: {
@@ -306,6 +349,10 @@ export type Database = {
     }
     Functions: {
       is_member: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
+      is_workspace_owner: {
         Args: { p_workspace_id: string }
         Returns: boolean
       }

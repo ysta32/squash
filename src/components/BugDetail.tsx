@@ -49,7 +49,10 @@ export interface BugDetailProps {
   onAssign?: (id: string, userId: string | null) => void | Promise<void>
   /** Counter bumped by the keyboard shortcut to open the assignee picker. */
   assignRequest?: number
-  /** Permanently deletes the bug (after the user confirms). */
+  /**
+   * Permanently deletes the bug (after the user confirms). Only offered to the member who filed
+   * the bug and to the workspace owner, matching the bugs_delete policy (0005_hardening.sql).
+   */
   onDelete?: (id: string) => Promise<void>
   onBack: () => void
   /** Counter bumped by the keyboard shortcut to open the Resolve popover. */
@@ -169,6 +172,8 @@ function BugBody({
   const resolver = bug.resolved_by ? (profiles.get(bug.resolved_by) ?? null) : null
   const editable = !bug.optimistic
   const isOpen = bug.status === 'open'
+  const canDelete =
+    bug.filed_by === selfId || members.some((m) => m.user_id === selfId && m.role === 'owner')
 
   const description = descDraft ?? bug.description
   const showRendered = !descFocused && description.trim() !== ''
@@ -384,7 +389,7 @@ function BugBody({
                 onConfirm={confirmPopover}
               />
             </div>
-            {onDelete && (
+            {onDelete && canDelete && (
               <button
                 type="button"
                 disabled={!editable}
@@ -398,7 +403,7 @@ function BugBody({
             )}
           </div>
         </header>
-        {onDelete && confirmDelete && (
+        {onDelete && canDelete && confirmDelete && (
           <DeleteDialog
             bug={bug}
             onCancel={() => setConfirmDelete(false)}
