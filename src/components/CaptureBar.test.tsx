@@ -193,6 +193,21 @@ describe('CaptureBar', () => {
     expect(onSubmit.mock.calls[0][0].severity).toBe('critical')
   })
 
+  it('severity control shows the label, picks from its menu, and resets after filing', async () => {
+    const { onSubmit, box } = setup()
+    const send = screen.getByRole('button', { name: 'File bug' })
+    expect(send).toBeDisabled()
+    fireEvent.change(box, { target: { value: 'x' } })
+    expect(send).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Severity: Medium' }))
+    fireEvent.click(screen.getByRole('option', { name: /High/ }))
+    expect(screen.getByRole('button', { name: 'Severity: High' })).toBeInTheDocument()
+    fireEvent.click(send)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].severity).toBe('high')
+    expect(screen.getByRole('button', { name: 'Severity: Medium' })).toBeInTheDocument()
+  })
+
   it('adds and removes attachment chips, rejecting oversized files', () => {
     const { onToast } = setup()
     const input = screen.getByTestId('file-input')
