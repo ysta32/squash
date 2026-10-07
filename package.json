@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "size": "node scripts/size-check.mjs",
     "preview": "vite preview",
     "claude-bridge": "node public/bridge/claude-bridge.mjs",
     "hotkey": "swift scripts/squash-hotkey.swift",
