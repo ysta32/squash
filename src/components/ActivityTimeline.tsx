@@ -31,27 +31,42 @@ function assignedVerb(ev: BugEvent, names: Map<string, string>): string {
 /** Class for a timeline row; `last` drops the rail that joins it to the next row. */
 export const TIMELINE_ITEM = 'relative flex min-w-0 items-start gap-3'
 
-/** The 1px rail joining a row's glyph to the next row's. */
+/**
+ * The 1px rail from this row's glyph centre to the next row's (rows have no gap between them),
+ * so consecutive rows draw one continuous line; glyphs knock it out with the page background.
+ */
 export function TimelineRail() {
-  return <span aria-hidden="true" className="absolute top-6 -bottom-1 left-[9.5px] w-px bg-line" />
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute top-[10px] -bottom-[10px] left-[9.5px] w-px bg-line-2"
+    />
+  )
 }
+
+/** The 20px glyph column every timeline row centres its icon or avatar on. */
+export const TIMELINE_GLYPH =
+  'relative z-[1] inline-flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-bg'
 
 /** One activity line in a timeline: a quiet `xs` `text-3` sentence with an icon on the rail. */
 export function ActivityEntry({
   event: ev,
   names,
   last = false,
+  hideNote = false,
 }: {
   event: BugEvent
   names: Map<string, string>
   last?: boolean
+  /** Set when the note is already shown elsewhere (the detail header's resolution quote). */
+  hideNote?: boolean
 }) {
   const Icon = ICON[ev.type]
-  const showNote = (ev.type === 'resolved' || ev.type === 'reopened') && ev.note
+  const showNote = !hideNote && (ev.type === 'resolved' || ev.type === 'reopened') && ev.note
   return (
     <li className={cn(TIMELINE_ITEM, !last && 'pb-4')}>
       {!last && <TimelineRail />}
-      <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-bg text-ink-3">
+      <span className={cn(TIMELINE_GLYPH, 'text-ink-3')}>
         <Icon size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
       </span>
       <div className="min-w-0 pt-0.5 text-xs text-ink-3">

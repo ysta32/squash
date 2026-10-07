@@ -68,6 +68,12 @@ const seeds: Seed[] = [
     severity: 'critical',
     filed_by: 'u-jordan',
     assignee_id: ME,
+    context: {
+      url: 'https://app.lumen.example/checkout?plan=growth',
+      viewport: { w: 390, h: 844, dpr: 3 },
+      browser: 'Safari 18',
+      os: 'iOS',
+    },
     minutes: 6,
   },
   {
@@ -198,6 +204,7 @@ export const bugs: Bug[] = [...seeds, ...featureSeeds].map((s) => ({
   title: s.title,
   description: s.description ?? '',
   transcript: s.transcript ?? null,
+  context: s.context ?? null,
   severity: s.severity,
   status: s.status ?? 'open',
   kind: s.kind ?? 'bug',

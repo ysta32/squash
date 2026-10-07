@@ -10,18 +10,26 @@ import { Kbd } from './ui'
 const TICKS: Record<Severity, number> = { low: 1, medium: 2, high: 3, critical: 4 }
 
 /**
- * Field-notebook tally for a severity: 1–4 vertical ticks (2px wide, 8px tall, 2px gap) in the
- * severity's colour, so it never relies on colour alone. Always 14px wide to sit in a column.
+ * Field-notebook meter for a severity: four 2px × 8px slots with 2px gaps; the first 1–4 are
+ * filled in the severity colour and the rest stay `--border-2`, so Low reads as 1/4 and Critical
+ * as 4/4 without relying on colour alone. Always 14px wide to sit in a column.
  */
 export function SeverityTicks({ severity, className }: { severity: Severity; className?: string }) {
+  const filled = TICKS[severity]
   return (
     <span
       aria-hidden="true"
-      data-ticks={TICKS[severity]}
+      data-ticks={filled}
       className={cn('inline-flex h-[8px] w-[14px] shrink-0 items-stretch gap-[2px]', className)}
     >
-      {Array.from({ length: TICKS[severity] }, (_, i) => (
-        <span key={i} className={cn('w-[2px] rounded-xs', SEVERITY_COLOR[severity])} />
+      {[1, 2, 3, 4].map((slot) => (
+        <span
+          key={slot}
+          className={cn(
+            'w-[2px] rounded-xs',
+            slot <= filled ? SEVERITY_COLOR[severity] : 'bg-line-2',
+          )}
+        />
       ))}
     </span>
   )

@@ -77,10 +77,11 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
       role="dialog"
       aria-label={`${verb} bug`}
       className={cn(
-        'panel absolute right-0 z-30 w-80 max-w-[calc(100vw-2rem)] animate-in p-3',
+        'panel absolute z-30 w-80 max-w-[calc(100vw-2rem)] animate-in p-3',
         placement === 'responsive'
-          ? 'bottom-full mb-2 sm:top-full sm:bottom-auto sm:mt-2 sm:mb-0'
-          : 'top-full mt-2',
+          ? // Phones: the trigger starts at the bar's left edge, so open up and left-aligned.
+            'right-auto bottom-full left-0 mb-2 sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:mt-2 sm:mb-0'
+          : 'top-full right-0 mt-2',
       )}
     >
       <textarea

@@ -404,8 +404,41 @@ describe('BugDetail', () => {
     expect(onSend).toHaveBeenCalledTimes(1)
     fireEvent.click(menuItem('Copy prompt for Claude Code')!)
     expect(onCopy).toHaveBeenCalledTimes(1)
-    fireEvent.click(menuItem('Send to Claude Code')!)
-    expect(onSend).toHaveBeenCalledTimes(2)
+    // Send is always a visible button (icon-only on phones), never hidden in the menu.
+    expect(menuItem('Send to Claude Code', true)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send to Claude Code' })).toBeEnabled()
+  })
+
+  it('quotes the resolution note once: in the header, not again on the timeline', () => {
+    thread.events = [
+      {
+        id: 'e1',
+        bug_id: 'b1',
+        actor_id: 'u2',
+        type: 'resolved',
+        note: 'Fixed it',
+        created_at: NOW,
+      },
+    ]
+    setup(
+      makeBug({
+        status: 'resolved',
+        resolved_by: 'u2',
+        resolved_at: NOW,
+        resolution_note: 'Fixed it',
+      }),
+    )
+    expect(screen.getByText('“Fixed it”')).toBeTruthy()
+    expect(screen.queryByText('Fixed it')).toBeNull()
+    const timeline = screen.getByRole('list', { name: 'Timeline' })
+    expect(within(timeline).getByText(/resolved/)).toBeTruthy()
+  })
+
+  it('captions the open screenshot with its size and file name', () => {
+    setup(makeBug({ attachments: [attachment('a1')] }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open screenshot 1' }))
+    const viewer = screen.getByRole('dialog', { name: 'Screenshot viewer' })
+    expect(viewer).toHaveTextContent('Fig. 1 / 1 · 10×10 · a1.webp')
   })
 
   it('keeps the description draft when the save fails', async () => {

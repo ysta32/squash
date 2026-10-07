@@ -149,6 +149,14 @@ interface BugBodyProps extends BugDetailProps {
 interface GalleryItem {
   key: string
   url: string | null
+  /** Lightbox caption detail: `W×H · file name`. */
+  caption: string | null
+}
+
+function attachmentCaption(a: BugAttachment): string {
+  const name = a.storage_path.split('/').pop() ?? ''
+  const size = a.width > 0 && a.height > 0 ? `${a.width}×${a.height}` : ''
+  return [size, name].filter(Boolean).join(' · ')
 }
 
 function BugBody({
@@ -180,8 +188,8 @@ function BugBody({
     action: () => void | Promise<void>
     onSuccess?: () => void
   } | null>(null)
-  const strikeRef = useRef<HTMLDivElement>(null)
   const stampRef = useRef<HTMLSpanElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
   const prevStatus = useRef(bug.status)
   const [signed, setSigned] = useState<Record<string, string>>({})
   const [lightboxKey, setLightboxKey] = useState<string | null>(null)
@@ -237,25 +245,45 @@ function BugBody({
     el.style.height = `${el.scrollHeight}px`
   }, [description, showRendered])
 
+  // While the action cluster is the fixed bottom bar (phones), publish its height (safe-area
+  // inset included) as --bottom-bar-h so toasts and other bottom-anchored UI sit above it.
+  useLayoutEffect(() => {
+    const el = barRef.current
+    const root = document.documentElement
+    if (!el) return
+    const sync = () => {
+      if (getComputedStyle(el).position === 'fixed') {
+        root.style.setProperty('--bottom-bar-h', `${el.getBoundingClientRect().height}px`)
+      } else {
+        root.style.removeProperty('--bottom-bar-h')
+      }
+    }
+    sync()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync)
+    observer?.observe(el)
+    window.addEventListener('resize', sync)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', sync)
+      root.style.removeProperty('--bottom-bar-h')
+    }
+  }, [])
+
   // The resolve moment (DESIGN.md section 8): when this bug goes open → resolved while shown,
-  // the title strikethrough draws left to right over 220ms and the check pin stamps in
-  // (scale 1.15 → 1). Reduced motion, or a bug that was already resolved, shows the end state.
+  // the check pin stamps in (scale 1.15 → 1) as the title settles to text-2. The strikethrough
+  // belongs to list rows only. Reduced motion, or an already resolved bug, shows the end state.
   useLayoutEffect(() => {
     const was = prevStatus.current
     prevStatus.current = bug.status
     if (was !== 'open' || bug.status !== 'resolved') return
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return
     const easing = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
-    strikeRef.current?.animate?.([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], {
-      duration: 220,
-      easing,
-    })
     stampRef.current?.animate?.(
       [
         { transform: 'scale(1.15)', opacity: 0 },
         { transform: 'scale(1)', opacity: 1 },
       ],
-      { duration: 220, delay: 160, easing, fill: 'backwards' },
+      { duration: 220, easing, fill: 'backwards' },
     )
   }, [bug.status])
 
@@ -332,28 +360,23 @@ function BugBody({
 
   const pending = bug.pending ?? []
   const gallery: GalleryItem[] = [
-    ...bug.attachments.map((a) => ({ key: a.id, url: signed[a.storage_path] ?? null })),
-    ...pending.map((p) => ({ key: p.localId, url: p.previewUrl })),
+    ...bug.attachments.map((a) => ({
+      key: a.id,
+      url: signed[a.storage_path] ?? null,
+      caption: attachmentCaption(a),
+    })),
+    ...pending.map((p) => ({
+      key: p.localId,
+      url: p.previewUrl,
+      caption: p.error ? 'Upload failed' : 'Uploading',
+    })),
   ]
-  const viewable = gallery.filter((g): g is { key: string; url: string } => g.url !== null)
+  const viewable = gallery.filter((g): g is GalleryItem & { url: string } => g.url !== null)
   const lightboxIndex = lightboxKey ? viewable.findIndex((g) => g.key === lightboxKey) : -1
 
   const title = titleDraft ?? bug.title
   const noun = KIND_LABEL[bug.kind].one.toLowerCase()
   const menuItems: MenuItem[] = [
-    ...(onSend
-      ? [
-          {
-            key: 'send',
-            label: 'Send to Claude Code',
-            icon: <SparkMark className="text-accent" />,
-            onSelect: () => onSend(bug),
-            disabled: !editable,
-            // Shown as its own button once the pane is wide enough (see the toolbar).
-            className: '@xl:hidden',
-          },
-        ]
-      : []),
     ...(onCopy
       ? [
           {
@@ -390,21 +413,19 @@ function BugBody({
     <div className="@container h-full min-w-0 overflow-y-auto [scrollbar-gutter:stable]">
       <article
         aria-label={`${KIND_LABEL[bug.kind].one} ${bug.optimistic ? '' : `#${bug.number}`}`.trim()}
-        className="w-full max-w-[760px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[32px] @xl:pt-8 sm:pb-16"
+        className="w-full max-w-[760px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[32px] @xl:pt-8 @min-[1200px]:mx-auto sm:pb-16"
       >
         <header className="border-b border-line pb-6">
-          <div className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={onBack}
-              aria-label="Back"
-              title="Back (Esc)"
-              className="t focus-ring -ml-3 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink md:hidden"
-            >
-              <ArrowLeft size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
-            </button>
-            <SpecimenLabel bug={bug} filer={filer?.display_name ?? 'Deleted user'} />
-          </div>
+          <button
+            type="button"
+            onClick={onBack}
+            title="Back (Esc)"
+            className="t focus-ring -mt-2 mb-2 -ml-3 inline-flex h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-ink-2 hover:bg-surface-3 hover:text-ink md:hidden"
+          >
+            <ArrowLeft size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+            Back
+          </button>
+          <SpecimenLabel bug={bug} filer={filer?.display_name ?? 'Deleted user'} />
 
           <div className="relative mt-5">
             <textarea
@@ -434,18 +455,6 @@ function BugBody({
                 isOpen ? 'text-ink' : 'text-ink-2',
               )}
             />
-            {!isOpen && (
-              <div
-                ref={strikeRef}
-                aria-hidden="true"
-                className={cn(
-                  TITLE_TYPE,
-                  'pointer-events-none absolute inset-0 origin-left text-transparent line-through decoration-ink-3 decoration-[1.5px] select-none',
-                )}
-              >
-                {title}
-              </div>
-            )}
           </div>
 
           {!isOpen && (
@@ -505,22 +514,29 @@ function BugBody({
               />
             </div>
 
-            {/* One action cluster: inline at the end of the toolbar, and a bottom action bar on
-                phones so Resolve is a full-width thumb target. */}
-            <div className="ml-auto flex items-center gap-2 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-20 max-sm:border-t max-sm:border-line max-sm:bg-surface-2 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-elev-2">
+            {/* One action cluster: inline at the end of the toolbar (its own row when the pane is
+                narrow), and a bottom action bar on phones: [Resolve, wide][spark][…]. */}
+            <div
+              ref={barRef}
+              className="ml-auto flex items-center gap-2 @max-2xl:ml-0 @max-2xl:w-full max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-20 max-sm:border-t max-sm:border-line max-sm:bg-surface-2 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-elev-2"
+            >
               {onSend && (
                 <button
                   type="button"
                   disabled={!editable}
                   onClick={() => onSend(bug)}
                   title="Open Claude Code on this bug (C)"
-                  className={buttonClass('secondary', 'md', 'h-8 px-3 @max-xl:hidden')}
+                  className={buttonClass(
+                    'secondary',
+                    'md',
+                    'h-8 px-3 max-sm:order-2 max-sm:h-11 max-sm:w-11 max-sm:px-0',
+                  )}
                 >
                   <SparkMark className="text-accent" />
-                  Send to Claude Code
+                  <span className="max-sm:sr-only">Send to Claude Code</span>
                 </button>
               )}
-              <div className="relative max-sm:flex-1">
+              <div className="relative max-sm:order-1 max-sm:flex-1">
                 <button
                   type="button"
                   disabled={!editable}
@@ -549,7 +565,9 @@ function BugBody({
                   placement="responsive"
                 />
               </div>
-              <MoreMenu items={menuItems} />
+              <div className="max-sm:order-3">
+                <MoreMenu items={menuItems} />
+              </div>
             </div>
           </div>
 
@@ -668,12 +686,18 @@ function BugBody({
 
           {claudeRun && <ClaudeProgress run={claudeRun} />}
 
-          <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} selfId={selfId} />
+          <CommentThread
+            bugId={bug.optimistic ? null : bug.id}
+            members={members}
+            selfId={selfId}
+            headerNote={isOpen ? null : bug.resolution_note}
+          />
         </div>
 
         {lightboxIndex >= 0 && (
           <Lightbox
             urls={viewable.map((g) => g.url)}
+            captions={viewable.map((g) => g.caption)}
             index={lightboxIndex}
             onClose={() => setLightboxKey(null)}
             onIndex={(i) => setLightboxKey(viewable[i]?.key ?? null)}
@@ -685,7 +709,7 @@ function BugBody({
 }
 
 const TITLE_TYPE =
-  '-mx-2 px-2 py-0.5 text-xl font-semibold break-words whitespace-pre-wrap [width:calc(100%+1rem)]'
+  '-mx-2 px-2 py-0.5 text-xl font-semibold break-words whitespace-pre-wrap [width:calc(100%+1rem)] [transition-property:color,background-color] duration-(--dur-emphasis)'
 const SECTION_HEADING = 'specimen-label mb-3 text-ink-3'
 const READ_TEXT =
   'max-w-[68ch] min-w-0 text-ink [&>div]:text-read [&>div]:leading-[1.7143rem] [&>div]:space-y-3'
@@ -752,7 +776,12 @@ function SpecimenLabel({ bug, filer }: { bug: BugWithMeta; filer: string }) {
         {hasContext && (
           <>
             {sep}
-            <span role="group" aria-label="Bug context" className="normal-case">
+            <span
+              role="group"
+              aria-label="Bug context"
+              title={formatContext(context)}
+              className="inline-block max-w-full truncate align-bottom normal-case"
+            >
               {context.url && (
                 <a
                   href={context.url}
@@ -890,7 +919,7 @@ export function BugDetailSkeleton() {
   return (
     <div role="status" aria-label="Loading bug" className="@container h-full min-w-0">
       <span className="sr-only">Loading…</span>
-      <div className="w-full max-w-[760px] px-[16px] pt-4 @xl:px-[32px] @xl:pt-8">
+      <div className="w-full max-w-[760px] px-[16px] pt-4 @xl:px-[32px] @xl:pt-8 @min-[1200px]:mx-auto">
         <div className="border-b border-line pb-6">
           <div className="w-72 max-w-full rounded-xs border border-line-2 bg-surface-1">
             <div className="border-b border-line px-3 py-[9px]">

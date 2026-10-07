@@ -4,7 +4,7 @@ import { useBug } from '../hooks/useBug'
 import type { BugEvent, Comment, Profile, WorkspaceMember } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
-import { ActivityEntry, TIMELINE_ITEM, TimelineRail } from './ActivityTimeline'
+import { ActivityEntry, TIMELINE_GLYPH, TIMELINE_ITEM, TimelineRail } from './ActivityTimeline'
 import { Avatar } from './Avatar'
 import { MentionInput } from './MentionInput'
 import { Button, Kbd } from './ui'
@@ -31,10 +31,20 @@ export interface CommentThreadProps {
   members: WorkspaceMember[]
   /** The signed-in user: their own comments can be edited and deleted. */
   selfId?: string | null
+  /**
+   * The resolution note the detail header already quotes. The latest "resolved" event with this
+   * note shows without it, so the note is not printed twice.
+   */
+  headerNote?: string | null
 }
 
 /** Live activity timeline + comment thread for one bug (backed by useBug). */
-export function CommentThread({ bugId, members, selfId = null }: CommentThreadProps) {
+export function CommentThread({
+  bugId,
+  members,
+  selfId = null,
+  headerNote = null,
+}: CommentThreadProps) {
   const { comments, events, addComment, editComment, deleteComment, loading } = useBug(bugId)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -67,6 +77,12 @@ export function CommentThread({ bugId, members, selfId = null }: CommentThreadPr
 
   const names = new Map(members.map((m) => [m.user_id, m.profile.display_name]))
   const entries = mergeTimeline(events, comments)
+  let quotedEventId: string | null = null
+  if (headerNote) {
+    for (const entry of entries) {
+      if (entry.kind === 'event' && entry.event.type === 'resolved') quotedEventId = entry.event.id
+    }
+  }
 
   return (
     <section aria-labelledby="timeline-heading" className="min-w-0">
@@ -92,7 +108,13 @@ export function CommentThread({ bugId, members, selfId = null }: CommentThreadPr
             const last = i === entries.length - 1
             if (entry.kind === 'event') {
               return (
-                <ActivityEntry key={entry.event.id} event={entry.event} names={names} last={last} />
+                <ActivityEntry
+                  key={entry.event.id}
+                  event={entry.event}
+                  names={names}
+                  last={last}
+                  hideNote={entry.event.id === quotedEventId && entry.event.note === headerNote}
+                />
               )
             }
             const c = entry.comment
@@ -225,7 +247,7 @@ function CommentItem({
   return (
     <li className={cn(TIMELINE_ITEM, 'group', !last && 'pb-6')}>
       {!last && <TimelineRail />}
-      <span className="relative inline-flex">
+      <span className={TIMELINE_GLYPH}>
         <Avatar profile={profile} size="xs" />
       </span>
       <div className="min-w-0 flex-1">

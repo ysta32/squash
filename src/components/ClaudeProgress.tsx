@@ -198,7 +198,7 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
         )}
 
         {run.message && (
-          <p className="max-w-[68ch] text-read [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">
+          <p className="max-w-[64ch] text-read [overflow-wrap:anywhere] text-pretty whitespace-pre-wrap text-ink">
             {run.message}
           </p>
         )}

@@ -10,9 +10,11 @@ export interface LightboxProps {
   index: number
   onClose: () => void
   onIndex: (index: number) => void
+  /** Per-image caption details (e.g. `1600×1000 · checkout.png`), aligned with `urls`. */
+  captions?: (string | null)[]
 }
 
-export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
+export function Lightbox({ urls, index, onClose, onIndex, captions }: LightboxProps) {
   const count = urls.length
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, count > 0)
@@ -48,6 +50,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
 
   if (count === 0) return null
   const url = urls[safeIndex]
+  const caption = captions?.[safeIndex] ?? null
 
   return createPortal(
     <div
@@ -55,15 +58,10 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Screenshot viewer"
-      className="glass-scrim fixed inset-0 z-50 flex animate-fade items-center justify-center p-4 sm:p-16"
+      // One dark glass scrim in both themes: a screenshot reads best on a dim surround.
+      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] px-4 py-16 backdrop-blur-[14px] sm:px-20"
       onClick={onClose}
     >
-      <p className="specimen-label glass absolute top-4 left-4 z-10 rounded-md px-3 py-2 text-ink shadow-elev-2">
-        Fig.{' '}
-        <span>
-          {safeIndex + 1} / {count}
-        </span>
-      </p>
       <button
         type="button"
         aria-label="Close"
@@ -109,13 +107,23 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
         url={url}
         alt={`Screenshot ${safeIndex + 1} of ${count}`}
       />
+      <p
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-full shrink-0 truncate text-center font-mono text-xs tracking-[0.06em] text-white/80 uppercase"
+      >
+        Fig.{' '}
+        <span>
+          {safeIndex + 1} / {count}
+        </span>
+        {caption && <span className="normal-case"> · {caption}</span>}
+      </p>
     </div>,
     document.body,
   )
 }
 
 const CHROME_BUTTON =
-  't focus-ring glass absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-md text-ink shadow-elev-2 hover:text-accent'
+  't focus-ring absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'
 
 function ZoomImage({ url, alt }: { url: string; alt: string }) {
   const [zoomed, setZoomed] = useState(false)
@@ -154,7 +162,7 @@ function ZoomImage({ url, alt }: { url: string; alt: string }) {
       onWheel={onWheel}
       style={{ transform: zoomed ? 'scale(2)' : 'scale(1)', transformOrigin: origin }}
       className={cn(
-        'max-h-full max-w-full animate-dialog rounded-lg object-contain shadow-elev-3 transition-transform duration-150 select-none',
+        'max-h-[calc(100dvh-10rem)] max-w-full animate-dialog rounded-lg object-contain shadow-elev-3 transition-transform duration-150 select-none',
         zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
       )}
     />
