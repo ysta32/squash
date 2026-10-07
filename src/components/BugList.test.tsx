@@ -18,6 +18,7 @@ const filters: BugFilters = {
   assignee: null,
   severity: null,
   query: '',
+  sort: 'newest',
 }
 const members: WorkspaceMember[] = ['Ada', 'Grace'].map((name) => ({
   workspace_id: 'workspace',

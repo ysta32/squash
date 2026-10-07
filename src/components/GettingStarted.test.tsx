@@ -120,6 +120,7 @@ function RoutedList(props: Partial<BugListProps>) {
                 resolvedBy: null,
                 assignee: null,
                 severity: null,
+                sort: 'newest',
               }}
               onFilters={vi.fn()}
               selectedId={null}

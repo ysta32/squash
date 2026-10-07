@@ -18,7 +18,7 @@ import { InviteDialog } from '../components/InviteDialog'
 import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
-import { countBugs, filterBugs, useBugs } from '../hooks/useBugs'
+import { countBugs, filterBugs, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { CommandPalette, type Command } from '../components/CommandPalette'
@@ -367,7 +367,8 @@ export default function Workspace() {
     [bugs, deleteBug, toast, deselect],
   )
 
-  const visible = useMemo(() => filterBugs(bugs, filters), [bugs, filters])
+  const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
+  const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
   const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
   const openByKind = useMemo(
     () => ({ bug: countBugs(bugs, 'bug').open, feature: countBugs(bugs, 'feature').open }),
@@ -794,7 +795,7 @@ export default function Workspace() {
             )}
           >
             <BugList
-              bugs={bugs}
+              bugs={sorted}
               workspaceName={ws.workspace?.name}
               loading={loading}
               error={error}

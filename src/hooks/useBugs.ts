@@ -19,6 +19,8 @@ import { openChannel } from './useRealtimeStatus'
 export { useBug } from './useBug'
 export { useSignedUrl } from './useSignedUrl'
 
+export type BugSort = 'newest' | 'oldest' | 'severity' | 'activity'
+
 export interface BugFilters {
   /** Bugs or feature requests: the list only ever shows one kind. */
   kind: BugKind
@@ -29,6 +31,7 @@ export interface BugFilters {
   assignee: string | null
   severity: Severity | null
   query: string
+  sort: BugSort
 }
 
 export interface NewBugInput {
@@ -121,6 +124,30 @@ export function filterBugs(bugs: BugWithMeta[], f: BugFilters): BugWithMeta[] {
   })
 }
 
+const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 }
+
+function time(iso: string | null): number {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isNaN(t) ? 0 : t
+}
+
+function activityAt(b: BugWithMeta): number {
+  return Math.max(time(b.created_at), time(b.updated_at), time(b.resolved_at))
+}
+
+/** Pure, stable list sort: newest, oldest, severity (critical first, then newest) or recent activity. */
+export function sortBugs(bugs: BugWithMeta[], sort: BugSort): BugWithMeta[] {
+  const newest = (a: BugWithMeta, b: BugWithMeta) => time(b.created_at) - time(a.created_at)
+  const compare = {
+    newest,
+    oldest: (a: BugWithMeta, b: BugWithMeta) => time(a.created_at) - time(b.created_at),
+    severity: (a: BugWithMeta, b: BugWithMeta) =>
+      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || newest(a, b),
+    activity: (a: BugWithMeta, b: BugWithMeta) => activityAt(b) - activityAt(a),
+  }[sort]
+  return [...bugs].sort(compare)
+}
+
 /** Status counts, of one kind only when `kind` is given. */
 export function countBugs(bugs: BugWithMeta[], kind?: BugKind): BugCounts {
   let open = 0
@@ -142,7 +169,7 @@ function sortAttachments(list: BugAttachment[]): BugAttachment[] {
   return [...list].sort((a, b) => a.created_at.localeCompare(b.created_at))
 }
 
-function sortBugs(list: BugWithMeta[]): BugWithMeta[] {
+function sortByCreated(list: BugWithMeta[]): BugWithMeta[] {
   return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
 
@@ -165,7 +192,7 @@ function mergeAttachments(a: BugAttachment[], b: BugAttachment[]): BugAttachment
 
 function upsertRow(bugs: BugWithMeta[], row: BugRow): BugWithMeta[] {
   const idx = bugs.findIndex((b) => b.id === row.id)
-  if (idx === -1) return sortBugs([...bugs, applyServerRow(undefined, row)])
+  if (idx === -1) return sortByCreated([...bugs, applyServerRow(undefined, row)])
   const next = applyServerRow(bugs[idx], row)
   if (next === bugs[idx]) return bugs
   const copy = bugs.slice()
@@ -247,7 +274,7 @@ export function applySnapshot(
     const olderThanWindow = opts.truncated && oldest !== null && b.created_at < oldest
     if (b.optimistic || opts.isRecent(`bug:${b.id}`) || olderThanWindow) out.push(b)
   }
-  return sortBugs(out)
+  return sortByCreated(out)
 }
 
 /** Non-authoritative merge of individually fetched rows (e.g. a deep-linked bug). */
@@ -256,7 +283,7 @@ function mergeRows(current: BugWithMeta[], rows: BugWithMeta[]): BugWithMeta[] {
   for (const r of rows) {
     const existing = next.find((b) => b.id === r.id)
     if (!existing) {
-      next = sortBugs([...next, r])
+      next = sortByCreated([...next, r])
       continue
     }
     next = mapBug(next, r.id, (bug) => ({

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Check, ChevronDown, CircleDashed, Download, X } from 'lucide-react'
 import { useDismiss } from '../hooks/useDismiss'
 import { useOverlayOpen } from '../hooks/useKeyboard'
-import type { BugFilters as Filters } from '../hooks/useBugs'
+import type { BugFilters as Filters, BugSort } from '../hooks/useBugs'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
@@ -63,6 +63,12 @@ export function BugFilters({
     icon: <span className={cn('h-2 w-2 rounded-full', SEVERITY_COLOR[severity])} />,
   }))
 
+  const sortOptions: FilterOption[] = [
+    { value: 'oldest', label: 'Oldest' },
+    { value: 'severity', label: 'Severity' },
+    { value: 'activity', label: 'Recently active' },
+  ]
+
   function exportBugs(format: 'csv' | 'md'): void {
     closeExport()
     triggerRef.current?.focus()
@@ -116,6 +122,18 @@ export function BugFilters({
           value={filters.resolvedBy}
           options={personOptions}
           onChange={(resolvedBy) => onFilters({ ...filters, resolvedBy })}
+        />
+        <FilterMenu
+          label="Sort"
+          anyLabel="Newest"
+          value={filters.sort === 'newest' ? null : filters.sort}
+          options={sortOptions}
+          onChange={(value) =>
+            onFilters({
+              ...filters,
+              sort: SORT_VALUES.find((sort) => sort === value) ?? 'newest',
+            })
+          }
         />
         {active && (
           <Button
@@ -197,6 +215,8 @@ export function BugFilters({
     </div>
   )
 }
+
+const SORT_VALUES: BugSort[] = ['oldest', 'severity', 'activity']
 
 interface FilterOption {
   value: string

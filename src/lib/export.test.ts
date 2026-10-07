@@ -242,6 +242,7 @@ const filterProps = {
     assignee: null,
     severity: null,
     query: '',
+    sort: 'newest',
   } as const,
   onFilters: vi.fn(),
   members: [],

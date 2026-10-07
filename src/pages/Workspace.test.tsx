@@ -98,6 +98,7 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
   const actual = await importOriginal<typeof UseBugsModule>()
   return {
     filterBugs: actual.filterBugs,
+    sortBugs: actual.sortBugs,
     countBugs: actual.countBugs,
     useBugs: (_ws: string, opts?: { onRemoteInsert?: (bug: Bug) => void }) => {
       mocks.onRemoteInsert = opts?.onRemoteInsert ?? null
@@ -299,6 +300,19 @@ describe('Workspace', () => {
 
     press('k')
     press('k')
+    expect(path()).toBe('/app/ws/bug/3')
+  })
+
+  it('J/K follow the visible order of a non-default sort', () => {
+    mocks.bugs = [
+      makeBug(3, { created_at: '2026-01-03T00:00:00Z' }),
+      makeBug(2, { created_at: '2026-01-02T00:00:00Z' }),
+      makeBug(1, { created_at: '2026-01-01T00:00:00Z' }),
+    ]
+    show('/app/ws/bug/1?sort=oldest')
+    press('j')
+    expect(path()).toBe('/app/ws/bug/2')
+    press('j')
     expect(path()).toBe('/app/ws/bug/3')
   })
 
