@@ -39,6 +39,7 @@ const DEFAULT_FILTERS: BugFilters = {
   tab: 'open',
   filedBy: null,
   resolvedBy: null,
+  assignee: null,
   severity: null,
   query: '',
 }

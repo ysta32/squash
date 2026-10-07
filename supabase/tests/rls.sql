@@ -400,6 +400,78 @@ do $$ declare w public.workspaces; i int; begin
   exception when others then if sqlerrm <> 'rate_limited' then raise; end if; end;
 end $$;
 
+-- ===== Assignees (0004_assignees.sql); WS One members: A, B, 04..11; C is an outsider =====
+:as_a
+-- [55] member assigns another member: 'assigned' event (actor A, note = assignee), no 'edited' event
+do $$ declare b uuid := current_setting('t.bug1')::uuid; n_edited int; begin
+  select count(*) into n_edited from public.bug_events where bug_id = b and type = 'edited';
+  update public.bugs set assignee_id = '10000000-0000-0000-0000-000000000002' where id = b;
+  if (select assignee_id from public.bugs where id = b) is distinct from '10000000-0000-0000-0000-000000000002'::uuid then
+    raise exception 'FAIL[55]: member could not assign another member'; end if;
+  if not exists (select 1 from public.bug_events where bug_id = b and type = 'assigned'
+                 and actor_id = '10000000-0000-0000-0000-000000000001' and note = '10000000-0000-0000-0000-000000000002') then
+    raise exception 'FAIL[55]: assigned event missing or wrong actor/note'; end if;
+  if (select count(*) from public.bug_events where bug_id = b and type = 'edited') <> n_edited then
+    raise exception 'FAIL[55]: assigning logged an edited event'; end if;
+end $$;
+-- [56] non-member assignee rejected on update and on insert; assignment unchanged
+do $$ declare b uuid := current_setting('t.bug1')::uuid; begin
+  begin
+    update public.bugs set assignee_id = '10000000-0000-0000-0000-000000000003' where id = b;
+    raise exception 'FAIL[56]: non-member assignee accepted on update';
+  exception when others then if sqlerrm <> 'assignee_not_member' then raise; end if;
+  end;
+  begin
+    insert into public.bugs (workspace_id, title, description, severity, filed_by, assignee_id)
+      values (current_setting('t.ws1')::uuid, 'Bad assignee', 'x', 'low', '10000000-0000-0000-0000-000000000001',
+              '10000000-0000-0000-0000-000000000003');
+    raise exception 'FAIL[56]: non-member assignee accepted on insert';
+  exception when others then if sqlerrm <> 'assignee_not_member' then raise; end if;
+  end;
+  if (select assignee_id from public.bugs where id = b) is distinct from '10000000-0000-0000-0000-000000000002'::uuid then
+    raise exception 'FAIL[56]: rejected assignment changed assignee_id'; end if;
+end $$;
+:as_c
+-- [57] outsider cannot change the assignee (row invisible); [58] outsider cannot probe membership via insert
+do $$ declare n int; begin
+  begin update public.bugs set assignee_id = '10000000-0000-0000-0000-000000000003' where id = current_setting('t.bug1')::uuid; get diagnostics n = row_count;
+  exception when sqlstate '42501' then n := 0; end;
+  if n <> 0 then raise exception 'FAIL[57]: outsider updated assignee'; end if;
+  begin
+    insert into public.bugs (workspace_id, title, description, severity, filed_by, assignee_id)
+      values (current_setting('t.ws1')::uuid, 'Probe', 'x', 'low', '10000000-0000-0000-0000-000000000003',
+              '10000000-0000-0000-0000-000000000002');
+    raise exception 'FAIL[58]: outsider inserted bug with assignee';
+  exception when others then if sqlerrm <> 'assignee_not_member' then raise; end if;
+  end;
+end $$;
+:as_pg
+do $$ begin
+  if (select assignee_id from public.bugs where id = current_setting('t.bug1')::uuid) is distinct from '10000000-0000-0000-0000-000000000002'::uuid then
+    raise exception 'FAIL[57]: outsider changed assignee_id'; end if;
+end $$;
+:as_a
+-- [59] removing a member clears their assignments (with an 'assigned' event, null note); they cannot be re-assigned
+do $$ declare b uuid := current_setting('t.bug1')::uuid; begin
+  update public.bugs set assignee_id = '10000000-0000-0000-0000-000000000004' where id = b;
+  perform public.remove_member(current_setting('t.ws1')::uuid, '10000000-0000-0000-0000-000000000004');
+  if (select assignee_id from public.bugs where id = b) is not null then
+    raise exception 'FAIL[59]: removed member still assigned'; end if;
+  if not exists (select 1 from public.bug_events where bug_id = b and type = 'assigned'
+                 and actor_id = '10000000-0000-0000-0000-000000000001' and note is null) then
+    raise exception 'FAIL[59]: unassign on member removal not logged'; end if;
+  begin
+    update public.bugs set assignee_id = '10000000-0000-0000-0000-000000000004' where id = b;
+    raise exception 'FAIL[59]: removed member could be assigned';
+  exception when others then if sqlerrm <> 'assignee_not_member' then raise; end if;
+  end;
+  -- [60] explicit unassign works
+  update public.bugs set assignee_id = '10000000-0000-0000-0000-000000000002' where id = b;
+  update public.bugs set assignee_id = null where id = b;
+  if (select assignee_id from public.bugs where id = b) is not null then
+    raise exception 'FAIL[60]: unassign failed'; end if;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

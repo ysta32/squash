@@ -9,7 +9,7 @@ type MemberRoleEnum = 'owner' | 'member'
 type BugSeverityEnum = 'low' | 'medium' | 'high' | 'critical'
 type BugStatusEnum = 'open' | 'resolved'
 type BugKindEnum = 'bug' | 'feature'
-type BugEventTypeEnum = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented'
+type BugEventTypeEnum = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented' | 'assigned'
 
 type WorkspaceRow = {
   id: string
@@ -128,6 +128,7 @@ export type Database = {
           resolved_at: string | null
           resolution_note: string | null
           updated_at: string
+          assignee_id: string | null
         }
         Insert: {
           id?: string
@@ -146,6 +147,7 @@ export type Database = {
           resolved_at?: string | null
           resolution_note?: string | null
           updated_at?: string
+          assignee_id?: string | null
         }
         Update: {
           id?: string
@@ -163,8 +165,9 @@ export type Database = {
           resolved_at?: string | null
           resolution_note?: string | null
           updated_at?: string
+          assignee_id?: string | null
         }
-        /** filed_by / resolved_by have no FK: attribution survives account deletion. */
+        /** filed_by / resolved_by / assignee_id have no FK: attribution survives account deletion. */
         Relationships: [
           {
             foreignKeyName: 'bugs_workspace_id_fkey'

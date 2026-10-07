@@ -1,4 +1,4 @@
-import { Check, MessageSquare, Pencil, Plus, RotateCcw } from 'lucide-react'
+import { Check, MessageSquare, Pencil, Plus, RotateCcw, UserCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { BugEvent, EventType, WorkspaceMember } from '../lib/types'
 import { relativeTime } from '../lib/utils'
@@ -9,6 +9,7 @@ const ICON: Record<EventType, LucideIcon> = {
   reopened: RotateCcw,
   edited: Pencil,
   commented: MessageSquare,
+  assigned: UserCheck,
 }
 
 const VERB: Record<EventType, string> = {
@@ -17,6 +18,7 @@ const VERB: Record<EventType, string> = {
   reopened: 'reopened',
   edited: 'edited',
   commented: 'commented',
+  assigned: 'changed the assignee',
 }
 
 export interface ActivityTimelineProps {

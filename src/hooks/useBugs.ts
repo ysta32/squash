@@ -25,6 +25,8 @@ export interface BugFilters {
   tab: 'open' | 'resolved' | 'all'
   filedBy: string | null
   resolvedBy: string | null
+  /** null = anyone, 'none' = unassigned only, else a user id. */
+  assignee: string | null
   severity: Severity | null
   query: string
 }
@@ -55,6 +57,8 @@ export interface UseBugsResult {
   ): Promise<void>
   resolveBug(id: string, note: string | null): Promise<void>
   reopenBug(id: string, note: string | null): Promise<void>
+  /** Sets (or with null clears) the assignee; optimistic, reverts on error. */
+  assignBug(id: string, userId: string | null): Promise<void>
   /** Permanently deletes a bug with its screenshots, comments and activity. */
   deleteBug(id: string): Promise<void>
   retryUploads(bugId: string): Promise<void>
@@ -69,6 +73,7 @@ type BugRowWithAttachments = BugRow & { bug_attachments: BugAttachment[] }
 const ERROR_MESSAGES: Record<string, string> = {
   rate_limited: 'Slow down — max 30 bugs per minute.',
   attachment_limit: 'Max 10 screenshots per bug.',
+  assignee_not_member: 'That person is not a member of this workspace.',
   too_large: 'Image is larger than 5 MB.',
   not_image: 'That file is not an image.',
 }
@@ -100,6 +105,12 @@ export function filterBugs(bugs: BugWithMeta[], f: BugFilters): BugWithMeta[] {
     if (f.tab !== 'all' && b.status !== f.tab) return false
     if (f.filedBy !== null && b.filed_by !== f.filedBy) return false
     if (f.resolvedBy !== null && b.resolved_by !== f.resolvedBy) return false
+    if (
+      f.assignee === 'none'
+        ? b.assignee_id !== null
+        : f.assignee !== null && b.assignee_id !== f.assignee
+    )
+      return false
     if (f.severity !== null && b.severity !== f.severity) return false
     if (!q) return true
     if (wantedNumber !== null && b.number === wantedNumber) return true
@@ -772,6 +783,7 @@ export function useBugs(
         resolved_by: null,
         resolved_at: null,
         resolution_note: null,
+        assignee_id: null,
         updated_at: now,
         attachments: [],
         optimistic: true,
@@ -922,6 +934,14 @@ export function useBugs(
     [patchBug],
   )
 
+  /** Assigns the bug to a workspace member, or unassigns it with null (server: assignee_not_member). */
+  const assignBug = useCallback(
+    async (id: string, userId: string | null) => {
+      await patchBug(id, { assignee_id: userId }, { assignee_id: userId })
+    },
+    [patchBug],
+  )
+
   const deleteBug = useCallback(
     async (id: string) => {
       const ws = workspaceId
@@ -978,6 +998,7 @@ export function useBugs(
     updateBug,
     resolveBug,
     reopenBug,
+    assignBug,
     deleteBug,
     retryUploads,
     getBugByNumber,
