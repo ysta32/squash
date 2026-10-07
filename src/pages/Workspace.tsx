@@ -828,6 +828,9 @@ export default function Workspace() {
               pickedIds={pickedIds}
               onTogglePick={togglePick}
               onClearPicked={clearPicked}
+              onResolve={resolveBug}
+              onReopen={reopenBug}
+              onAssign={assign}
               onSend={claude.sendBugs}
               onCopy={claude.copyBugs}
               onInvite={() => setInviteOpen(true)}
