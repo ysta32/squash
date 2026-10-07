@@ -20,6 +20,7 @@ const h = vi.hoisted(() => {
     selectResult: { data: [] as unknown[], error: null } as Result,
     insertResult: { data: null, error: null } as Result,
     inserted: [] as unknown[],
+    insertFailOnce: null as Result | null,
     resolveInsert: null as null | ((r: Result) => void),
     deferInsert: false,
     selectCalls: 0,
@@ -63,21 +64,29 @@ vi.mock('../lib/supabase', () => {
         return {
           select: () => ({
             single: () =>
-              state.deferInsert
-                ? new Promise<Result>((resolve) => {
-                    state.resolveInsert = resolve
-                  })
-                : Promise.resolve(
-                    state.insertResult.data
-                      ? {
-                          data: {
-                            ...(state.insertResult.data as object),
-                            id: (row as { id: string }).id,
-                          },
-                          error: null,
-                        }
-                      : state.insertResult,
-                  ),
+              state.insertFailOnce
+                ? Promise.resolve(
+                    (() => {
+                      const fail = state.insertFailOnce as Result
+                      state.insertFailOnce = null
+                      return fail
+                    })(),
+                  )
+                : state.deferInsert
+                  ? new Promise<Result>((resolve) => {
+                      state.resolveInsert = resolve
+                    })
+                  : Promise.resolve(
+                      state.insertResult.data
+                        ? {
+                            data: {
+                              ...(state.insertResult.data as object),
+                              id: (row as { id: string }).id,
+                            },
+                            error: null,
+                          }
+                        : state.insertResult,
+                    ),
           }),
         }
       },
@@ -353,6 +362,29 @@ describe('useBugs', () => {
     expect(h.state.channels.map((c) => c.topic)).toContain('ws:ws1:bugs')
   })
 
+  it('fileBug retries without context when the server lacks the column (migration 0007 pending)', async () => {
+    h.state.insertResult = { data: bug({ id: 'tmp', number: 9 }), error: null }
+    h.state.insertFailOnce = {
+      data: null,
+      error: { code: 'PGRST204', message: "Could not find the 'context' column of 'bugs'" },
+    } as unknown as Result
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.fileBug({
+        description: 'Old server',
+        context: { browser: 'Chrome 131' },
+        transcript: null,
+        severity: 'low',
+        kind: 'bug',
+        files: [],
+      })
+    })
+    expect(h.state.inserted).toHaveLength(2)
+    expect((h.state.inserted[1] as { row: object }).row).not.toHaveProperty('context')
+    expect(result.current.bugs[0].number).toBe(9)
+  })
+
   it('fileBug inserts optimistically and clears the optimistic flag once the insert resolves', async () => {
     h.state.deferInsert = true
     const { result } = renderHook(() => useBugs('ws1'))
@@ -362,6 +394,7 @@ describe('useBugs', () => {
     act(() => {
       filing = result.current.fileBug({
         description: 'Checkout total is wrong\nmore details',
+        context: { url: 'https://example.com/checkout', browser: 'Chrome 131' },
         transcript: null,
         severity: 'high',
         kind: 'bug',
@@ -370,6 +403,11 @@ describe('useBugs', () => {
     })
     await waitFor(() => expect(result.current.bugs).toHaveLength(1))
     const optimistic = result.current.bugs[0]
+    expect(optimistic.context).toEqual({
+      url: 'https://example.com/checkout',
+      browser: 'Chrome 131',
+    })
+    expect(h.state.inserted[0]).toMatchObject({ row: { context: optimistic.context } })
     expect(optimistic.optimistic).toBe(true)
     expect(optimistic.title).toBe('Checkout total is wrong')
     expect(optimistic.pending).toHaveLength(1)

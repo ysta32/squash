@@ -623,6 +623,247 @@ do $$ begin
     raise exception 'FAIL[68]: bugs survived their workspace'; end if;
 end $$;
 
+-- ===== Comment edit / delete (0006_comment_edit.sql) =====
+:as_b
+-- [71] author edits the body of their own comment: edited_at set, nothing else changes
+do $$ declare c public.comments; n int; begin
+  insert into public.comments (bug_id, author_id, body, edited_at)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'original', now()) returning * into c;
+  perform set_config('t.cm_b', c.id::text, true);
+  if c.edited_at is not null then raise exception 'FAIL[71]: new comment kept a client-sent edited_at'; end if;
+  update public.comments set body = 'edited text' where id = c.id; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[71]: author could not edit own comment'; end if;
+  if not exists (select 1 from public.comments where id = c.id and body = 'edited text' and edited_at is not null
+                 and bug_id = c.bug_id and author_id = c.author_id and created_at = c.created_at) then
+    raise exception 'FAIL[71]: edit did not set edited_at or changed other columns'; end if;
+end $$;
+-- [72] author cannot change bug_id / author_id / created_at / edited_at (column privilege)
+do $$ declare b2 uuid; begin
+  begin
+    update public.comments set author_id = '10000000-0000-0000-0000-000000000001' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: author_id changed';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+  select id into b2 from public.bugs where workspace_id = current_setting('t.ws1')::uuid and id <> current_setting('t.bug1')::uuid limit 1;
+  begin
+    update public.comments set bug_id = coalesce(b2, gen_random_uuid()) where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: bug_id changed';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+  begin
+    update public.comments set created_at = now() - interval '1 day' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: created_at changed';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+  begin
+    update public.comments set edited_at = null where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[72]: edited_at written by client';
+  exception when others then if sqlstate <> '42501' then raise; end if; end;
+end $$;
+:as_a
+-- [73] other members (incl. the owner) cannot edit; a plain member cannot delete someone else's comment
+do $$ declare n int; begin
+  update public.comments set body = 'owner edit' where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[73]: owner edited another member''s comment'; end if;
+  perform set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000005","role":"authenticated"}', true);
+  update public.comments set body = 'member edit' where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[73]: member edited another member''s comment'; end if;
+  delete from public.comments where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[73]: member deleted another member''s comment'; end if;
+end $$;
+:as_c
+-- [74] outsider cannot edit or delete (same 0-row result as for a missing comment)
+do $$ declare n int; begin
+  update public.comments set body = 'outsider' where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[74]: outsider edited a comment'; end if;
+  delete from public.comments where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[74]: outsider deleted a comment'; end if;
+end $$;
+:as_pg
+-- [75] the guard holds for the service role too; a body-less update keeps edited_at
+do $$ declare e timestamptz; begin
+  begin
+    update public.comments set author_id = '10000000-0000-0000-0000-000000000001' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[75]: service role changed author_id';
+  exception when others then if sqlerrm <> 'immutable_field' then raise; end if; end;
+  begin
+    update public.comments set created_at = now() - interval '1 day' where id = current_setting('t.cm_b')::uuid;
+    raise exception 'FAIL[75]: service role changed created_at';
+  exception when others then if sqlerrm <> 'immutable_field' then raise; end if; end;
+  select edited_at into e from public.comments where id = current_setting('t.cm_b')::uuid;
+  update public.comments set body = body, edited_at = null where id = current_setting('t.cm_b')::uuid;
+  if (select edited_at from public.comments where id = current_setting('t.cm_b')::uuid) is distinct from e then
+    raise exception 'FAIL[75]: edited_at not kept on a no-op update'; end if;
+  -- a comment by member 04, who was removed from WS One in [59]
+  insert into public.comments (bug_id, author_id, body)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000004', 'left behind');
+end $$;
+:as_a
+-- [76] a removed member can no longer edit or delete their old comment
+do $$ declare n int; id4 uuid; begin
+  select id into id4 from public.comments where author_id = '10000000-0000-0000-0000-000000000004' and body = 'left behind';
+  perform set_config('t.cm_4', id4::text, true);
+  perform set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000004","role":"authenticated"}', true);
+  update public.comments set body = 'still mine' where id = id4; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[76]: removed member edited their comment'; end if;
+  delete from public.comments where id = id4; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[76]: removed member deleted their comment'; end if;
+end $$;
+:as_a
+-- [77] the workspace owner can delete any comment in the workspace
+do $$ declare n int; begin
+  delete from public.comments where id = current_setting('t.cm_4')::uuid; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[77]: owner could not delete a comment'; end if;
+end $$;
+:as_b
+-- [78] the author can delete their own comment
+do $$ declare n int; begin
+  delete from public.comments where id = current_setting('t.cm_b')::uuid; get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[78]: author could not delete own comment'; end if;
+end $$;
+:as_pg
+do $$ begin
+  if exists (select 1 from public.comments where id in (current_setting('t.cm_b')::uuid, current_setting('t.cm_4')::uuid)) then
+    raise exception 'FAIL[78]: deleted comments still present'; end if;
+end $$;
+
+-- ===== Comment text in the activity log is redacted on edit / delete (0006) =====
+:as_b
+-- [79] a new comment's event is linked to it; editing replaces the event text
+do $$ declare cid uuid; begin
+  insert into public.comments (bug_id, author_id, body)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'secret one') returning id into cid;
+  perform set_config('t.cm_r', cid::text, true);
+  perform set_config('t.ev_r', (select id::text from public.bug_events where comment_id = cid), true);
+  if not exists (select 1 from public.bug_events where comment_id = cid and type = 'commented' and note = 'secret one') then
+    raise exception 'FAIL[79]: commented event not linked to its comment'; end if;
+  update public.comments set body = 'public v2' where id = cid;
+end $$;
+:as_a
+do $$ begin
+  if exists (select 1 from public.bug_events where note = 'secret one') then
+    raise exception 'FAIL[79]: original text still readable after edit'; end if;
+  if not exists (select 1 from public.bug_events where comment_id = current_setting('t.cm_r')::uuid and note = 'public v2') then
+    raise exception 'FAIL[79]: event text not updated to the edited body'; end if;
+end $$;
+:as_b
+delete from public.comments where id = current_setting('t.cm_r')::uuid;
+:as_a
+-- [80] deleting the comment clears the event text (the event itself stays)
+do $$ begin
+  if exists (select 1 from public.bug_events where note in ('secret one', 'public v2')) then
+    raise exception 'FAIL[80]: deleted comment text still readable'; end if;
+  if not exists (select 1 from public.bug_events where id = current_setting('t.ev_r')::uuid and note is null and comment_id is null) then
+    raise exception 'FAIL[80]: commented event missing, not redacted or still linked'; end if;
+end $$;
+-- [81] legacy events (no comment_id) are redacted by author + identical text, on edit and on delete
+:as_b
+do $$ declare cid uuid; begin
+  insert into public.comments (bug_id, author_id, body)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'legacy secret') returning id into cid;
+  perform set_config('t.cm_l', cid::text, true);
+end $$;
+:as_pg
+update public.bug_events set comment_id = null where comment_id = current_setting('t.cm_l')::uuid;
+:as_b
+update public.comments set body = 'legacy v2' where id = current_setting('t.cm_l')::uuid;
+:as_a
+do $$ begin
+  if exists (select 1 from public.bug_events where note = 'legacy secret') then
+    raise exception 'FAIL[81]: legacy event kept the original text after edit'; end if;
+end $$;
+:as_b
+delete from public.comments where id = current_setting('t.cm_l')::uuid;
+:as_a
+do $$ begin
+  if exists (select 1 from public.bug_events where note in ('legacy secret', 'legacy v2')) then
+    raise exception 'FAIL[81]: legacy event kept the text after delete'; end if;
+end $$;
+:as_pg
+-- [82] comments replica identity is DEFAULT; redaction / event functions are not client-callable
+do $$ begin
+  if (select relreplident from pg_class where oid = 'public.comments'::regclass) <> 'd' then
+    raise exception 'FAIL[82]: comments replica identity is not default'; end if;
+  if has_function_privilege('authenticated', 'public.comments_redact_events()', 'execute')
+     or has_function_privilege('anon', 'public.comments_redact_events()', 'execute')
+     or has_function_privilege('authenticated', 'public.comments_guard()', 'execute') then
+    raise exception 'FAIL[82]: comment trigger functions callable by clients'; end if;
+end $$;
+
+:as_a
+-- [83] reusing a deleted comment's id can't rewrite the original author's retained event
+insert into public.comments (id, bug_id, author_id, body)
+  values (current_setting('t.cm_r')::uuid, current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000001', 'reuse v1');
+update public.comments set body = 'reuse v2' where id = current_setting('t.cm_r')::uuid;
+delete from public.comments where id = current_setting('t.cm_r')::uuid;
+do $$ begin
+  if not exists (select 1 from public.bug_events where id = current_setting('t.ev_r')::uuid and note is null) then
+    raise exception 'FAIL[83]: id reuse rewrote another member''s event'; end if;
+end $$;
+:as_pg
+-- [84] bug_events replica identity is DEFAULT, so redacted notes don't persist in old-row images
+do $$ begin
+  if (select relreplident from pg_class where oid = 'public.bug_events'::regclass) <> 'd' then
+    raise exception 'FAIL[84]: bug_events replica identity is not default'; end if;
+end $$;
+
+-- ===== Context constraints and existing bug RLS (0007) =====
+:as_a
+-- [85] filer can insert context; [86] oversized objects are rejected
+-- [87] non-object JSON is rejected, including JSON null
+do $$ declare bid uuid; payload jsonb; begin
+  insert into public.bugs (workspace_id, title, description, severity, filed_by, context)
+    values (current_setting('t.ws1')::uuid, 'Context bug', 'context', 'low', auth.uid(), '{"url":"https://example.com"}')
+    returning id into bid;
+  perform set_config('t.context_bug', bid::text, true);
+  if (select context->>'url' from public.bugs where id = bid) is distinct from 'https://example.com' then
+    raise exception 'FAIL[85]: filer context insert/read failed'; end if;
+  begin
+    update public.bugs set context = jsonb_build_object('build', repeat('x', 17000)) where id = bid;
+    raise exception 'FAIL[86]: oversized context accepted';
+  exception when check_violation then null;
+  end;
+  foreach payload in array array['[]'::jsonb, '"text"'::jsonb, '42'::jsonb, 'true'::jsonb, 'null'::jsonb] loop
+    begin
+      update public.bugs set context = payload where id = bid;
+      raise exception 'FAIL[87]: non-object context accepted';
+    exception when check_violation then null;
+    end;
+  end loop;
+end $$;
+:as_b
+-- [88] another member can read/update context, including SQL null
+do $$ begin
+  if (select context->>'url' from public.bugs where id = current_setting('t.context_bug')::uuid) is distinct from 'https://example.com' then
+    raise exception 'FAIL[88]: member cannot read context'; end if;
+  update public.bugs set context = null where id = current_setting('t.context_bug')::uuid;
+  if not found then raise exception 'FAIL[88]: member cannot clear context'; end if;
+  update public.bugs set context = '{"browser":"Firefox"}' where id = current_setting('t.context_bug')::uuid;
+  if (select context->>'browser' from public.bugs where id = current_setting('t.context_bug')::uuid) is distinct from 'Firefox' then
+    raise exception 'FAIL[88]: member cannot update context'; end if;
+end $$;
+:as_c
+-- [89] outsider cannot read or update context; [90] cannot insert it
+do $$ begin
+  if exists (select context from public.bugs where id = current_setting('t.context_bug')::uuid) then
+    raise exception 'FAIL[89]: outsider can read context'; end if;
+  update public.bugs set context = '{}' where id = current_setting('t.context_bug')::uuid;
+  if found then raise exception 'FAIL[89]: outsider can update context'; end if;
+  begin
+    insert into public.bugs (workspace_id, title, description, severity, filed_by, context)
+      values (current_setting('t.ws1')::uuid, 'Outsider', 'context', 'low', auth.uid(), '{}');
+    raise exception 'FAIL[90]: outsider inserted context';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+:as_a
+-- [91] context insert still cannot spoof another filer
+do $$ begin
+  begin
+    insert into public.bugs (workspace_id, title, description, severity, filed_by, context)
+      values (current_setting('t.ws1')::uuid, 'Spoof', 'context', 'low', '10000000-0000-0000-0000-000000000002', '{}');
+    raise exception 'FAIL[91]: context insert spoofed filer';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

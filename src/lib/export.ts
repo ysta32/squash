@@ -1,3 +1,4 @@
+import { formatContext } from './bugContext'
 import { KIND_LABEL, SEVERITY_LABEL } from './types'
 import type { BugWithMeta as BugWithAttachments } from './types'
 
@@ -21,7 +22,8 @@ function csvCell(value: string | number | null): string {
 }
 
 export function bugsToCsv(bugs: BugWithAttachments[]): string {
-  const header = 'number,kind,title,severity,status,filed_by,created_at,resolved_at,description'
+  const header =
+    'number,kind,title,severity,status,filed_by,created_at,resolved_at,description,context'
   const rows = bugs.map((bug) =>
     [
       bug.number,
@@ -33,6 +35,7 @@ export function bugsToCsv(bugs: BugWithAttachments[]): string {
       bug.created_at,
       bug.resolved_at,
       bug.description,
+      formatContext(bug.context),
     ]
       .map(csvCell)
       .join(','),
@@ -60,10 +63,12 @@ export function bugsToMarkdown(bugs: BugWithAttachments[], workspaceName: string
     ),
   ]
   for (const bug of bugs) {
+    const context = formatContext(bug.context)
     lines.push(
       '',
       `## ${KIND_LABEL[bug.kind].one} #${bug.number}: ${markdownCell(bug.title)}`,
       '',
+      ...(context ? [`Context: ${markdownCell(context)}`, ''] : []),
       bug.description.replace(/</g, '&lt;').replace(/^( {0,3})#/gm, '$1\\#'),
     )
   }

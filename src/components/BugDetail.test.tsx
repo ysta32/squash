@@ -4,10 +4,12 @@ import type { BugEvent, BugWithMeta, Comment, WorkspaceMember } from '../lib/typ
 import { BugDetail } from './BugDetail'
 
 const addComment = vi.fn<(body: string) => Promise<void>>()
+const editComment = vi.fn<(id: string, body: string) => Promise<void>>()
+const deleteComment = vi.fn<(id: string) => Promise<void>>()
 const thread: { comments: Comment[]; events: BugEvent[] } = { comments: [], events: [] }
 
 vi.mock('../hooks/useBug', () => ({
-  useBug: () => ({ ...thread, addComment, loading: false }),
+  useBug: () => ({ ...thread, addComment, editComment, deleteComment, loading: false }),
 }))
 vi.mock('../hooks/useSignedUrl', () => ({
   useSignedUrl: (path: string | null) => (path ? `https://cdn.test/${path}` : null),
@@ -93,6 +95,33 @@ function setup(bug: BugWithMeta | null, extra: Partial<Parameters<typeof BugDeta
 }
 
 describe('BugDetail', () => {
+  it('shows a context label with a safe external URL', () => {
+    setup(
+      makeBug({
+        context: {
+          url: 'https://example.com/checkout',
+          viewport: { w: 1440, h: 900, dpr: 2 },
+          browser: 'Chrome 131',
+          os: 'macOS',
+        },
+      }),
+    )
+    expect(screen.getByLabelText('Bug context')).toHaveTextContent(
+      'example.com/checkout · 1440×900 @2x · Chrome 131 · macOS',
+    )
+    const link = screen.getByRole('link', { name: 'example.com/checkout' })
+    expect(link).toHaveAttribute('href', 'https://example.com/checkout')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+  it.each([null, {}, { url: 'javascript:alert(1)' }])(
+    'hides empty or invalid context %j',
+    (context) => {
+      setup(makeBug({ context }))
+      expect(screen.queryByLabelText('Bug context')).not.toBeInTheDocument()
+    },
+  )
+
   beforeEach(() => {
     thread.comments = []
     thread.events = []
@@ -441,7 +470,14 @@ describe('BugDetail', () => {
 
   it('renders comments and timeline, sends on Enter and ignores empty', async () => {
     thread.comments = [
-      { id: 'c1', bug_id: 'b1', author_id: 'u2', body: 'line1\nline2', created_at: NOW },
+      {
+        id: 'c1',
+        bug_id: 'b1',
+        author_id: 'u2',
+        body: 'line1\nline2',
+        created_at: NOW,
+        edited_at: null,
+      },
     ]
     thread.events = [
       {

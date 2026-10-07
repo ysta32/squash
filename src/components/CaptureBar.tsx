@@ -1,3 +1,4 @@
+import { collectEnvContext, extractUrl, sanitizeContext } from '../lib/bugContext'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, RefObject } from 'react'
 import { Camera, CornerDownLeft, Info, Mic, Paperclip, SendHorizontal } from 'lucide-react'
@@ -52,6 +53,11 @@ export function CaptureBar({
   const noun = kind === 'feature' ? 'feature request' : 'bug'
   const [value, setValueState] = useState('')
   const [interim, setInterim] = useState('')
+  const [removedUrls, setRemovedUrls] = useState<string[]>([])
+  const removedUrlsRef = useRef<string[]>([])
+  const detectedUrl = extractUrl(value)
+  const contextUrl = detectedUrl && !removedUrls.includes(detectedUrl) ? detectedUrl : undefined
+
   const valueRef = useRef('')
   const transcriptRef = useRef<string | null>(null)
   const submittingRef = useRef(false)
@@ -119,6 +125,13 @@ export function CaptureBar({
     },
     [],
   )
+
+  const removeUrl = () => {
+    if (!contextUrl) return
+    removedUrlsRef.current = [...removedUrlsRef.current, contextUrl]
+    setRemovedUrls(removedUrlsRef.current)
+    innerRef.current?.focus()
+  }
 
   const addFiles = useCallback(
     (files: File[]) => {
@@ -204,7 +217,15 @@ export function CaptureBar({
       transcript: transcriptRef.current,
       severity: severityRef.current,
       chips: chipsRef.current,
+      removedUrls: removedUrlsRef.current,
     }
+    const url = extractUrl(description)
+    const context = sanitizeContext({
+      ...collectEnvContext(),
+      url: url && !snapshot.removedUrls.includes(url) ? url : undefined,
+    })
+    removedUrlsRef.current = []
+    setRemovedUrls([])
     const files = snapshot.chips.map((c) => c.file)
     setValue('')
     setTranscript(null)
@@ -213,6 +234,7 @@ export function CaptureBar({
     try {
       await onSubmit({
         description,
+        context,
         transcript: snapshot.transcript,
         severity: snapshot.severity,
         kind,
@@ -220,6 +242,8 @@ export function CaptureBar({
       })
       snapshot.chips.forEach((c) => URL.revokeObjectURL(c.previewUrl))
     } catch (err) {
+      removedUrlsRef.current = [...snapshot.removedUrls, ...removedUrlsRef.current]
+      setRemovedUrls(removedUrlsRef.current)
       const current = valueRef.current
       setValue(current.trim() === '' ? snapshot.value : `${snapshot.value.trimEnd()}\n\n${current}`)
       if (snapshot.transcript) {
@@ -327,6 +351,24 @@ export function CaptureBar({
         </div>
       )}
 
+      {contextUrl && (
+        <button
+          type="button"
+          aria-label={`Remove URL ${contextUrl}`}
+          title={contextUrl}
+          onClick={removeUrl}
+          onKeyDown={(e) => {
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+              e.preventDefault()
+              removeUrl()
+            }
+          }}
+          className="focus-ring mt-1 inline-flex max-w-full items-center gap-1 rounded border border-border px-2 py-1 font-mono text-xs text-muted"
+        >
+          <span className="truncate">URL {contextUrl}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      )}
       {editingChip && (
         <AnnotateDialog
           key={editingChip.id}

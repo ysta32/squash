@@ -7,28 +7,17 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer } from 'vite'
-import { fixtures, socialCard } from './fixtures.mjs'
+import { socialCard } from './fixtures.mjs'
+import { fixturesDir, renderFixtures } from './render-fixtures.mjs'
 
 const configFile = fileURLToPath(new URL('./vite.config.ts', import.meta.url))
-const fixturesDir = fileURLToPath(
-  new URL('../../node_modules/.cache/squash-shots/', import.meta.url),
-)
 const outDir = fileURLToPath(new URL('../../docs/screenshots/', import.meta.url))
 const only = process.argv[2]
 
 const browser = await chromium.launch({ channel: 'chrome' })
 
 // 1. Render the demo bugs' attached screenshots.
-mkdirSync(fixturesDir, { recursive: true })
-for (const f of fixtures) {
-  const page = await browser.newPage({
-    viewport: { width: f.width, height: f.height },
-    deviceScaleFactor: 2,
-  })
-  await page.setContent(f.html)
-  writeFileSync(fixturesDir + f.file, await page.screenshot())
-  await page.close()
-}
+await renderFixtures(browser)
 
 // 2. Serve the app with the mocked backend.
 const server = await createServer({ configFile, logLevel: 'error' })

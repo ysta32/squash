@@ -1,3 +1,5 @@
+import type { Json } from './database.types'
+
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type BugStatus = 'open' | 'resolved'
 export type BugKind = 'bug' | 'feature'
@@ -34,6 +36,7 @@ export interface Bug {
   number: number
   title: string
   description: string
+  context?: Json | null
   transcript: string | null
   severity: Severity
   status: BugStatus
@@ -64,6 +67,8 @@ export interface Comment {
   author_id: string
   body: string
   created_at: string
+  /** Set by the server whenever the body changes; null if never edited. */
+  edited_at: string | null
 }
 
 export interface BugEvent {

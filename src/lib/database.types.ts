@@ -118,6 +118,7 @@ export type Database = {
           number: number
           title: string
           description: string
+          context: Json | null
           transcript: string | null
           severity: BugSeverityEnum
           status: BugStatusEnum
@@ -137,6 +138,7 @@ export type Database = {
           number?: number
           title: string
           description: string
+          context?: Json | null
           transcript?: string | null
           severity?: BugSeverityEnum
           status?: BugStatusEnum
@@ -155,6 +157,7 @@ export type Database = {
           number?: number
           title?: string
           description?: string
+          context?: Json | null
           transcript?: string | null
           severity?: BugSeverityEnum
           status?: BugStatusEnum
@@ -223,6 +226,8 @@ export type Database = {
           author_id: string
           body: string
           created_at: string
+          /** Set by the server whenever `body` changes; null if never edited. */
+          edited_at: string | null
         }
         Insert: {
           id?: string
@@ -231,12 +236,9 @@ export type Database = {
           body: string
           created_at?: string
         }
+        /** Clients may only change `body` (column grant + comments_guard trigger). */
         Update: {
-          id?: string
-          bug_id?: string
-          author_id?: string
           body?: string
-          created_at?: string
         }
         Relationships: [
           {
@@ -256,6 +258,8 @@ export type Database = {
           type: BugEventTypeEnum
           note: string | null
           created_at: string
+          /** 'commented' events only: the comment (its note is redacted on edit/delete). */
+          comment_id: string | null
         }
         /** Inserted only by triggers; no client INSERT policy exists. */
         Insert: {

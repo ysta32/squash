@@ -2,6 +2,7 @@ import { Badge, Button, Field, Input, Section } from '../ui'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../Avatar'
+import { DeletionLog } from './DeletionLog'
 import { LAST_WORKSPACE_KEY, useWorkspace } from '../../hooks/useWorkspaces'
 import { removeScreenshots } from '../../lib/storageCleanup'
 
@@ -191,6 +192,7 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
           ))}
         </ul>
       </Section>
+      <DeletionLog workspaceId={workspaceId} members={members} />
       {error && !confirmDelete && (
         <p role="alert" className="text-sm text-danger">
           {error}

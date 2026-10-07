@@ -58,8 +58,8 @@ describe('exportFilename', () => {
 describe('bugsToCsv', () => {
   it('writes ordered columns and empty nullable values', () => {
     expect(bugsToCsv([bug()])).toBe(
-      'number,kind,title,severity,status,filed_by,created_at,resolved_at,description\r\n' +
-        '7,bug,Login fails,high,open,ada,2026-10-01T10:00:00Z,,Steps to reproduce\r\n',
+      'number,kind,title,severity,status,filed_by,created_at,resolved_at,description,context\r\n' +
+        '7,bug,Login fails,high,open,ada,2026-10-01T10:00:00Z,,Steps to reproduce,\r\n',
     )
   })
 
@@ -67,7 +67,7 @@ describe('bugsToCsv', () => {
     expect(
       bugsToCsv([bug({ title: 'Login, "again"', description: 'First\r\nSecond\nThird\rFourth' })]),
     ).toContain(
-      '7,bug,"Login, ""again""",high,open,ada,2026-10-01T10:00:00Z,,"First\r\nSecond\nThird\rFourth"\r\n',
+      '7,bug,"Login, ""again""",high,open,ada,2026-10-01T10:00:00Z,,"First\r\nSecond\nThird\rFourth",\r\n',
     )
   })
 
@@ -77,7 +77,7 @@ describe('bugsToCsv', () => {
       const csv = bugsToCsv([bug({ title: value, filed_by: value, description: value })])
       const guarded = value.includes(',') ? `"'${value}"` : `'${value}`
       expect(csv).toContain(
-        `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded}\r\n`,
+        `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded},\r\n`,
       )
     },
   )
@@ -97,14 +97,14 @@ describe('bugsToCsv', () => {
       const value = `${whitespace}${prefix}SUM(1,2)`
       const guarded = `"'${value}"`
       expect(bugsToCsv([bug({ title: value, filed_by: value, description: value })])).toContain(
-        `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded}\r\n`,
+        `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded},\r\n`,
       )
     })
 
     it('preserves the character inside ordinary text', () => {
       const value = `Text ${prefix} value`
       expect(bugsToCsv([bug({ title: value, filed_by: value, description: value })])).toContain(
-        `7,bug,${value},high,open,${value},2026-10-01T10:00:00Z,,${value}\r\n`,
+        `7,bug,${value},high,open,${value},2026-10-01T10:00:00Z,,${value},\r\n`,
       )
     })
   })
@@ -118,13 +118,13 @@ describe('bugsToCsv', () => {
     ['  +123', "'  +123"],
   ])('guards whitespace-prefixed cells: %s', (value, guarded) => {
     expect(bugsToCsv([bug({ title: value, filed_by: value, description: value })])).toContain(
-      `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded}\r\n`,
+      `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded},\r\n`,
     )
   })
 
   it('exports just the header for an empty list', () => {
     expect(bugsToCsv([])).toBe(
-      'number,kind,title,severity,status,filed_by,created_at,resolved_at,description\r\n',
+      'number,kind,title,severity,status,filed_by,created_at,resolved_at,description,context\r\n',
     )
   })
 })
@@ -300,4 +300,23 @@ describe('export menu', () => {
     fireEvent.pointerDown(document.body)
     expect(screen.queryByRole('menu')).toBeNull()
   })
+})
+
+it('exports sanitized context in CSV and markdown', () => {
+  const item = bug({
+    context: {
+      url: 'https://example.com/checkout',
+      viewport: { w: 1440, h: 900, dpr: 2 },
+      browser: 'Chrome 131',
+      os: 'macOS',
+      build: 'abc123',
+      secret: 'hidden',
+    },
+  })
+  for (const text of [bugsToCsv([item]), bugsToMarkdown([item], 'Acme')]) {
+    expect(text).toContain(
+      'https://example.com/checkout · 1440×900 @2x · Chrome 131 · macOS · abc123',
+    )
+    expect(text).not.toContain('hidden')
+  }
 })

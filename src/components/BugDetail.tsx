@@ -1,3 +1,4 @@
+import { formatContext, sanitizeContext } from '../lib/bugContext'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
@@ -289,11 +290,29 @@ function BugBody({
     ...pending.map((p) => ({ key: p.localId, url: p.previewUrl })),
   ]
   const viewable = gallery.filter((g): g is { key: string; url: string } => g.url !== null)
+  const context = sanitizeContext(bug.context)
+  const environment = formatContext({ ...context, url: undefined })
   const lightboxIndex = lightboxKey ? viewable.findIndex((g) => g.key === lightboxKey) : -1
 
   return (
     <div className="h-full min-w-0 overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl min-w-0 px-4 pb-12 sm:px-6">
+        {formatContext(context) && (
+          <p aria-label="Bug context" className="pt-4 font-mono text-xs break-words text-muted">
+            {context.url && (
+              <a
+                href={context.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="focus-ring underline"
+              >
+                {context.url.replace(/^https?:\/\//, '')}
+              </a>
+            )}
+            {context.url && environment && ' · '}
+            {environment}
+          </p>
+        )}
         <header className="flex flex-wrap items-center gap-2 pt-4">
           <div className="flex min-w-0 items-center gap-1">
             <button
@@ -580,7 +599,7 @@ function BugBody({
             </section>
           )}
 
-          <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} />
+          <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} selfId={selfId} />
         </div>
 
         {lightboxIndex >= 0 && (

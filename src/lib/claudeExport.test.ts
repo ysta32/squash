@@ -58,7 +58,16 @@ const base = {
   workspaceName: 'Acme',
   origin: 'https://squash.test',
   urls: { 'ws/b1/one.webp': "https://cdn.test/one.webp?token=a'b" },
-  comments: [{ id: 'c1', bug_id: 'b1', author_id: 'ada', body: 'Only on Safari', created_at: '' }],
+  comments: [
+    {
+      id: 'c1',
+      bug_id: 'b1',
+      author_id: 'ada',
+      body: 'Only on Safari',
+      created_at: '',
+      edited_at: null,
+    },
+  ],
 }
 
 describe('formatClaudePrompt', () => {
@@ -142,4 +151,25 @@ describe('unattended bridge runs', () => {
     expect(parseClaudeResult(null)).toEqual([])
     expect(parseClaudeResult({ bugs: 'x' })).toEqual([])
   })
+})
+
+it.each([undefined, '.squash/bugs/run'])('includes context in Claude export (%s)', (localDir) => {
+  const { prompt } = formatClaudePrompt({
+    ...base,
+    localDir,
+    bugs: [
+      bug({
+        context: {
+          url: 'https://example.com/checkout',
+          viewport: { w: 1440, h: 900, dpr: 2 },
+          browser: 'Chrome 131',
+          os: 'macOS',
+          build: 'abc123',
+        },
+      }),
+    ],
+  })
+  expect(prompt).toContain(
+    '- Context: https://example.com/checkout · 1440×900 @2x · Chrome 131 · macOS · abc123',
+  )
 })

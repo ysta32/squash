@@ -28,6 +28,48 @@ export function mergeById<T extends WithIdAndTime>(current: T[], incoming: T[]):
   return [...current, ...additions].sort((a, b) => a.created_at.localeCompare(b.created_at))
 }
 
+/** Later edit wins; a row never edited (null) is older than any edit. */
+function isNewer(incoming: Comment, current: Comment): boolean {
+  if (incoming.edited_at === null) return false
+  if (current.edited_at === null) return true
+  // Parsed, not string-compared: REST and realtime payloads may format timestamps differently.
+  return Date.parse(incoming.edited_at) > Date.parse(current.edited_at)
+}
+
+/**
+ * Merges comment rows into the list: unknown ids are added, known ids are replaced only by a newer
+ * edit (so a stale fetch never undoes a realtime edit), ids in `deleted` are dropped. When
+ * `snapshot` is set, `incoming` is a full server listing and rows in `snapshot` (ids that were
+ * already known before that listing was requested) but missing from it are dropped as deleted.
+ */
+export function upsertComments(
+  current: Comment[],
+  incoming: Comment[],
+  deleted: ReadonlySet<string>,
+  snapshot?: ReadonlySet<string>,
+): Comment[] {
+  const byId = new Map(current.map((c) => [c.id, c]))
+  let changed = false
+  if (snapshot) {
+    const listed = new Set(incoming.map((c) => c.id))
+    for (const id of snapshot) {
+      if (!listed.has(id) && byId.delete(id)) changed = true
+    }
+  }
+  for (const id of deleted) {
+    if (byId.delete(id)) changed = true
+  }
+  for (const row of incoming) {
+    if (deleted.has(row.id)) continue
+    const known = byId.get(row.id)
+    if (known && !isNewer(row, known)) continue
+    byId.set(row.id, row)
+    changed = true
+  }
+  if (!changed) return current
+  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+}
+
 interface BugThreadState {
   bugId: string | null
   comments: Comment[]
@@ -42,6 +84,8 @@ export function useBug(bugId: string | null): {
   comments: Comment[]
   events: BugEvent[]
   addComment(body: string): Promise<void>
+  editComment(id: string, body: string): Promise<void>
+  deleteComment(id: string): Promise<void>
   loading: boolean
 } {
   const [state, setState] = useState<BugThreadState>({
@@ -52,6 +96,10 @@ export function useBug(bugId: string | null): {
   })
   /** The bug whose thread is currently live; late results for any other bug are dropped. */
   const liveBugRef = useRef<string | null>(null)
+  /** Comment ids deleted while this bug is open; late inserts / fetches never bring them back. */
+  const deletedRef = useRef<Set<string>>(new Set())
+  /** Comment ids currently shown, read when a fetch starts (see upsertComments' snapshot). */
+  const shownRef = useRef<Comment[]>([])
 
   const apply = useCallback((id: string, fn: (s: BugThreadState) => BugThreadState) => {
     if (liveBugRef.current !== id) return
@@ -61,6 +109,8 @@ export function useBug(bugId: string | null): {
   useEffect(() => {
     if (!bugId) return
     liveBugRef.current = bugId
+    deletedRef.current = new Set()
+    const deleted = deletedRef.current
     let active = true
 
     const channel = openChannel(`bug:${bugId}`)
@@ -69,7 +119,34 @@ export function useBug(bugId: string | null): {
         { event: 'INSERT', schema: 'public', table: 'comments', filter: `bug_id=eq.${bugId}` },
         (payload) => {
           if (!active) return
-          apply(bugId, (s) => ({ ...s, comments: mergeById(s.comments, [payload.new]) }))
+          apply(bugId, (s) => ({
+            ...s,
+            comments: upsertComments(s.comments, [payload.new], deleted),
+          }))
+        },
+      )
+      .on<Comment>(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'comments', filter: `bug_id=eq.${bugId}` },
+        (payload) => {
+          if (!active) return
+          apply(bugId, (s) => ({
+            ...s,
+            comments: upsertComments(s.comments, [payload.new], deleted),
+          }))
+        },
+      )
+      // DELETE events cannot be filtered by column (and carry only the id under RLS), so this sees
+      // every comment deletion the server sends; ids that are not in this thread are no-ops.
+      .on<Comment>(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'comments' },
+        (payload) => {
+          if (!active) return
+          const removedId = payload.old.id
+          if (!removedId) return
+          deleted.add(removedId)
+          apply(bugId, (s) => ({ ...s, comments: upsertComments(s.comments, [], deleted) }))
         },
       )
       .on<BugEvent>(
@@ -83,6 +160,8 @@ export function useBug(bugId: string | null): {
     let latest = 0
     const load = () => {
       const seq = ++latest
+      // Every id shown now came from the server, so one missing from this listing was deleted.
+      const known = new Set(shownRef.current.map((c) => c.id))
       void Promise.all([
         supabase
           .from('comments')
@@ -101,7 +180,7 @@ export function useBug(bugId: string | null): {
           if (e.error) console.error('Failed to load bug history', e.error)
           apply(bugId, (s) => ({
             ...s,
-            comments: mergeById(s.comments, c.data ?? []),
+            comments: c.data ? upsertComments(s.comments, c.data, deleted, known) : s.comments,
             events: mergeById(s.events, e.data ?? []),
             loaded: true,
           }))
@@ -155,16 +234,70 @@ export function useBug(bugId: string | null): {
         throw new Error('Slow down — max 30 comments per minute.')
       }
       if (error || !data) throw new Error(error?.message ?? 'Could not post comment.')
-      apply(bugId, (s) => ({ ...s, comments: mergeById(s.comments, [data]) }))
+      apply(bugId, (s) => ({
+        ...s,
+        comments: upsertComments(s.comments, [data], deletedRef.current),
+      }))
+    },
+    [bugId, apply],
+  )
+
+  const editComment = useCallback(
+    async (id: string, body: string) => {
+      if (!bugId) throw new Error('No bug selected.')
+      const text = body.trim()
+      if (!text) throw new Error('Comment is empty.')
+      const { data, error } = await supabase
+        .from('comments')
+        .update({ body: text })
+        .eq('id', id)
+        .select()
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      // RLS hides the row from the update when it is not yours or no longer exists.
+      if (!data) throw new Error('This comment can no longer be edited.')
+      apply(bugId, (s) => ({
+        ...s,
+        comments: upsertComments(s.comments, [data], deletedRef.current),
+      }))
+    },
+    [bugId, apply],
+  )
+
+  const deleteComment = useCallback(
+    async (id: string) => {
+      if (!bugId) throw new Error('No bug selected.')
+      const { data, error } = await supabase.from('comments').delete().eq('id', id).select('id')
+      if (error) throw new Error(error.message)
+      if (!data || data.length === 0) {
+        // Not deleted: either already gone (fine) or not allowed. Only the latter is an error.
+        const { data: still } = await supabase
+          .from('comments')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle()
+        if (still) throw new Error('You cannot delete this comment.')
+      }
+      deletedRef.current.add(id)
+      apply(bugId, (s) => ({
+        ...s,
+        comments: upsertComments(s.comments, [], deletedRef.current),
+      }))
     },
     [bugId, apply],
   )
 
   const current = bugId !== null && state.bugId === bugId
+  const comments = current ? state.comments : EMPTY_COMMENTS
+  useEffect(() => {
+    shownRef.current = comments
+  }, [comments])
   return {
-    comments: current ? state.comments : EMPTY_COMMENTS,
+    comments,
     events: current ? state.events : EMPTY_EVENTS,
     addComment,
+    editComment,
+    deleteComment,
     loading: bugId !== null && !(current && state.loaded),
   }
 }

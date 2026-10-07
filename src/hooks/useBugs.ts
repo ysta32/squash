@@ -1,3 +1,4 @@
+import { sanitizeContext, type BugContext } from '../lib/bugContext'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Database } from '../lib/database.types'
@@ -35,6 +36,7 @@ export interface BugFilters {
 }
 
 export interface NewBugInput {
+  context?: BugContext
   description: string
   transcript: string | null
   severity: Severity
@@ -84,6 +86,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 /** Maps DB/storage/compression error codes (raised as the message) to user-facing text. */
+/** PostgREST's error when a column is missing from the schema (e.g. a migration not yet applied). */
+export function isMissingColumn(error: unknown, column: string): boolean {
+  if (!error || typeof error !== 'object') return false
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  const text = typeof message === 'string' ? message : ''
+  return (code === 'PGRST204' || code === '42703') && text.includes(column)
+}
+
 export function friendlyError(err: unknown, fallback = 'Something went wrong. Try again.'): string {
   const message =
     err instanceof Error
@@ -260,7 +270,7 @@ export function applySnapshot(
   const out: BugWithMeta[] = []
   for (const f of fetched) {
     const existing = byId.get(f.id)
-    const base = existing ? applyServerRow(existing, f) : f
+    const base = existing ? applyServerRow(existing, { ...f, context: f.context ?? null }) : f
     const attachments = snapshotAttachments(
       f.attachments,
       existing?.attachments ?? [],
@@ -287,7 +297,7 @@ function mergeRows(current: BugWithMeta[], rows: BugWithMeta[]): BugWithMeta[] {
       continue
     }
     next = mapBug(next, r.id, (bug) => ({
-      ...applyServerRow(bug, r),
+      ...applyServerRow(bug, { ...r, context: r.context ?? null }),
       attachments: mergeAttachments(r.attachments, bug.attachments),
     }))
   }
@@ -798,6 +808,7 @@ export function useBugs(
         deriveTitle(input.description) ||
         deriveTitle(input.transcript ?? '') ||
         (input.kind === 'feature' ? 'Untitled feature' : 'Untitled bug')
+      const context = input.context ? sanitizeContext(input.context) : null
       const description = input.description.trim()
       const transcript = input.transcript?.trim() ? input.transcript.trim() : null
 
@@ -819,6 +830,7 @@ export function useBugs(
         title,
         description,
         transcript,
+        context,
         severity: input.severity,
         status: 'open',
         kind: input.kind,
@@ -838,20 +850,24 @@ export function useBugs(
       let inserted: BugRow | null = null
       let failure: unknown = null
       try {
-        const { data, error } = await supabase
-          .from('bugs')
-          .insert({
-            id,
-            workspace_id: ws,
-            title,
-            description,
-            transcript,
-            severity: input.severity,
-            kind: input.kind,
-            filed_by: filedBy,
-          })
-          .select()
-          .single()
+        const row = {
+          id,
+          workspace_id: ws,
+          title,
+          description,
+          transcript,
+          context,
+          severity: input.severity,
+          kind: input.kind,
+          filed_by: filedBy,
+        }
+        let { data, error } = await supabase.from('bugs').insert(row).select().single()
+        if (error && context && isMissingColumn(error, 'context')) {
+          // The server hasn't run migration 0007 yet: file the bug without its context.
+          const { context: _omit, ...withoutContext } = row
+          void _omit
+          ;({ data, error } = await supabase.from('bugs').insert(withoutContext).select().single())
+        }
         if (error) failure = error
         else inserted = data
       } catch (err) {
