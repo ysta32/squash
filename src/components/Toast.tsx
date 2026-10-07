@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -41,8 +42,55 @@ interface ToastContextValue {
 
 const TONE_ICON: Record<ToastTone, ReactNode> = {
   neutral: null,
-  success: <CircleCheck className="size-4 text-success" />,
-  error: <CircleAlert className="size-4 text-danger" />,
+  success: <CircleCheck size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-success" />,
+  error: <CircleAlert size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-danger" />,
+}
+
+const EXIT_MS = 110
+const SHIFT_MS = 160
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : true
+}
+
+/** Web Animations is the only motion path; environments without it (and reduced motion) skip it. */
+function canAnimate(): boolean {
+  return typeof Element.prototype.animate === 'function' && !prefersReducedMotion()
+}
+
+/**
+ * Plays a removed toast's exit on a detached, inert snapshot so the real node (and its text) leaves
+ * the DOM and the accessibility tree immediately, as before.
+ */
+function playExit(node: HTMLElement) {
+  const rect = node.getBoundingClientRect()
+  const ghost = node.cloneNode(true) as HTMLElement
+  ghost.removeAttribute('role')
+  ghost.removeAttribute('aria-live')
+  ghost.setAttribute('aria-hidden', 'true')
+  ghost.inert = true
+  Object.assign(ghost.style, {
+    position: 'fixed',
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    margin: '0',
+    zIndex: '50',
+    pointerEvents: 'none',
+    animation: 'none',
+  })
+  document.body.append(ghost)
+  const animation = ghost.animate(
+    [
+      { opacity: 1, transform: 'none' },
+      { opacity: 0, transform: 'translateY(4px)' },
+    ],
+    { duration: EXIT_MS, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
+  )
+  const remove = () => ghost.remove()
+  animation.finished.then(remove, remove)
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null)
@@ -80,18 +128,19 @@ function Notification({
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false)
       }}
-      className="pointer-events-auto flex w-full animate-[toast-in_150ms_ease-out] items-start gap-2.5 rounded-lg border border-border bg-bg-elevated py-2 pr-2 pl-3 text-sm text-fg shadow-elevated"
+      data-toast-id={item.id}
+      className="pointer-events-auto flex min-h-11 w-full animate-[toast-in_var(--dur-standard)_var(--ease-out)] items-center gap-3 rounded-lg border border-line bg-surface-2 py-1.5 pr-1.5 pl-4 text-sm text-ink shadow-elev-2"
     >
       {icon ? (
-        <span aria-hidden="true" className="flex h-6 shrink-0 items-center">
+        <span aria-hidden="true" className="-ml-1 flex shrink-0 items-center">
           {icon}
         </span>
       ) : null}
-      <span className="min-w-0 flex-1 py-0.5 leading-5 break-words">{item.msg}</span>
+      <span className="min-w-0 flex-1 py-1 break-words">{item.msg}</span>
       {item.action && (
         <button
           type="button"
-          className="focus-ring rounded-md px-2 py-0.5 text-accent hover:bg-bg-subtle"
+          className="t focus-ring h-8 shrink-0 rounded-md px-2.5 font-medium text-accent hover:bg-surface-3 pointer-coarse:h-11"
           onClick={() => activate(item)}
         >
           {item.action.label}
@@ -101,9 +150,9 @@ function Notification({
         type="button"
         aria-label="Dismiss notification"
         onClick={() => dismiss(item.id)}
-        className="t focus-ring flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg"
+        className="t focus-ring flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:size-11"
       >
-        <X className="size-3.5" aria-hidden="true" />
+        <X size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
       </button>
     </div>
   )
@@ -126,24 +175,67 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if ((!active || active === document.body) && target.isConnected) target.focus()
   }, [items])
 
-  const dismiss = useCallback((id: number) => {
-    currentItems.current = currentItems.current.filter((t) => t.id !== id)
-    setItems(currentItems.current)
+  // Positions before a change, so the toasts that stay can glide (transform only) to their new place.
+  const before = useRef<Map<string, number> | null>(null)
+
+  /** Records layout and plays exits for `removed` before the list changes. */
+  const prepare = useCallback((removed: number[]) => {
+    const root = region.current
+    if (!root || !canAnimate()) return
+    const tops = new Map<string, number>()
+    for (const node of Array.from(root.querySelectorAll<HTMLElement>('[data-toast-id]'))) {
+      const id = node.dataset.toastId ?? ''
+      if (removed.includes(Number(id))) playExit(node)
+      else tops.set(id, node.getBoundingClientRect().top)
+    }
+    before.current = tops
   }, [])
 
-  const toast = useCallback((msg: string, opts?: ToastOptions) => {
-    const id = nextId.current++
-    const item: ToastItem = {
-      id,
-      msg,
-      icon: opts?.icon,
-      tone: opts?.tone ?? 'neutral',
-      action: opts?.action,
-      duration: opts?.duration ?? TOAST_DURATION_MS,
+  useLayoutEffect(() => {
+    const tops = before.current
+    before.current = null
+    const root = region.current
+    if (!tops || !root) return
+    for (const node of Array.from(root.querySelectorAll<HTMLElement>('[data-toast-id]'))) {
+      const top = tops.get(node.dataset.toastId ?? '')
+      if (top === undefined) continue
+      const delta = top - node.getBoundingClientRect().top
+      if (Math.abs(delta) < 1) continue
+      node.animate([{ transform: `translateY(${delta}px)` }, { transform: 'none' }], {
+        duration: SHIFT_MS,
+        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+      })
     }
-    currentItems.current = [...currentItems.current, item].slice(-MAX_TOASTS)
-    setItems(currentItems.current)
-  }, [])
+  }, [items])
+
+  const dismiss = useCallback(
+    (id: number) => {
+      if (!currentItems.current.some((t) => t.id === id)) return
+      prepare([id])
+      currentItems.current = currentItems.current.filter((t) => t.id !== id)
+      setItems(currentItems.current)
+    },
+    [prepare],
+  )
+
+  const toast = useCallback(
+    (msg: string, opts?: ToastOptions) => {
+      const id = nextId.current++
+      const item: ToastItem = {
+        id,
+        msg,
+        icon: opts?.icon,
+        tone: opts?.tone ?? 'neutral',
+        action: opts?.action,
+        duration: opts?.duration ?? TOAST_DURATION_MS,
+      }
+      const next = [...currentItems.current, item].slice(-MAX_TOASTS)
+      prepare(currentItems.current.filter((t) => !next.includes(t)).map((t) => t.id))
+      currentItems.current = next
+      setItems(next)
+    },
+    [prepare],
+  )
 
   const activate = useCallback(
     (item: ToastItem) => {
@@ -193,7 +285,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         }}
         aria-live="polite"
         role="status"
-        className="pointer-events-none fixed bottom-4 left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+        // Clears the phone bug-detail action bar, which publishes its height as --bottom-bar-h.
+        className="pointer-events-none fixed bottom-[calc(1rem+var(--bottom-bar-h,0px)+env(safe-area-inset-bottom))] left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
       >
         {items.map((item) => (
           <Notification key={item.id} item={item} dismiss={dismiss} activate={activate} />

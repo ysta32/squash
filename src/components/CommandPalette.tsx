@@ -166,7 +166,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
   let index = -1
   return (
     <div
-      className="fixed inset-0 z-50 flex animate-fade items-start justify-center bg-black/40 p-4 pt-[12vh] backdrop-blur-[2px] sm:pt-[18vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim p-3 pt-[12vh] transition-opacity duration-(--dur-standard) ease-out starting:opacity-0 sm:p-4 sm:pt-[20vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -178,10 +178,16 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
         onMouseDown={(e) => {
           if (e.target !== inputRef.current) e.preventDefault()
         }}
-        className="w-full max-w-xl animate-in overflow-hidden rounded-xl border border-border bg-bg-elevated text-fg shadow-elevated"
+        className="w-full max-w-160 overflow-hidden rounded-xl border border-line bg-surface-2/80 text-ink shadow-elev-3 backdrop-blur-lg backdrop-saturate-150 transition-[opacity,transform] duration-(--dur-emphasis) ease-out starting:translate-y-1 starting:opacity-0"
       >
-        <div className="flex items-center gap-2.5 border-b border-border px-4">
-          <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
+        <div className="flex h-12 items-center gap-3 border-b border-line px-4">
+          <Search
+            size={16}
+            absoluteStrokeWidth
+            strokeWidth={1.5}
+            aria-hidden="true"
+            className="shrink-0 text-ink-3"
+          />
           <input
             ref={inputRef}
             type="text"
@@ -200,30 +206,33 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
               setActive(0)
             }}
             onKeyDown={onKeyDown}
-            className="h-12 w-full bg-transparent text-sm text-fg outline-none placeholder:text-muted"
+            className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
           />
-          <Kbd>Esc</Kbd>
+          <Kbd className="shrink-0">Esc</Kbd>
         </div>
         <div
           id={listId}
           role="listbox"
           aria-label="Commands"
-          className="max-h-[min(22rem,60vh)] scroll-py-2 overflow-y-auto p-1.5"
+          className="max-h-[min(24rem,56vh)] scroll-py-2 overflow-y-auto overscroll-contain p-2"
         >
           {flat.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-muted">No matching commands</p>
+            <div className="px-2 py-6">
+              <p className="text-sm font-medium text-ink">No matching commands</p>
+              <p className="mt-1 text-sm text-ink-2">
+                Nothing matches <span className="font-mono text-ink">{query.trim()}</span>. Try a
+                bug number or a word from its title.
+              </p>
+            </div>
           ) : (
             groups.map((group, g) => (
               <div
                 key={group.name}
                 role="group"
                 aria-labelledby={`${baseId}-group-${g}`}
-                className="py-1"
+                className="pb-1 not-first:mt-1 not-first:border-t not-first:border-line not-first:pt-1"
               >
-                <div
-                  id={`${baseId}-group-${g}`}
-                  className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase"
-                >
+                <div id={`${baseId}-group-${g}`} className="specimen-label px-2 pt-2 pb-1.5">
                   {group.name}
                 </div>
                 {group.items.map((command) => {
@@ -242,23 +251,41 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                       }}
                       onClick={() => runCommand(command)}
                       className={cn(
-                        'relative flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm select-none',
+                        'relative flex h-9 cursor-pointer items-center gap-3 rounded-md px-2 text-sm select-none pointer-coarse:h-11',
                         "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:content-['']",
-                        selected ? 'bg-bg-subtle text-fg before:bg-accent' : 'text-fg/90',
+                        selected ? 'bg-ink/6 text-ink before:bg-accent' : 'text-ink',
                       )}
                     >
                       <Icon
                         aria-hidden="true"
-                        className={cn('size-4 shrink-0', selected ? 'text-fg' : 'text-muted')}
+                        size={16}
+                        absoluteStrokeWidth
+                        strokeWidth={1.5}
+                        className={cn('shrink-0', selected ? 'text-ink' : 'text-ink-3')}
                       />
                       <span className="min-w-0 flex-1 truncate">{command.label}</span>
-                      {command.hint && <Kbd className="shrink-0">{command.hint}</Kbd>}
+                      {command.hint && <Kbd className="ml-auto shrink-0">{command.hint}</Kbd>}
                     </div>
                   )
                 })}
               </div>
             ))
           )}
+        </div>
+        <div
+          aria-hidden="true"
+          className="hidden h-9 items-center gap-4 border-t border-line px-4 font-mono text-xs text-ink-3 sm:flex"
+        >
+          <span className="flex items-center gap-1.5">
+            <Kbd>↑</Kbd>
+            <Kbd>↓</Kbd> move
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Kbd>↵</Kbd> run
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Kbd>Esc</Kbd> close
+          </span>
         </div>
       </div>
     </div>

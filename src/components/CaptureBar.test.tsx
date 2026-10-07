@@ -38,7 +38,9 @@ function setup(onSubmit = vi.fn().mockResolvedValue(undefined), onToast = vi.fn(
   return {
     onSubmit,
     onToast,
-    box: screen.getByPlaceholderText('Paste a screenshot or describe a bug') as HTMLTextAreaElement,
+    box: screen.getByPlaceholderText(
+      'Paste a screenshot or describe the bug',
+    ) as HTMLTextAreaElement,
   }
 }
 
@@ -124,7 +126,7 @@ describe('CaptureBar', () => {
   it('files a feature request when the Features tab is showing', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} kind="feature" />)
-    const box = screen.getByPlaceholderText('Paste a screenshot or describe a feature')
+    const box = screen.getByPlaceholderText('Paste a screenshot or describe the feature')
     fireEvent.change(box, { target: { value: 'Dark mode' } })
     fireEvent.click(screen.getByRole('button', { name: 'File feature request' }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'feature' }))
@@ -248,10 +250,31 @@ describe('CaptureBar', () => {
     const big = new File(['b'], 'big.png', { type: 'image/png' })
     Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
     fireEvent.change(input, { target: { files: [ok, big] } })
-    expect(onToast).toHaveBeenCalledWith('Image too large (max 5MB)')
+    // The size error shows inline at the bar, not as a toast.
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Screenshot not added: the file is over 5 MB. Try a smaller crop.',
+    )
+    expect(onToast).not.toHaveBeenCalled()
+    expect(screen.getByAltText('a.png')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Remove a.png'))
     expect(screen.queryByLabelText('Remove a.png')).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows a fixed-width Filing… state while the submit is in flight', async () => {
+    let finish!: () => void
+    const { box, onSubmit } = setup()
+    onSubmit.mockImplementation(() => new Promise<void>((r) => (finish = r)))
+    fireEvent.change(box, { target: { value: 'pending' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    const send = screen.getByRole('button', { name: 'File bug' })
+    await waitFor(() => expect(send).toHaveAttribute('aria-busy', 'true'))
+    expect(within(send).getByText('Filing…')).not.toHaveClass('invisible')
+    expect(within(send).getByText('File')).toHaveClass('invisible')
+    await act(async () => finish())
+    expect(send).not.toHaveAttribute('aria-busy')
+    expect(within(send).getByText('Filing…')).toHaveClass('invisible')
   })
 
   it('hides the mic and shows an info hint when speech is unsupported', () => {

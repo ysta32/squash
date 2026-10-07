@@ -1,4 +1,4 @@
-import { Pencil, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
 interface AttachmentChipProps {
   name: string
@@ -20,21 +20,21 @@ export function AttachmentChip({
   progress,
 }: AttachmentChipProps) {
   return (
-    <div className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-line-2 bg-surface-3 shadow-elev-1">
+    <div className="group relative size-14 shrink-0 overflow-hidden rounded-md border border-line-2 bg-surface-3 shadow-elev-1">
       {onEdit ? (
         <button
           type="button"
           aria-label={`Mark up ${name}`}
           onClick={onEdit}
           title={`Mark up ${name}`}
-          className="group/edit block h-full w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+          className="focus-ring-inset block size-full rounded-md"
         >
           <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
           <span
             aria-hidden="true"
-            className="t pointer-events-none absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-sm bg-surface-2 text-ink shadow-elev-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+            className="t pointer-events-none absolute inset-x-0 bottom-0 bg-ink/80 py-0.5 text-center font-mono text-[10px] leading-4 text-surface-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
           >
-            <Pencil size={11} />
+            Mark up
           </span>
         </button>
       ) : (
@@ -44,7 +44,7 @@ export function AttachmentChip({
         <svg
           aria-hidden="true"
           viewBox="0 0 32 32"
-          className="pointer-events-none absolute inset-0 h-full w-full -rotate-90 bg-scrim"
+          className="pointer-events-none absolute inset-0 size-full -rotate-90 bg-ink/30"
         >
           <circle
             cx="16"
@@ -64,9 +64,9 @@ export function AttachmentChip({
         aria-label={`Remove ${name}`}
         onClick={onRemove}
         title={`Remove ${name}`}
-        className="t absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-ink shadow-elev-2 opacity-0 outline-none hover:text-danger focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-focus group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+        className="t absolute top-0.5 right-0.5 flex size-5 items-center justify-center rounded-sm bg-ink/80 text-surface-2 opacity-0 outline-none group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus [@media(hover:none)]:opacity-100"
       >
-        <X size={12} aria-hidden="true" />
+        <X size={12} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
       </button>
     </div>
   )
