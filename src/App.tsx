@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/auth'
 import Landing from './pages/Landing'
@@ -69,56 +70,64 @@ function PrefetchWorkspace() {
   return null
 }
 
+/** Resets the boundary on navigation so a crash on one page doesn't stick. */
+function RoutedBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+}
+
 export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
           <PrefetchWorkspace />
-          <Suspense fallback={<DelayedSkeleton />}>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/claude" element={<ClaudeGuide />} />
-              <Route path="/signin" element={<SignIn />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="/join/:code" element={<Join />} />
-              <Route
-                path="/app"
-                element={
-                  <RequireAuth>
-                    <AppIndex />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/app/:workspaceId"
-                element={
-                  <RequireAuth>
-                    <WorkspaceRoute />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/app/:workspaceId/bug/:number"
-                element={
-                  <RequireAuth>
-                    <WorkspaceRoute />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/app/:workspaceId/settings"
-                element={
-                  <RequireAuth>
-                    <Settings />
-                  </RequireAuth>
-                }
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+          <RoutedBoundary>
+            <Suspense fallback={<DelayedSkeleton />}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/claude" element={<ClaudeGuide />} />
+                <Route path="/signin" element={<SignIn />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/join/:code" element={<Join />} />
+                <Route
+                  path="/app"
+                  element={
+                    <RequireAuth>
+                      <AppIndex />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/app/:workspaceId"
+                  element={
+                    <RequireAuth>
+                      <WorkspaceRoute />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/app/:workspaceId/bug/:number"
+                  element={
+                    <RequireAuth>
+                      <WorkspaceRoute />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/app/:workspaceId/settings"
+                  element={
+                    <RequireAuth>
+                      <Settings />
+                    </RequireAuth>
+                  }
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </RoutedBoundary>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

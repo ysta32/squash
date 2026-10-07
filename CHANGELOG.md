@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- A page that crashes now shows a "Something went wrong" screen with Reload, a link back to your workspaces and error details, instead of a blank page. If a new deploy replaces the page's files, Squash reloads once by itself to pick up the update.
+
 ## v1.6.0 — 2026-10-07
 
 Trust and hardening: tighter database rules, a safer Claude Code helper, keyboard and screen-reader fixes, list sorting and bulk actions.
