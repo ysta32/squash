@@ -13,7 +13,11 @@ export default function Privacy() {
           </Link>
         </nav>
       </header>
-      <main id="main" tabIndex={-1} className="focus:outline-none mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="focus:outline-none mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14"
+      >
         <h1 className="text-3xl font-semibold tracking-tight">Privacy</h1>
         <p className="mt-3 text-sm text-muted">
           Last updated: <time dateTime="2026-10-07">October 7, 2026</time>

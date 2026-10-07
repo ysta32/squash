@@ -274,7 +274,9 @@ describe('Workspace', () => {
     show('/app/ws')
     const banners = screen
       .getAllByRole('status')
-      .filter((element) => element.textContent?.includes("Couldn't refresh — showing saved results"))
+      .filter((element) =>
+        element.textContent?.includes("Couldn't refresh — showing saved results"),
+      )
     expect(banners).toHaveLength(1)
     const [banner] = banners
     expect(banner).toHaveTextContent("Couldn't refresh — showing saved results")
