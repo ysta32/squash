@@ -205,10 +205,11 @@ export function seoPlugin(): Plugin {
       const index = bundle['index.html']
       if (!index || index.type !== 'asset' || typeof index.source !== 'string') return
       for (const page of OG_PAGES) {
-        if (page.path === '/') continue
         if (!publicDir || !existsSync(join(publicDir, ogImagePath(page)))) {
           this.error(`Missing ${ogImagePath(page)}: run npm run gen:og`)
         }
+        // The home page is index.html itself.
+        if (page.path === '/') continue
         const file = join(outDir, page.path, 'index.html')
         mkdirSync(dirname(file), { recursive: true })
         writeFileSync(file, pageHtml(index.source, page, siteUrl))
