@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { useParams } from 'react-router-dom'
 import { Bot, Bug, Copy, FolderCog, Lightbulb, Search, X } from 'lucide-react'
 import { filterBugs } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
@@ -10,6 +11,7 @@ import { BugFilters } from './BugFilters'
 import type { ClaudeRun } from '../lib/claudeExport'
 import { BugRow } from './BugRow'
 import { EmptyState } from './EmptyState'
+import { GettingStarted } from './GettingStarted'
 import { Skeleton } from './Skeleton'
 
 export interface BugListProps {
@@ -40,6 +42,7 @@ export interface BugListProps {
   onCopy?: (bugs: BugWithMeta[]) => void
   /** Opens the Claude Code setup guide (helper and project folder). */
   onClaudeSetup?: () => void
+  onInvite?: () => void
   claudeConnected?: boolean
   /** Latest Claude Code session per bug number, to mark rows Claude is working on. */
   claudeRuns?: Map<number, ClaudeRun>
@@ -66,9 +69,11 @@ export function BugList({
   onSend,
   onCopy,
   onClaudeSetup,
+  onInvite,
   claudeConnected = false,
   claudeRuns,
 }: BugListProps) {
+  const { workspaceId } = useParams<{ workspaceId: string }>()
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
@@ -220,6 +225,19 @@ export function BugList({
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={loading}>
+        {!loading && workspaceId && (
+          <GettingStarted
+            workspaceId={workspaceId}
+            steps={{
+              filed: bugs.some((b) => !b.optimistic),
+              invited: members.length > 1,
+              claude: !!claudeConnected,
+              resolved: bugs.some((b) => b.status === 'resolved'),
+            }}
+            onInvite={onInvite}
+            onClaudeSetup={onClaudeSetup}
+          />
+        )}
         {loading ? (
           <Skeleton />
         ) : visible.length === 0 ? (

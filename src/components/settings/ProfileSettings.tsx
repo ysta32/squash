@@ -5,19 +5,7 @@ import { Avatar } from '../Avatar'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 import type { Profile } from '../../lib/types'
-
-const COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#f59e0b',
-  '#10b981',
-  '#06b6d4',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-  '#6366f1',
-  '#14b8a6',
-]
+import { AVATAR_COLORS } from '../../lib/avatarColor'
 
 // Mirrors the profiles CHECK constraints in supabase/migrations/0001_init.sql.
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
@@ -106,7 +94,7 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
           <fieldset disabled={busy}>
             <legend className="mb-3">Avatar color</legend>
             <div className="flex flex-wrap gap-3">
-              {COLORS.map((value) => (
+              {AVATAR_COLORS.map((value) => (
                 <button
                   key={value}
                   type="button"

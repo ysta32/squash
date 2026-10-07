@@ -54,6 +54,24 @@ const FEATURES: Feature[] = [
     },
   },
   {
+    id: 'markup',
+    label: 'Mark up',
+    title: 'Point at the problem, not around it',
+    body: 'Draw on a screenshot before you file it. An arrow and a box say more than a paragraph of “the button near the bottom”.',
+    bullets: [
+      'Arrow, box and pen, with A, B and P to switch',
+      'Undo with ⌘Z, and Escape asks before throwing work away',
+      'Large captures are re-encoded to stay under the upload limit',
+    ],
+    shot: {
+      name: 'annotate',
+      themed: true,
+      width: 1400,
+      height: 991,
+      alt: 'The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button',
+    },
+  },
+  {
     id: 'claude',
     label: 'Claude Code',
     title: 'Send it to Claude Code and watch it get fixed',
@@ -78,8 +96,8 @@ const FEATURES: Feature[] = [
     body: 'New bugs, edits, comments and resolutions reach every teammate in about a second. Invite up to ten people with a link.',
     bullets: [
       'See who is online and which bug each teammate has open',
+      'Assign an owner, and filter to what is yours or what nobody has picked up',
       'Filed and resolved counts per member, for the week and all time',
-      'Every action is written to an append-only activity log',
     ],
     shot: {
       name: 'stats',

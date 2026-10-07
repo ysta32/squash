@@ -1,9 +1,10 @@
-import { X } from 'lucide-react'
+import { Pencil, X } from 'lucide-react'
 
 interface AttachmentChipProps {
   name: string
   previewUrl: string
   onRemove: () => void
+  onEdit?: () => void
   /** 0..1; when defined a progress ring is drawn over the thumbnail. */
   progress?: number
 }
@@ -11,10 +12,30 @@ interface AttachmentChipProps {
 const RADIUS = 14
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
-export function AttachmentChip({ name, previewUrl, onRemove, progress }: AttachmentChipProps) {
+export function AttachmentChip({
+  name,
+  previewUrl,
+  onRemove,
+  onEdit,
+  progress,
+}: AttachmentChipProps) {
   return (
     <div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-[var(--border)]">
-      <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
+      {onEdit ? (
+        <button
+          type="button"
+          aria-label={`Mark up ${name}`}
+          onClick={onEdit}
+          className="focus-ring group/edit h-full w-full"
+        >
+          <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
+          <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-bg-elevated p-0.5 text-fg opacity-0 group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100">
+            <Pencil size={10} />
+          </span>
+        </button>
+      ) : (
+        <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
+      )}
       {progress !== undefined && progress < 1 && (
         <svg viewBox="0 0 32 32" className="absolute inset-0 h-full w-full -rotate-90 bg-black/30">
           <circle

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Profile } from '../lib/types'
+import { readableAvatarColor } from '../lib/avatarColor'
 import { cn, initials } from '../lib/utils'
 
 export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg'
@@ -52,7 +53,7 @@ export function Avatar({ profile, size = 'md', ring = false, className }: Avatar
   return (
     <span
       className={cn(base, 'text-white')}
-      style={{ backgroundColor: profile.avatar_color }}
+      style={{ backgroundColor: readableAvatarColor(profile.avatar_color) }}
       aria-label={profile.display_name}
     >
       {initials(profile.display_name)}

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { CaptureBar } from './CaptureBar'
+import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 
 const speechState = vi.hoisted(() => ({
   supported: true,
@@ -210,5 +211,121 @@ describe('CaptureBar', () => {
     setup()
     expect(screen.queryByLabelText('Start dictation')).toBeNull()
     expect(screen.getByTitle('Voice needs Chrome, Edge, or Safari')).toBeTruthy()
+  })
+
+  it.each(['png', 'jpeg', 'too-large'])('saves a staged annotation: %s', async (scenario) => {
+    let loaded: HTMLImageElement | undefined
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          loaded = document.createElement('img')
+          Object.defineProperties(loaded, {
+            naturalWidth: { value: 100 },
+            naturalHeight: { value: 100 },
+          })
+          return loaded
+        }
+      },
+    )
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      strokeRect: vi.fn(),
+      fillRect: vi.fn(),
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    )
+    const oversized = new Uint8Array(MAX_ORIGINAL_BYTES + 1)
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) => {
+      const large = type === 'image/png' ? scenario !== 'png' : scenario === 'too-large'
+      callback(new Blob([large ? oversized : 'marked'], { type }))
+    })
+    try {
+      vi.mocked(URL.createObjectURL)
+        .mockReturnValueOnce('blob:first')
+        .mockReturnValueOnce('blob:second')
+        .mockReturnValueOnce('blob:editor')
+        .mockReturnValueOnce(scenario === 'png' ? 'blob:marked' : 'blob:conversion')
+        .mockReturnValueOnce('blob:marked')
+      const { box, onSubmit, onToast } = setup()
+      const first = new File(['first'], 'first.png', { type: 'image/png' })
+      const second = new File(['second'], 'second.png', { type: 'image/png' })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first, second] } })
+      fireEvent.change(box, { target: { value: 'Annotated screenshot' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Mark up first.png' }))
+      expect(screen.getByRole('dialog', { name: 'Mark up first.png' })).toHaveAttribute(
+        'aria-modal',
+        'true',
+      )
+      if (!loaded) throw new Error('Expected editor image')
+      fireEvent.load(loaded)
+      const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
+      canvas.setPointerCapture = vi.fn()
+      canvas.releasePointerCapture = vi.fn()
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        right: 100,
+        bottom: 100,
+        toJSON: () => ({}),
+      })
+      fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, button: 0 })
+      fireEvent.pointerUp(canvas, { clientX: 80, clientY: 80 })
+      await act(async () => fireEvent.keyDown(window, { key: 'Enter' }))
+      if (scenario !== 'png') {
+        if (!loaded) throw new Error('Expected conversion image')
+        await act(async () => fireEvent.load(loaded!))
+      }
+      if (scenario === 'too-large') {
+        // The editor stays open with the marks and explains why, instead of dropping the work.
+        const dialog = await screen.findByRole('dialog', { name: 'Mark up first.png' })
+        await waitFor(() => expect(dialog).toHaveTextContent('too large'))
+        expect(dialog).toHaveTextContent('The marked-up image is too large to upload (max 5MB).')
+        expect(onToast).not.toHaveBeenCalled()
+        expect(screen.getByAltText('first.png')).toHaveAttribute('src', 'blob:first')
+        expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:first')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+        const discard = screen.queryByRole('button', { name: /^Discard/ })
+        if (discard) fireEvent.click(discard)
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+        await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+        expect(onSubmit.mock.calls[0][0].files).toEqual([first, second])
+        return
+      }
+      expect(onToast).not.toHaveBeenCalled()
+      const name = scenario === 'png' ? 'first-marked.png' : 'first-marked.jpg'
+      expect(onSubmit).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: `Mark up ${name}` })).toBeInTheDocument()
+      expect(screen.getByAltText(name)).toHaveAttribute('src', 'blob:marked')
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:first')
+      expect(screen.getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual([
+        name,
+        'second.png',
+      ])
+      await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+      const files: File[] = onSubmit.mock.calls[0][0].files
+      expect(files[0].name).toBe(name)
+      expect(files[0].type).toBe(scenario === 'png' ? 'image/png' : 'image/jpeg')
+      expect(files[0].size).toBeLessThanOrEqual(MAX_ORIGINAL_BYTES)
+      expect(files[1]).toBe(second)
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
   })
 })

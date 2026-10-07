@@ -11,7 +11,7 @@ import {
 } from '../lib/claudeExport'
 import type { BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
-import { Badge, Button, Input, Kbd } from './ui'
+import { Badge, Button, Input, Kbd, proseLinkClass } from './ui'
 
 export interface ClaudeSetupDialogProps {
   open: boolean
@@ -294,12 +294,7 @@ export function ClaudeSetupDialog({
           your project and starts Claude Code there with your Claude Code permissions. To remove it,
           run the same command with <code className="font-mono">--uninstall</code> in place of the
           address at the end.{' '}
-          <a
-            href="/claude"
-            target="_blank"
-            rel="noreferrer"
-            className="focus-ring rounded-md text-accent underline-offset-2 hover:underline"
-          >
+          <a href="/claude" target="_blank" rel="noreferrer" className={proseLinkClass}>
             Full setup guide
           </a>
         </p>

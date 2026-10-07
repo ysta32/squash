@@ -4,4 +4,10 @@ export { Field, Input } from './Field'
 export { Kbd } from './Kbd'
 export { Logo, LogoMark } from './Logo'
 export { Section } from './Section'
-export { buttonClass, inputClass, type ButtonSize, type ButtonVariant } from './styles'
+export {
+  buttonClass,
+  inputClass,
+  proseLinkClass,
+  type ButtonSize,
+  type ButtonVariant,
+} from './styles'

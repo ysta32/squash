@@ -1,5 +1,6 @@
 import { createRef, useState } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugFilters } from '../hooks/useBugs'
 import { useSignedUrl } from '../hooks/useSignedUrl'
@@ -106,6 +107,29 @@ describe('BugList', () => {
     cleanup()
     vi.clearAllMocks()
     vi.restoreAllMocks()
+  })
+
+  it('marks checklist steps from the whole workspace, not the current tab', () => {
+    render(
+      <MemoryRouter initialEntries={['/app/ws-1']}>
+        <Routes>
+          <Route
+            path="/app/:workspaceId"
+            element={
+              <Harness
+                filters={{ ...filters, kind: 'feature' }}
+                counts={{ open: 0, resolved: 0, all: 0 }}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const list = screen.getByRole('list', { name: 'Getting started' })
+    const filed = within(list).getByText('File your first bug').closest('li')!
+    const resolved = within(list).getByText('Resolve a bug').closest('li')!
+    expect(within(filed).getByText('Done')).toBeInTheDocument()
+    expect(within(resolved).getByText('Done')).toBeInTheDocument()
   })
 
   it.each(['CSV', 'Markdown'])('offers %s export for the visible bugs and workspace', (format) => {

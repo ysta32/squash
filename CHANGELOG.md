@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## v1.4.0 — 2026-10-07
+
+Screenshot mark-up, shareable views, a getting-started checklist, and an accessibility pass.
+
+### Added
+
+- Mark up a screenshot before filing it. Click a staged image in the capture bar to draw arrows, boxes and freehand strokes in four colors, switch tools with <kbd>A</kbd>, <kbd>B</kbd> and <kbd>P</kbd>, and undo with <kbd>⌘Z</kbd>. The marked-up image replaces the original, and very large results are re-encoded to stay under the upload limit.
+- The list's tab, filters and search live in the URL, so a filtered view can be bookmarked or pasted to a teammate, and Back and Forward restore it.
+- A getting-started checklist in new workspaces: file a bug, invite a teammate, connect Claude Code and resolve a bug. It tracks progress on its own and can be dismissed.
+- `npm run a11y` audits every page in both themes with axe-core and fails on serious or critical issues.
+
+### Changed
+
+- Muted text, avatar initials and inline links now meet WCAG AA contrast in every color scheme. Avatar colors stored before this release are darkened when drawn.
+- Workspace pages have a main landmark, a page heading for screen readers and a labelled capture section.
+- The demo checkout screenshot no longer comes pre-annotated, since Squash can now mark it up itself.
+
 ## v1.3.0 — 2026-10-07
 
 Assignees, notifications, mention autocomplete, and database tests in CI.

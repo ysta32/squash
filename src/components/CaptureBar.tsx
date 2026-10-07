@@ -6,10 +6,12 @@ import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
 import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
+import { fitUnder } from '../lib/annotate'
 import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, randomId } from '../lib/utils'
 import { AttachmentChip } from './AttachmentChip'
+import { AnnotateDialog } from './AnnotateDialog'
 import { SeverityPicker } from './SeverityPicker'
 import { Button, Kbd } from './ui'
 
@@ -65,6 +67,7 @@ export function CaptureBar({
     setSeverityState(s)
   }
   const [chips, setChips] = useState<Chip[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
   const innerRef = useRef<HTMLTextAreaElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -108,6 +111,7 @@ export function CaptureBar({
   useEffect(
     () => () => {
       chipsRef.current.forEach((c) => URL.revokeObjectURL(c.previewUrl))
+      chipsRef.current = []
     },
     [],
   )
@@ -240,7 +244,31 @@ export function CaptureBar({
     }
   }
 
+  const saveMarkedUp = async (file: File): Promise<void> => {
+    try {
+      file = await fitUnder(file, MAX_ORIGINAL_BYTES)
+    } catch (error) {
+      // Thrown back to the editor, which keeps the marks and shows the message.
+      throw new Error(
+        error instanceof Error && error.message === 'too-large'
+          ? 'The marked-up image is too large to upload (max 5MB).'
+          : error instanceof Error
+            ? error.message
+            : 'Could not save the marked-up image.',
+        { cause: error },
+      )
+    }
+    const current = chipsRef.current.find((chip) => chip.id === editingId)
+    if (!current) return
+    const previewUrl = URL.createObjectURL(file)
+    URL.revokeObjectURL(current.previewUrl)
+    setChips((previous) =>
+      previous.map((chip) => (chip.id === current.id ? { ...chip, file, previewUrl } : chip)),
+    )
+  }
+
   const canSubmit = value.trim().length > 0
+  const editingChip = chips.find((chip) => chip.id === editingId)
 
   return (
     <div
@@ -286,9 +314,19 @@ export function CaptureBar({
               name={c.file.name || 'image'}
               previewUrl={c.previewUrl}
               onRemove={() => removeChip(c.id)}
+              onEdit={() => setEditingId(c.id)}
             />
           ))}
         </div>
+      )}
+
+      {editingChip && (
+        <AnnotateDialog
+          key={editingChip.id}
+          file={editingChip.file}
+          onClose={() => setEditingId(null)}
+          onSave={saveMarkedUp}
+        />
       )}
 
       <div className="mt-1 flex items-center gap-1">

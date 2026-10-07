@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { BugDetail } from '../components/BugDetail'
 import { BugList } from '../components/BugList'
@@ -18,7 +18,8 @@ import { InviteDialog } from '../components/InviteDialog'
 import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
-import { countBugs, filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
+import { countBugs, filterBugs, useBugs } from '../hooks/useBugs'
+import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
@@ -36,15 +37,6 @@ import { NEXT_THEME, useTheme } from '../lib/theme'
 import type { Bug, BugKind } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 
-const DEFAULT_FILTERS: BugFilters = {
-  kind: 'bug',
-  tab: 'open',
-  filedBy: null,
-  resolvedBy: null,
-  assignee: null,
-  severity: null,
-  query: '',
-}
 const HIGHLIGHT_MS = 3000
 
 /** Who made the latest assignment change on a bug, from its activity log. */
@@ -72,6 +64,7 @@ export default function Workspace() {
     number?: string
   }>()
   const navigate = useNavigate()
+  const { search } = useLocation()
   const { user } = useAuth()
   const selfId = user?.id ?? ''
   const { toast } = useToast()
@@ -108,7 +101,7 @@ export default function Workspace() {
         title,
         body: bug.title,
         tag: bug.id,
-        onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}`),
+        onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}${search}`),
       })
       if (document.visibilityState !== 'visible') setUnreadCount((count) => count + 1)
     }
@@ -191,7 +184,7 @@ export default function Workspace() {
           title,
           body: bug.title,
           tag: `assigned:${bug.id}`,
-          onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}`),
+          onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}${search}`),
         })
         if (document.visibilityState !== 'visible') setUnreadCount((count) => count + 1)
       })
@@ -215,7 +208,7 @@ export default function Workspace() {
     rolledBack.current.clear()
   }, [bugs, selfId])
 
-  const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)
+  const [filters, setFilters] = useUrlFilters()
   const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set())
   const togglePick = useCallback((id: string) => {
     setPickedIds((prev) => {
@@ -262,7 +255,11 @@ export default function Workspace() {
   const showDetail = hasNumberParam || found
 
   const basePath = `/app/${workspaceId}`
-  const bugPath = useCallback((n: number) => `/app/${workspaceId}/bug/${n}`, [workspaceId])
+  const listPath = `${basePath}${search}`
+  const bugPath = useCallback(
+    (n: number) => `/app/${workspaceId}/bug/${n}${search}`,
+    [workspaceId, search],
+  )
 
   const presence = usePresence(workspaceId, selected?.id ?? null)
 
@@ -272,11 +269,14 @@ export default function Workspace() {
   const [followedKind, setFollowedKind] = useState<BugKind | null>(null)
   if (selectedKind !== followedKind) {
     setFollowedKind(selectedKind)
-    if (selectedKind !== null && selectedKind !== filters.kind) {
-      setFilters((f) => ({ ...f, kind: selectedKind }))
-      setPickedIds(new Set())
-    }
+    if (selectedKind !== null && selectedKind !== filters.kind) setPickedIds(new Set())
   }
+  useEffect(() => {
+    if (selectedKind === null) return
+    setFilters((f) => (f.kind === selectedKind ? f : { ...f, kind: selectedKind }), {
+      replace: true,
+    })
+  }, [selectedKind, setFilters])
 
   useEffect(() => {
     if (ws.workspace) setLastWorkspace(ws.workspace.id)
@@ -314,13 +314,13 @@ export default function Workspace() {
       if (!bug) return
       if (bug.optimistic || bug.number === 0) {
         setPendingId(id)
-        if (hasNumberParam) navigate(basePath, { replace: opts?.replace })
+        if (hasNumberParam) navigate(listPath, { replace: opts?.replace })
         return
       }
       setPendingId(null)
       navigate(bugPath(bug.number), { replace: opts?.replace })
     },
-    [bugs, hasNumberParam, navigate, basePath, bugPath],
+    [bugs, hasNumberParam, navigate, listPath, bugPath],
   )
 
   // A newly filed item opens right away: it is optimistic (no number yet), so it is held as the
@@ -333,7 +333,7 @@ export default function Workspace() {
           onOptimistic: (id) => {
             newId = id
             setPendingId(id)
-            if (hasNumberParam) navigate(basePath)
+            if (hasNumberParam) navigate(listPath)
           },
         })
       } catch (err) {
@@ -341,13 +341,13 @@ export default function Workspace() {
         throw err
       }
     },
-    [fileBug, hasNumberParam, navigate, basePath],
+    [fileBug, hasNumberParam, navigate, listPath],
   )
 
   const deselect = useCallback(() => {
     setPendingId(null)
-    if (hasNumberParam) navigate(basePath)
-  }, [hasNumberParam, navigate, basePath])
+    if (hasNumberParam) navigate(listPath)
+  }, [hasNumberParam, navigate, listPath])
 
   const deleteAndDeselect = useCallback(
     async (id: string) => {
@@ -748,65 +748,77 @@ export default function Workspace() {
         onInvite={() => setInviteOpen(true)}
         role={ws.role}
       />
-      <div
-        className={cn(
-          'sticky top-0 z-10 border-b border-border bg-bg p-3',
-          showDetail && 'hidden md:block',
-        )}
-      >
-        <div className="mx-auto max-w-5xl">
-          <CaptureBar
-            workspaceId={workspaceId}
-            onSubmit={fileAndSelect}
-            kind={filters.kind}
-            onToast={toast}
-            focusRef={captureRef}
-          />
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_3fr]">
-        <div
+      <main className="flex min-h-0 flex-1 flex-col">
+        <h1 className="sr-only">{workspace.name}</h1>
+        <section
+          aria-label="File a bug"
           className={cn(
-            'h-full min-h-0 md:block md:border-r md:border-border',
-            showDetail && 'hidden',
+            'sticky top-0 z-10 border-b border-border bg-bg p-3',
+            showDetail && 'hidden md:block',
           )}
         >
-          <BugList
-            bugs={bugs}
-            workspaceName={ws.workspace?.name}
-            loading={loading}
-            counts={counts}
-            openByKind={openByKind}
-            filters={filters}
-            onFilters={(next) => {
-              // Switching between Bugs and Features starts fresh: no picks, nothing open.
-              if (next.kind !== filters.kind) {
-                clearPicked()
-                deselect()
-              }
-              setFilters(next)
-            }}
-            selectedId={selected?.id ?? null}
-            onSelect={select}
-            members={ws.members}
-            selfId={selfId}
-            viewersOf={presence.viewers}
-            highlightIds={highlightIds}
-            searchRef={searchRef}
-            pickedIds={pickedIds}
-            onTogglePick={togglePick}
-            onClearPicked={clearPicked}
-            onSend={claude.sendBugs}
-            onCopy={claude.copyBugs}
-            onClaudeSetup={claude.openSetup}
-            claudeConnected={claude.connected}
-            claudeRuns={claude.runs}
-          />
+          <div className="mx-auto max-w-5xl">
+            <CaptureBar
+              workspaceId={workspaceId}
+              onSubmit={fileAndSelect}
+              kind={filters.kind}
+              onToast={toast}
+              focusRef={captureRef}
+            />
+          </div>
+        </section>
+        <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_3fr]">
+          <div
+            className={cn(
+              'h-full min-h-0 md:block md:border-r md:border-border',
+              showDetail && 'hidden',
+            )}
+          >
+            <BugList
+              bugs={bugs}
+              workspaceName={ws.workspace?.name}
+              loading={loading}
+              counts={counts}
+              openByKind={openByKind}
+              filters={filters}
+              onFilters={(next) => {
+                // Switching between Bugs and Features starts fresh: no picks, nothing open.
+                if (next.kind !== filters.kind) {
+                  clearPicked()
+                  setPendingId(null)
+                  if (hasNumberParam) {
+                    navigate({
+                      pathname: basePath,
+                      search: writeFilters(new URLSearchParams(search), next).toString(),
+                    })
+                    return
+                  }
+                }
+                setFilters(next)
+              }}
+              selectedId={selected?.id ?? null}
+              onSelect={select}
+              members={ws.members}
+              selfId={selfId}
+              viewersOf={presence.viewers}
+              highlightIds={highlightIds}
+              searchRef={searchRef}
+              pickedIds={pickedIds}
+              onTogglePick={togglePick}
+              onClearPicked={clearPicked}
+              onSend={claude.sendBugs}
+              onCopy={claude.copyBugs}
+              onInvite={() => setInviteOpen(true)}
+              onClaudeSetup={claude.openSetup}
+              claudeConnected={claude.connected}
+              claudeRuns={claude.runs}
+            />
+          </div>
+          <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>
+            {detail}
+          </div>
         </div>
-        <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>
-          {detail}
-        </div>
-      </div>
+      </main>
       <InviteDialog
         workspace={workspace}
         open={inviteOpen}

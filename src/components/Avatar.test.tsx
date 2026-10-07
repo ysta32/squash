@@ -8,9 +8,15 @@ describe('Avatar', () => {
   afterEach(cleanup)
 
   it('renders initials fallback on avatar_color', () => {
+    render(<Avatar profile={{ ...base, avatar_color: '#b91c1c', avatar_url: null }} />)
+    const el = screen.getByText('AL')
+    expect(el.style.backgroundColor).toBe('rgb(185, 28, 28)')
+  })
+
+  it('darkens a low-contrast avatar_color behind the white initials', () => {
     render(<Avatar profile={{ ...base, avatar_url: null }} />)
     const el = screen.getByText('AL')
-    expect(el.style.backgroundColor).toBe('rgb(255, 0, 0)')
+    expect(el.style.backgroundColor).toBe('rgb(237, 0, 0)')
   })
 
   it('renders an image when avatar_url is set', () => {
