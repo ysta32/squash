@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyStoredTheme } from './theme'
+import { act, renderHook } from '@testing-library/react'
+import { applyStoredTheme, useTheme } from './theme'
 
 function mockMatchMedia(matches: boolean) {
   vi.stubGlobal(
@@ -74,5 +75,64 @@ describe('applyStoredTheme', () => {
     localStorage.setItem('squash:scheme', 'neon')
     applyStoredTheme()
     expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
+  })
+})
+
+describe('useTheme', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.classList.remove('dark')
+    mockMatchMedia(false)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shares one theme across consumers and applies each change', () => {
+    const a = renderHook(() => useTheme())
+    const b = renderHook(() => useTheme())
+    expect(a.result.current.theme).toBe('system')
+
+    act(() => a.result.current.setTheme('dark'))
+    expect(b.result.current.theme).toBe('dark')
+    expect(b.result.current.resolved).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    act(() => b.result.current.setTheme('light'))
+    expect(a.result.current.theme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+
+    act(() => a.result.current.setTheme('dark'))
+    expect(b.result.current.theme).toBe('dark')
+    expect(localStorage.getItem('squash:theme')).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    a.unmount()
+    b.unmount()
+  })
+
+  it('recovers from a failed storage write when another tab changes the theme', () => {
+    const { result, unmount } = renderHook(() => useTheme())
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota')
+    })
+    try {
+      act(() => result.current.setTheme('dark'))
+      expect(result.current.theme).toBe('dark')
+    } finally {
+      setItem.mockRestore()
+    }
+
+    localStorage.setItem('squash:theme', 'light')
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'squash:theme', newValue: 'light' }))
+    })
+    expect(result.current.theme).toBe('light')
+
+    localStorage.clear()
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: null }))
+    })
+    expect(result.current.theme).toBe('system')
+    unmount()
   })
 })

@@ -12,11 +12,11 @@ const STATE_LABEL: Record<ClaudeRunState, string> = {
 }
 
 const STATE_DOT: Record<ClaudeRunState, string> = {
-  starting: 'animate-pulse bg-zinc-400',
+  starting: 'animate-pulse bg-muted/60',
   working: 'animate-pulse bg-accent',
-  waiting: 'animate-pulse bg-amber-500',
-  done: 'bg-green-500',
-  ended: 'bg-zinc-400',
+  waiting: 'animate-pulse bg-warning',
+  done: 'bg-success',
+  ended: 'bg-muted/60',
 }
 
 /** Re-renders every few seconds so "updated 12s ago" stays current while Claude works. */
@@ -82,7 +82,7 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
           {run.todos.map((todo, i) => (
             <li key={i} className="flex items-start gap-1.5">
               {todo.status === 'completed' ? (
-                <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-500" aria-label="Done" />
+                <Check className="mt-0.5 h-3 w-3 shrink-0 text-success" aria-label="Done" />
               ) : todo.status === 'in_progress' ? (
                 <CircleDot className="mt-0.5 h-3 w-3 shrink-0 text-accent" aria-label="Doing" />
               ) : (

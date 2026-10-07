@@ -25,13 +25,13 @@ export function Avatar({ profile, size = 'md', ring = false, className }: Avatar
   const base = cn(
     'inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full font-semibold',
     SIZE_CLASS[size],
-    ring && 'ring-2 ring-green-500',
+    ring && 'ring-2 ring-success',
     className,
   )
 
   if (!profile) {
     return (
-      <span className={cn(base, 'bg-zinc-400 text-white')} aria-label="Unknown user">
+      <span className={cn(base, 'bg-muted text-bg')} aria-label="Unknown user">
         ?
       </span>
     )

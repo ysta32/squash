@@ -37,7 +37,7 @@ function setup(onSubmit = vi.fn().mockResolvedValue(undefined), onToast = vi.fn(
   return {
     onSubmit,
     onToast,
-    box: screen.getByPlaceholderText('Describe the bug…') as HTMLTextAreaElement,
+    box: screen.getByPlaceholderText('Paste a screenshot or describe a bug') as HTMLTextAreaElement,
   }
 }
 
@@ -93,7 +93,7 @@ describe('CaptureBar', () => {
   it('files a feature request when the Features tab is showing', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} kind="feature" />)
-    const box = screen.getByPlaceholderText('Describe the feature…')
+    const box = screen.getByPlaceholderText('Paste a screenshot or describe a feature')
     fireEvent.change(box, { target: { value: 'Dark mode' } })
     fireEvent.click(screen.getByRole('button', { name: 'File feature request' }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'feature' }))

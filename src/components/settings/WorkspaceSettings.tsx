@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { Button, Field, Input, Section } from '../ui'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../Avatar'
 import { LAST_WORKSPACE_KEY, useWorkspace } from '../../hooks/useWorkspaces'
@@ -25,8 +26,15 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const owner = role === 'owner'
-  const button =
-    't rounded-md border border-border px-3 py-2 hover:bg-bg-subtle disabled:opacity-50'
+  const [savedName, setSavedName] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const dirty = (name ?? workspace?.name ?? '').trim() !== (savedName ?? workspace?.name ?? '')
+
+  useEffect(() => {
+    if (!saved) return
+    const timer = window.setTimeout(() => setSaved(false), 2500)
+    return () => window.clearTimeout(timer)
+  }, [saved])
 
   async function run(action: () => Promise<void>, success: string) {
     if (busy || !owner) return
@@ -62,45 +70,67 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section className="space-y-6">
-      <h2 className="text-lg font-medium">Workspace</h2>
       {owner ? (
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            if ((name ?? workspace.name).trim())
-              void run(() => rename(name ?? workspace.name), 'Workspace renamed.')
+            if (dirty && (name ?? workspace.name).trim())
+              void run(async () => {
+                const nextName = (name ?? workspace.name).trim()
+                await rename(nextName)
+                setSavedName(nextName)
+                setName(nextName)
+                setSaved(true)
+              }, 'Workspace renamed.')
           }}
           className="space-y-3"
         >
-          <label className="block space-y-2">
-            <span>Workspace name</span>
-            <input
-              required
-              disabled={busy}
-              value={name ?? workspace.name}
-              onChange={(event) => setName(event.target.value)}
-              className="t block w-full rounded-md border border-border bg-bg px-3 py-2 focus:outline-accent"
-            />
-          </label>
-          <button disabled={busy || !(name ?? workspace.name).trim()} className={button}>
-            Save name
-          </button>
+          <Section
+            title="Workspace"
+            description="Set the name your team sees across Squash."
+            footer={
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={busy || !dirty || !(name ?? workspace.name).trim()}
+              >
+                {busy ? 'Saving…' : saved ? 'Saved' : 'Save'}
+              </Button>
+            }
+          >
+            <Field label="Workspace name">
+              {({ id, describedBy }) => (
+                <Input
+                  id={id}
+                  aria-describedby={describedBy}
+                  required
+                  disabled={busy}
+                  value={name ?? workspace.name}
+                  onChange={(event) => {
+                    setName(event.target.value)
+                    setSaved(false)
+                  }}
+                />
+              )}
+            </Field>
+          </Section>
         </form>
       ) : (
-        <div className="space-y-2">
+        <Section title="Workspace" description="View your workspace details.">
           <p>{workspace.name}</p>
           <p className="text-muted">Only the owner can change workspace settings</p>
-        </div>
+        </Section>
       )}
       {owner && (
-        <div className="space-y-3">
-          <h3 className="font-medium">Invite code</h3>
+        <Section
+          title="Invite code"
+          description="Share this code with teammates to invite them to your workspace."
+        >
           <code className="block rounded-md bg-bg-subtle p-3">
             {inviteCode ?? workspace.invite_code}
           </code>
-          <button
+          <Button
             disabled={busy}
-            className={button}
             onClick={() => {
               if (
                 window.confirm(
@@ -113,11 +143,10 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
             }}
           >
             Regenerate
-          </button>
-        </div>
+          </Button>
+        </Section>
       )}
-      <div>
-        <h3 className="mb-3 font-medium">Members</h3>
+      <Section title="Members" description="See who has access to this workspace.">
         <ul className="divide-y divide-border">
           {members.map((member) => (
             <li key={member.user_id} className="flex items-center gap-3 py-3">
@@ -125,8 +154,7 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
               <span className="min-w-0 flex-1 break-words">{member.profile.display_name}</span>
               <span className="text-sm text-muted">{member.role}</span>
               {owner && member.role !== 'owner' && member.user_id !== workspace.owner_id && (
-                <button
-                  className={button}
+                <Button
                   disabled={busy}
                   aria-label={`Remove ${member.profile.display_name}`}
                   onClick={() => {
@@ -137,14 +165,14 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
                   }}
                 >
                   Remove
-                </button>
+                </Button>
               )}
             </li>
           ))}
         </ul>
-      </div>
+      </Section>
       {error && !confirmDelete && (
-        <p role="alert" className="text-red-500">
+        <p role="alert" className="text-danger">
           {error}
         </p>
       )}
@@ -154,14 +182,14 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
         </p>
       )}
       {owner && (
-        <div className="space-y-3 border-t border-border pt-6">
-          <h3 className="font-medium text-red-500">Danger zone</h3>
-          <p className="text-sm text-muted">
-            Permanently delete this workspace, its bugs, and screenshots.
-          </p>
-          <button
+        <Section
+          title="Delete workspace"
+          tone="danger"
+          description="Permanently delete this workspace, its bugs, and screenshots for every member. This cannot be undone."
+        >
+          <Button
             disabled={busy}
-            className={`${button} text-red-500`}
+            variant="danger"
             onClick={() => {
               setTypedName('')
               setError(null)
@@ -169,8 +197,8 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
             }}
           >
             Delete workspace
-          </button>
-        </div>
+          </Button>
+        </Section>
       )}
       {owner && confirmDelete && (
         <dialog
@@ -182,7 +210,7 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
             if (!busy) setConfirmDelete(false)
           }}
           aria-labelledby="delete-workspace-title"
-          className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg-elevated p-6 text-fg backdrop:bg-black/50"
+          className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-border bg-bg-elevated p-6 text-fg backdrop:bg-fg/50"
         >
           <form
             onSubmit={(event) => {
@@ -195,36 +223,34 @@ export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
               Delete workspace permanently?
             </h3>
             <p>All bugs and screenshots will be permanently removed. This cannot be undone.</p>
-            <label className="block space-y-2">
-              <span>Type {workspace.name} to confirm</span>
-              <input
-                autoFocus
-                disabled={busy}
-                value={typedName}
-                onChange={(event) => setTypedName(event.target.value)}
-                className="t block w-full rounded-md border border-border bg-bg px-3 py-2 focus:outline-accent"
-              />
-            </label>
+            <Field label={`Type ${workspace.name} to confirm`}>
+              {({ id, describedBy }) => (
+                <Input
+                  id={id}
+                  aria-describedby={describedBy}
+                  autoFocus
+                  disabled={busy}
+                  value={typedName}
+                  onChange={(event) => setTypedName(event.target.value)}
+                />
+              )}
+            </Field>
             {error && (
-              <p role="alert" className="text-red-500">
+              <p role="alert" className="text-danger">
                 {error}
               </p>
             )}
             <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                disabled={busy}
-                className={button}
-                onClick={() => setConfirmDelete(false)}
-              >
+              <Button type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 disabled={busy || typedName !== workspace.name}
-                className="t rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+                type="submit"
+                variant="danger"
               >
                 {busy ? 'Deleting…' : 'Delete workspace'}
-              </button>
+              </Button>
             </div>
           </form>
         </dialog>

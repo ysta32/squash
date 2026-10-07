@@ -48,13 +48,13 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
   const byId = new Map(members.map((m) => [m.user_id, m.profile]))
 
   return (
-    <div className="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-border bg-bg-elevated p-3 shadow-lg">
-      <div className="mb-2 grid grid-cols-[1fr_4.5rem_4.5rem] gap-2 text-xs text-zinc-500">
+    <div className="absolute right-0 top-full z-30 mt-1 w-96 rounded-lg border border-border bg-bg-elevated p-3 shadow-elevated">
+      <div className="mb-2 grid grid-cols-[1fr_6.5rem_6.5rem] gap-2 text-xs text-muted">
         <span>Member</span>
         <span className="text-right">Filed 7d / all</span>
         <span className="text-right">Resolved 7d / all</span>
       </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       {!error && rows === null && (
         <div className="space-y-2" aria-busy="true">
           {[0, 1, 2].map((i) => (
@@ -67,7 +67,7 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
         return (
           <div
             key={r.user_id}
-            className="grid grid-cols-[1fr_4.5rem_4.5rem] items-center gap-2 py-1 text-sm"
+            className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-2 py-1 text-sm"
           >
             <span className="flex min-w-0 items-center gap-2">
               <Avatar profile={profile} size="xs" />
@@ -82,7 +82,7 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
           </div>
         )
       })}
-      {rows?.length === 0 && <p className="text-sm text-zinc-500">No activity yet.</p>}
+      {rows?.length === 0 && <p className="text-sm text-muted">No activity yet.</p>}
     </div>
   )
 }

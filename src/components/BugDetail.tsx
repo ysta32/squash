@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Copy,
   Lightbulb,
   Mic,
+  MousePointerClick,
   RotateCcw,
   RotateCw,
   Trash2,
@@ -24,12 +25,14 @@ import type {
   WorkspaceMember,
 } from '../lib/types'
 import { KIND_LABEL, SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
+import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { Avatar } from './Avatar'
 import { ClaudeProgress } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
 import { ResolvePopover } from './ResolvePopover'
+import { Kbd, buttonClass } from './ui'
 
 export type BugPatch = Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>
 
@@ -90,8 +93,12 @@ export function BugDetail(props: BugDetailProps) {
 
   if (!bug) {
     return (
-      <div className="hidden h-full items-center justify-center text-sm text-muted md:flex">
-        Select a bug
+      <div className="hidden h-full flex-col items-center justify-center gap-2 px-6 text-center md:flex">
+        <MousePointerClick className="h-6 w-6 text-muted" aria-hidden="true" />
+        <p className="text-sm text-muted">Select a bug to see its details</p>
+        <p className="text-xs text-muted">
+          <Kbd>J</Kbd>/<Kbd>K</Kbd> to move, <Kbd>N</Kbd> to file one
+        </p>
       </div>
     )
   }
@@ -137,7 +144,9 @@ function BugBody({
   onPopover,
 }: BugBodyProps) {
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
   const [descDraft, setDescDraft] = useState<string | null>(null)
+  const [descFocused, setDescFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [signed, setSigned] = useState<Record<string, string>>({})
   const [lightboxKey, setLightboxKey] = useState<string | null>(null)
@@ -153,12 +162,34 @@ function BugBody({
   const isOpen = bug.status === 'open'
 
   const description = descDraft ?? bug.description
+  const showRendered = !descFocused && description.trim() !== ''
+  useLayoutEffect(() => {
+    const el = titleRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [titleDraft, bug.title])
+
+  useEffect(() => {
+    const el = titleRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight}px`
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   useLayoutEffect(() => {
     const el = descRef.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
-  }, [description])
+  }, [description, showRendered])
 
   function run(action: () => void | Promise<void>, onSuccess?: () => void) {
     setError(null)
@@ -350,7 +381,7 @@ function BugBody({
             onClick={() => setConfirmDelete(true)}
             aria-label={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
             title={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
-            className="-mr-2 rounded-md p-2 text-muted hover:bg-bg-subtle hover:text-red-500 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
+            className="-mr-2 rounded-md p-2 text-muted hover:bg-bg-subtle hover:text-danger disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -365,7 +396,9 @@ function BugBody({
       )}
 
       <section className="px-6 pt-3 pb-4">
-        <input
+        <textarea
+          ref={titleRef}
+          rows={1}
           value={titleDraft ?? bug.title}
           readOnly={!editable}
           aria-label="Title"
@@ -383,7 +416,7 @@ function BugBody({
               cancelRef.current = false
             }
           }}
-          className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none"
+          className="block w-full resize-none overflow-hidden bg-transparent text-xl font-semibold tracking-tight outline-none"
         />
         <div className="mt-2 space-y-1 text-xs text-muted">
           <p className="flex items-center gap-1.5">
@@ -424,7 +457,7 @@ function BugBody({
           )}
         </div>
         {error && (
-          <p role="alert" className="mt-2 flex items-center gap-1 text-xs text-red-500">
+          <p role="alert" className="mt-2 flex items-center gap-1 text-xs text-danger">
             <AlertCircle className="h-3.5 w-3.5" />
             {error}
           </p>
@@ -442,7 +475,11 @@ function BugBody({
           aria-label="Description"
           placeholder="Add a description…"
           onChange={(e) => setDescDraft(e.target.value)}
-          onBlur={saveDescription}
+          onFocus={() => setDescFocused(true)}
+          onBlur={() => {
+            setDescFocused(false)
+            saveDescription()
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.preventDefault()
@@ -452,8 +489,21 @@ function BugBody({
               cancelRef.current = false
             }
           }}
-          className="w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted"
+          className={cn(
+            'w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted',
+            showRendered && 'sr-only',
+          )}
         />
+        {showRendered && (
+          <div
+            onClick={(e) => {
+              if (editable && !(e.target as HTMLElement).closest('a')) descRef.current?.focus()
+            }}
+            className={editable ? 'cursor-text' : undefined}
+          >
+            <Markdown source={description} />
+          </div>
+        )}
         {bug.transcript !== null && (
           <div className="mt-3 rounded-md bg-bg-subtle px-3 py-2 text-xs text-muted">
             <p className="mb-1 flex items-center gap-1 font-medium">
@@ -555,7 +605,7 @@ function DeleteDialog({
           cannot be undone. To keep a record, resolve it instead.
         </p>
         {error && (
-          <p role="alert" className="text-red-500">
+          <p role="alert" className="text-danger">
             {error}
           </p>
         )}
@@ -568,11 +618,7 @@ function DeleteDialog({
           >
             Cancel
           </button>
-          <button
-            autoFocus
-            disabled={busy}
-            className="rounded-md bg-red-600 px-3 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-          >
+          <button autoFocus disabled={busy} className={buttonClass('danger')}>
             {busy ? 'Deleting…' : `Delete ${noun}`}
           </button>
         </div>
@@ -681,7 +727,7 @@ function PendingThumb({
           </span>
         )}
         {upload.error && (
-          <span className="absolute right-1 bottom-1 left-1 rounded bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+          <span className="absolute right-1 bottom-1 left-1 rounded bg-danger px-1.5 py-0.5 text-center text-xs font-medium text-white">
             Upload failed
           </span>
         )}
@@ -692,7 +738,7 @@ function PendingThumb({
           aria-label="Retry upload"
           title="Retry upload"
           onClick={onRetry}
-          className="absolute top-1 right-1 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-black/85"
+          className="absolute top-1 right-1 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white hover:bg-black/85"
         >
           <RotateCw size={10} aria-hidden="true" />
           Retry

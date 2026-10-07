@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useBug } from '../hooks/useBug'
 import type { WorkspaceMember } from '../lib/types'
+import { Markdown } from '../lib/markdown'
 import { relativeTime } from '../lib/utils'
 import { ActivityTimeline } from './ActivityTimeline'
 import { Avatar } from './Avatar'
@@ -50,7 +51,7 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
   return (
     <>
       <section className="border-t border-border px-6 py-4">
-        <h2 className="mb-3 text-xs font-medium tracking-wide text-muted uppercase">Activity</h2>
+        <h2 className="mb-3 text-sm font-medium text-fg">Activity</h2>
         {loading && events.length === 0 ? (
           <p className="text-xs text-muted">Loading…</p>
         ) : (
@@ -58,7 +59,7 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
         )}
       </section>
       <section className="border-t border-border px-6 py-4">
-        <h2 className="mb-3 text-xs font-medium tracking-wide text-muted uppercase">Comments</h2>
+        <h2 className="mb-3 text-sm font-medium text-fg">Comments</h2>
         {comments.length > 0 && (
           <ul className="mb-4 space-y-4">
             {comments.map((c) => {
@@ -76,7 +77,7 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
                         {relativeTime(c.created_at)}
                       </time>
                     </p>
-                    <p className="mt-0.5 text-sm break-words whitespace-pre-wrap">{c.body}</p>
+                    <Markdown source={c.body} className="mt-0.5" />
                   </div>
                 </li>
               )
@@ -93,12 +94,12 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
           placeholder={bugId ? 'Leave a comment…' : 'Comments open once the bug is saved'}
           className="w-full resize-none rounded-md border border-border bg-bg-subtle px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent disabled:opacity-60"
         />
-        <div className="mt-1 flex items-center justify-between text-[11px] text-muted">
+        <div className="mt-1 flex items-center justify-between text-xs text-muted">
           <span>Enter to send · Shift+Enter for a new line</span>
           {sending && <span>Sending…</span>}
         </div>
         {error && (
-          <p role="alert" className="mt-1 text-xs text-red-500">
+          <p role="alert" className="mt-1 text-xs text-danger">
             {error}
           </p>
         )}

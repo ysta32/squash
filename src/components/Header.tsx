@@ -3,7 +3,8 @@ import { BarChart2, Monitor, Moon, Sun, UserPlus } from 'lucide-react'
 import type { MemberRole, Workspace, WorkspaceMember } from '../lib/types'
 import type { PresenceUser } from '../hooks/usePresence'
 import { useDismiss } from '../hooks/useDismiss'
-import { useTheme, type Theme } from '../lib/theme'
+import { NEXT_THEME, useTheme } from '../lib/theme'
+import { LogoMark } from './ui'
 import { PresenceAvatars } from './PresenceAvatars'
 import { ProfileMenu } from './ProfileMenu'
 import { StatsPopover } from './StatsPopover'
@@ -19,10 +20,9 @@ export interface HeaderProps {
   role: MemberRole | null
 }
 
-const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' }
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor }
 const ICON_BTN =
-  'flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
+  'focus-ring flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg'
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
@@ -57,8 +57,11 @@ export function Header({
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold tracking-tight">Squash</span>
-        <span className="text-zinc-300 dark:text-zinc-700">/</span>
+        <span className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <LogoMark size={20} />
+          Squash
+        </span>
+        <span className="text-border">/</span>
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
       </div>
       <div className="flex items-center gap-1.5">

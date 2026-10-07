@@ -154,12 +154,14 @@ describe('BugDetail', () => {
 
   it('shows a placeholder when no bug is selected', () => {
     setup(null)
-    expect(screen.getByText('Select a bug')).toBeTruthy()
+    expect(screen.getByText('Select a bug to see its details')).toBeTruthy()
   })
 
   it('renders title, number and filed attribution', () => {
     setup(makeBug())
-    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Login button broken')
+    expect((screen.getByLabelText('Title') as HTMLTextAreaElement).value).toBe(
+      'Login button broken',
+    )
     expect(screen.getByText('#42')).toBeTruthy()
     expect(screen.getByText(/Filed by/).textContent).toMatch(/Filed by Ada Lovelace · just now/)
   })
@@ -279,6 +281,18 @@ describe('BugDetail', () => {
     expect(onUpdate).toHaveBeenCalledTimes(1)
   })
 
+  it('Enter in the title saves without inserting a newline', async () => {
+    const { onUpdate } = setup(makeBug())
+    const input = screen.getByLabelText('Title') as HTMLTextAreaElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'Wrapped title' } })
+    const notPrevented = fireEvent.keyDown(input, { key: 'Enter' })
+    await act(async () => {})
+    expect(notPrevented).toBe(false)
+    expect(input.value).not.toContain('\n')
+    expect(onUpdate).toHaveBeenCalledWith('b1', { title: 'Wrapped title' })
+  })
+
   it('keeps the title draft when the save fails, clears it after success', async () => {
     const onUpdate = vi
       .fn<(id: string, patch: object) => Promise<void>>()
@@ -286,7 +300,7 @@ describe('BugDetail', () => {
       .mockResolvedValueOnce()
     const onToast = vi.fn()
     setup(makeBug(), { onUpdate, onToast })
-    const input = screen.getByLabelText('Title') as HTMLInputElement
+    const input = screen.getByLabelText('Title') as HTMLTextAreaElement
     input.focus()
     fireEvent.change(input, { target: { value: 'Retitled' } })
     fireEvent.blur(input)
@@ -318,7 +332,7 @@ describe('BugDetail', () => {
 
   it('Esc cancels title and description edits without saving', async () => {
     const { onUpdate } = setup(makeBug())
-    const input = screen.getByLabelText('Title') as HTMLInputElement
+    const input = screen.getByLabelText('Title') as HTMLTextAreaElement
     input.focus()
     fireEvent.change(input, { target: { value: 'Discard me' } })
     fireEvent.keyDown(input, { key: 'Escape' })
@@ -433,7 +447,8 @@ describe('BugDetail', () => {
     ]
     addComment.mockResolvedValue()
     setup(makeBug())
-    expect(screen.getByText(/line1/).textContent).toBe('line1\nline2')
+    const body = screen.getByText(/line1/)
+    expect(body.innerHTML).toBe('line1<br>line2')
     const items = screen.getAllByRole('listitem').map((li) => li.textContent ?? '')
     const filedIdx = items.findIndex((t) => t.includes('Deleted user filed'))
     const resolvedIdx = items.findIndex((t) => t.includes('Grace Hopper resolved'))

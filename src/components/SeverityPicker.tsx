@@ -37,7 +37,7 @@ export function SeverityPicker({ value, onChange, size = 'md' }: SeverityPickerP
           title={`${SEVERITY_LABEL[s]} (Alt+${SEVERITIES.indexOf(s) + 1})`}
           onClick={() => onChange(s)}
           onKeyDown={onKeyDown}
-          className="flex h-5 w-5 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          className="flex h-5 w-5 items-center justify-center focus-ring rounded-full"
         >
           <span
             className={cn(
@@ -45,7 +45,7 @@ export function SeverityPicker({ value, onChange, size = 'md' }: SeverityPickerP
               size === 'sm' ? 'h-2 w-2' : 'h-2.5 w-2.5',
               SEVERITY_COLOR[s],
               value === s
-                ? 'opacity-100 ring-2 ring-offset-1 ring-current/40'
+                ? 'opacity-100 ring-2 ring-fg/30 ring-offset-1 ring-offset-bg'
                 : 'opacity-35 hover:opacity-70',
             )}
           />

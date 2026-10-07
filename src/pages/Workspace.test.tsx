@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToastProvider } from '../components/Toast'
 import type { Bug, BugWithMeta, Workspace as WorkspaceRow, WorkspaceMember } from '../lib/types'
@@ -7,6 +7,7 @@ import { useRef, type ReactNode } from 'react'
 import type * as UseBugsModule from '../hooks/useBugs'
 import { useDismiss } from '../hooks/useDismiss'
 import type * as ProfileMenuModule from '../components/ProfileMenu'
+import { isMac } from '../lib/utils'
 import Workspace from './Workspace'
 
 const NOW = new Date().toISOString()
@@ -365,6 +366,31 @@ describe('Workspace', () => {
     ;(document.activeElement as HTMLElement).blur()
     fireEvent.keyDown(document.body, { key: '?', shiftKey: true })
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
+  })
+
+  it('Mod+K opens the command palette, even from the capture box, and commands run', () => {
+    show('/app/ws')
+    const capture = screen.getByLabelText('Capture')
+    capture.focus()
+    const mod = isMac ? { metaKey: true } : { ctrlKey: true }
+    fireEvent.keyDown(capture, { key: 'k', ...mod })
+    const dialog = screen.getByRole('dialog', { name: 'Command palette' })
+    expect(within(dialog).getByRole('option', { name: '#2 Bug number 2' })).toBeInTheDocument()
+
+    const input = within(dialog).getByRole('combobox')
+    expect(document.activeElement).toBe(input)
+    press('j')
+    expect(path()).toBe('/app/ws')
+
+    fireEvent.change(input, { target: { value: '2' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull()
+    expect(path()).toBe('/app/ws/bug/2')
+
+    fireEvent.keyDown(document.body, { key: 'k', ...mod })
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument()
+    fireEvent.keyDown(document.body, { key: 'k', ...mod })
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull()
   })
 
   it('remote inserts toast the filer and highlight the row', () => {

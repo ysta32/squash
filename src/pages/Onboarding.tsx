@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AuthLayout } from '../components/AuthLayout'
 import { InviteDialog } from '../components/InviteDialog'
 import { setLastWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
+import { Button, Field, Input } from '../components/ui'
 import type { Workspace } from '../lib/types'
 
 export default function Onboarding() {
@@ -10,7 +12,7 @@ export default function Onboarding() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ form: 'create' | 'join'; message: string } | null>(null)
   const [created, setCreated] = useState<Workspace | null>(null)
 
   const onCreate = async (e: FormEvent) => {
@@ -23,7 +25,10 @@ export default function Onboarding() {
       setLastWorkspace(ws.id)
       setCreated(ws)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError({
+        form: 'create',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+      })
     } finally {
       setBusy(false)
     }
@@ -39,62 +44,75 @@ export default function Onboarding() {
       setLastWorkspace(ws.id)
       navigate(`/app/${ws.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError({
+        form: 'join',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+      })
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--bg)] p-4 text-[var(--fg)]">
-      <div className="w-full max-w-md rounded-xl border border-[var(--border)] p-6">
-        <section>
-          <h1 className="text-lg font-semibold">Create a workspace</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">A shared place for your team's bugs.</p>
-          <form onSubmit={(e) => void onCreate(e)} className="mt-3 flex gap-2">
-            <input
+    <AuthLayout
+      title="Name your workspace"
+      description="A workspace is a shared place for your team's bugs."
+      footer={
+        <form onSubmit={(e) => void onJoin(e)} className="space-y-3">
+          <Field
+            label="Have an invite code?"
+            hint="Enter the 8 characters a teammate shared."
+            error={error?.form === 'join' ? error.message : null}
+          >
+            {({ id, describedBy }) => (
+              <div className="flex gap-2">
+                <Input
+                  id={id}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                  placeholder="ABCD1234"
+                  aria-label="Invite code"
+                  aria-describedby={describedBy}
+                  maxLength={8}
+                  className="min-w-0 flex-1 font-mono uppercase tracking-widest"
+                />
+                <Button type="submit" disabled={busy || code.length < 8}>
+                  Join
+                </Button>
+              </div>
+            )}
+          </Field>
+        </form>
+      }
+    >
+      <form onSubmit={(e) => void onCreate(e)} className="space-y-3">
+        <Field
+          label="Workspace name"
+          hint="Your team or product name. You can rename it later."
+          error={error?.form === 'create' ? error.message : null}
+        >
+          {({ id, describedBy }) => (
+            <Input
+              id={id}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Workspace name"
+              placeholder="Acme web app"
               aria-label="Workspace name"
+              aria-describedby={describedBy}
               maxLength={60}
-              className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
             />
-            <button
-              type="submit"
-              disabled={busy || !name.trim()}
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Create
-            </button>
-          </form>
-        </section>
-
-        <div className="my-6 border-t border-[var(--border)]" />
-
-        <section>
-          <h2 className="text-lg font-semibold">Join with a code</h2>
-          <form onSubmit={(e) => void onJoin(e)} className="mt-3 flex gap-2">
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
-              placeholder="ABCD1234"
-              aria-label="Invite code"
-              maxLength={8}
-              className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-transparent px-3 py-2 font-mono text-sm uppercase tracking-widest"
-            />
-            <button
-              type="submit"
-              disabled={busy || code.length < 8}
-              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              Join
-            </button>
-          </form>
-        </section>
-
-        {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
-      </div>
+          )}
+        </Field>
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          disabled={busy || !name.trim()}
+          className="w-full"
+        >
+          Create workspace
+        </Button>
+      </form>
 
       {created && (
         <InviteDialog
@@ -104,6 +122,6 @@ export default function Onboarding() {
           onClose={() => navigate(`/app/${created.id}`)}
         />
       )}
-    </main>
+    </AuthLayout>
   )
 }

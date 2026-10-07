@@ -58,7 +58,7 @@ export function BugRow({
         else onSelect(bug.id)
       }}
       className={cn(
-        't flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
+        't focus-ring flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left',
         selected && 'ring-1 ring-inset ring-accent',
         highlighted || picked ? 'bg-accent/10' : selected ? 'bg-muted/10' : 'hover:bg-bg-subtle',
         bug.status === 'resolved' && 'opacity-60',
@@ -80,7 +80,7 @@ export function BugRow({
         <span
           className={cn(
             'inline-flex shrink-0 animate-pulse',
-            claudeState === 'waiting' ? 'text-amber-500' : 'text-accent',
+            claudeState === 'waiting' ? 'text-warning' : 'text-accent',
           )}
           title={claudeState === 'waiting' ? 'Claude needs you in Terminal' : 'Claude is working'}
         >

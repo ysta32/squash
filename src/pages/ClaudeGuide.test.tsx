@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type * as ClaudeExport from '../lib/claudeExport'
 import ClaudeGuide from './ClaudeGuide'
@@ -22,6 +22,8 @@ function setup() {
 afterEach(() => {
   cleanup()
   pingBridge.mockReset()
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 describe('ClaudeGuide', () => {
@@ -33,6 +35,59 @@ describe('ClaudeGuide', () => {
     )
     expect(screen.getByLabelText('Uninstall command')).toHaveValue(
       `curl -fsSL ${origin}/bridge/install.sh | sh -s -- --uninstall`,
+    )
+  })
+
+  it.each(['Install command', 'Uninstall command'])('copies the %s', async (label) => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    setup()
+    const block = within(screen.getByRole('group', { name: `${label} block` }))
+    fireEvent.click(block.getByRole('button', { name: 'Copy' }))
+    expect(await block.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(
+      (screen.getByLabelText(label) as HTMLInputElement).value,
+    )
+  })
+
+  it('resets the copied confirmation after two seconds', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    setup()
+    const block = within(screen.getByRole('group', { name: 'Install command block' }))
+    await act(async () => {
+      fireEvent.click(block.getByRole('button', { name: 'Copy' }))
+    })
+    expect(block.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(2000))
+    expect(block.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+  })
+
+  it('offers manual copying after a clipboard error and clears the error on retry', async () => {
+    const writeText = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Permission denied'))
+      .mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    setup()
+    const block = within(screen.getByRole('group', { name: 'Install command block' }))
+    fireEvent.click(block.getByRole('button', { name: 'Copy' }))
+    expect(await block.findByRole('alert')).toHaveTextContent(
+      'Select the command and copy it manually.',
+    )
+    expect(block.queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument()
+    fireEvent.click(block.getByRole('button', { name: 'Copy' }))
+    expect(await block.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+    expect(block.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('offers manual copying when the clipboard API is unavailable', async () => {
+    vi.stubGlobal('navigator', {})
+    setup()
+    const block = within(screen.getByRole('group', { name: 'Install command block' }))
+    fireEvent.click(block.getByRole('button', { name: 'Copy' }))
+    expect(await block.findByRole('alert')).toHaveTextContent(
+      'Select the command and copy it manually.',
     )
   })
 

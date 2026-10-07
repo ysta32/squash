@@ -202,6 +202,10 @@ const session = {
 const uploads = new Map<string, string>()
 const signed = (path: string) => uploads.get(path) ?? `/__shots/${path.split('/').pop()}`
 
+/** Shots of signed-out pages (landing, sign-in) set this flag before the app loads. */
+const signedOut = localStorage.getItem('squash:demo-signed-out') === '1'
+const current = signedOut ? null : session
+
 const ok = <T>(data: T) => Promise.resolve({ data, error: null })
 
 export const supabase = {
@@ -211,8 +215,8 @@ export const supabase = {
   getChannels: () => [],
   removeChannel: () => Promise.resolve('ok'),
   auth: {
-    getSession: () => ok({ session }),
-    getUser: () => ok({ user: session.user }),
+    getSession: () => ok({ session: current }),
+    getUser: () => ok({ user: current?.user ?? null }),
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
     signInWithOAuth: () => ok(null),
     signInWithOtp: () => ok(null),

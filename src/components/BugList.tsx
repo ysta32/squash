@@ -14,6 +14,7 @@ import { Skeleton } from './Skeleton'
 
 export interface BugListProps {
   bugs: BugWithMeta[]
+  workspaceName?: string
   loading: boolean
   /** Status counts for the kind being shown. */
   counts: { open: number; resolved: number; all: number }
@@ -44,6 +45,7 @@ export interface BugListProps {
 
 export function BugList({
   bugs,
+  workspaceName,
   loading,
   counts,
   openByKind,
@@ -205,13 +207,27 @@ export function BugList({
             className="t w-full rounded-md border border-border bg-bg py-2 pl-8 pr-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </label>
-        <BugFilters filters={filters} onFilters={onFilters} members={members} />
+        <BugFilters
+          filters={filters}
+          onFilters={onFilters}
+          members={members}
+          bugs={visible}
+          workspaceName={workspaceName}
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={loading}>
         {loading ? (
           <Skeleton />
         ) : visible.length === 0 ? (
-          <EmptyState kind={filters.kind} tab={filters.tab} filtered={filtered} />
+          <EmptyState
+            kind={filters.kind}
+            tab={filters.tab}
+            filtered={filtered}
+            hasItems={counts.all > 0}
+            onClearFilters={() =>
+              onFilters({ ...filters, query: '', filedBy: null, resolvedBy: null, severity: null })
+            }
+          />
         ) : (
           <div role="listbox" aria-label={KIND_LABEL[filters.kind].many} className="space-y-1 p-2">
             {visible.map((bug) => (

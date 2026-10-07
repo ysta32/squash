@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useDismiss } from '../hooks/useDismiss'
@@ -12,6 +12,15 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
   const close = useCallback(() => setOpen(false), [])
   useDismiss(ref, close, open)
 
+  const onMenuKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const next = e.key === 'ArrowDown' ? at + 1 : at - 1
+    items[(next + items.length) % items.length]?.focus()
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -20,24 +29,25 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
         aria-label="Profile menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex rounded-full"
+        className="focus-ring flex rounded-full"
       >
         <Avatar profile={profile} size="sm" />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-border bg-bg-elevated p-1 shadow-lg"
+          onKeyDown={onMenuKey}
+          className="absolute right-0 top-full w-48 z-30 mt-1 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated"
         >
-          <div className="truncate px-2 py-1.5 text-sm font-medium">
+          <div className="truncate px-2 py-1.5 text-sm font-medium text-fg">
             {profile?.display_name ?? ''}
           </div>
-          <div className="my-1 border-t border-border" />
+          <div role="separator" className="my-1 border-t border-border" />
           <Link
             to={`/app/${workspaceId}/settings`}
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="block rounded-md px-2 py-1.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring"
           >
             Settings
           </Link>
@@ -50,12 +60,12 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
                 setError(e instanceof Error ? e.message : 'Could not sign out'),
               )
             }}
-            className="block w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring"
           >
             Sign out
           </button>
           {error && (
-            <p role="alert" className="px-2 py-1 text-xs text-red-500">
+            <p role="alert" className="px-2 py-1 text-xs text-danger">
               {error}
             </p>
           )}
