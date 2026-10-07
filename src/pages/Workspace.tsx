@@ -27,6 +27,7 @@ import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
 import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
+import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { NEXT_THEME, useTheme } from '../lib/theme'
 import type { Bug, BugKind } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
@@ -411,6 +412,20 @@ export default function Workspace() {
       keywords: ['find', 'filter'],
       run: () => focusInList(searchRef),
     },
+    ...(['csv', 'md'] as const).map((format): Command => ({
+      id: `export-${format}`,
+      label: `Export visible bugs as ${format === 'csv' ? 'CSV' : 'Markdown'}`,
+      group: 'Export',
+      run: () => {
+        if (!ws.workspace) return
+        const name = ws.workspace.name
+        downloadText(
+          exportFilename(name, format),
+          format === 'csv' ? bugsToCsv(visible) : bugsToMarkdown(visible, name),
+          format === 'csv' ? 'text/csv;charset=utf-8' : 'text/markdown;charset=utf-8',
+        )
+      },
+    })),
     ...visible
       .filter((b) => !b.optimistic && b.number > 0)
       .map((b): Command => ({
@@ -572,6 +587,7 @@ export default function Workspace() {
         >
           <BugList
             bugs={bugs}
+            workspaceName={ws.workspace?.name}
             loading={loading}
             counts={counts}
             openByKind={openByKind}

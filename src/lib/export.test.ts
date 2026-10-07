@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BugFilters } from '../components/BugFilters'
 import type { BugWithMeta } from './types'
-import { bugsToCsv, bugsToMarkdown, downloadText } from './export'
+import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from './export'
 
 function bug(overrides: Partial<BugWithMeta> = {}): BugWithMeta {
   return {
@@ -32,6 +32,26 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
+})
+
+describe('exportFilename', () => {
+  it.each(['csv', 'md'] as const)('uses a sanitized workspace and UTC date for %s', (ext) => {
+    expect(exportFilename(' / Acme & Team / ', ext, new Date('2026-10-07T23:00:00-04:00'))).toBe(
+      `squash-acme-team-2026-10-08.${ext}`,
+    )
+  })
+
+  it.each(['', ' / !!! '])('falls back for a workspace without slug characters: %s', (name) => {
+    expect(exportFilename(name, 'csv', new Date('2026-10-07T12:00:00Z'))).toBe(
+      'squash-workspace-2026-10-07.csv',
+    )
+  })
+
+  it('defaults to the current date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-07T12:00:00Z'))
+    expect(exportFilename('Acme Team', 'md')).toBe('squash-acme-team-2026-10-07.md')
+  })
 })
 
 describe('bugsToCsv', () => {

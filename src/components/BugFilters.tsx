@@ -2,7 +2,7 @@ import { useCallback, useId, useRef, useState } from 'react'
 import { ChevronDown, Download, X } from 'lucide-react'
 import { useDismiss } from '../hooks/useDismiss'
 import type { BugFilters as Filters } from '../hooks/useBugs'
-import { bugsToCsv, bugsToMarkdown, downloadText } from '../lib/export'
+import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { SEVERITIES, SEVERITY_LABEL } from '../lib/types'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import { Button, inputClass } from './ui'
@@ -40,14 +40,8 @@ export function BugFilters({
     if (onExport) {
       onExport(format)
     } else if (workspaceName !== undefined) {
-      const slug =
-        workspaceName
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '') || 'workspace'
-      const date = new Date().toISOString().slice(0, 10)
       downloadText(
-        `squash-${slug}-${date}.${format}`,
+        exportFilename(workspaceName, format),
         format === 'csv' ? bugsToCsv(bugs) : bugsToMarkdown(bugs, workspaceName),
         format === 'csv' ? 'text/csv;charset=utf-8' : 'text/markdown;charset=utf-8',
       )

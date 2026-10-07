@@ -3,7 +3,6 @@ import { Bot, Bug, Copy, FolderCog, Lightbulb, Search, X } from 'lucide-react'
 import { filterBugs } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
-import { useWorkspaces } from '../hooks/useWorkspaces'
 import { KIND_LABEL } from '../lib/types'
 import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
@@ -15,6 +14,7 @@ import { Skeleton } from './Skeleton'
 
 export interface BugListProps {
   bugs: BugWithMeta[]
+  workspaceName?: string
   loading: boolean
   /** Status counts for the kind being shown. */
   counts: { open: number; resolved: number; all: number }
@@ -45,6 +45,7 @@ export interface BugListProps {
 
 export function BugList({
   bugs,
+  workspaceName,
   loading,
   counts,
   openByKind,
@@ -65,9 +66,6 @@ export function BugList({
   claudeConnected = false,
   claudeRuns,
 }: BugListProps) {
-  const { workspaces } = useWorkspaces()
-  const workspaceId = bugs[0]?.workspace_id ?? members[0]?.workspace_id
-  const workspaceName = workspaces.find((workspace) => workspace.id === workspaceId)?.name
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)

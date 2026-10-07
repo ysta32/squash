@@ -1,6 +1,19 @@
 import { KIND_LABEL, SEVERITY_LABEL } from './types'
 import type { BugWithMeta as BugWithAttachments } from './types'
 
+export function exportFilename(
+  workspaceName: string,
+  ext: 'csv' | 'md',
+  date: Date = new Date(),
+): string {
+  const slug =
+    workspaceName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'workspace'
+  return `squash-${slug}-${date.toISOString().slice(0, 10)}.${ext}`
+}
+
 function csvCell(value: string | number | null): string {
   const text = String(value ?? '')
   const guarded = /^\s*[=+\-@]|^[\t\r]/.test(text) ? `'${text}` : text

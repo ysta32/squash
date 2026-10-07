@@ -10,14 +10,6 @@ import type { BugListProps } from './BugList'
 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: vi.fn(() => null) }))
-vi.mock('../hooks/useWorkspaces', () => ({
-  useWorkspaces: () => ({
-    workspaces: [
-      { id: 'other-workspace', name: 'Other Team' },
-      { id: 'workspace', name: 'Acme Team' },
-    ],
-  }),
-}))
 
 const filters: BugFilters = {
   kind: 'bug',
@@ -82,6 +74,7 @@ function Harness(props: Partial<BugListProps>) {
   return (
     <BugList
       bugs={bugs}
+      workspaceName="Acme Team"
       loading={false}
       counts={{ open: 1, resolved: 1, all: 2 }}
       selectedId={null}
