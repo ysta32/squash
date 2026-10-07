@@ -51,3 +51,35 @@ export function drawShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]): void
   }
   ctx.restore()
 }
+
+export async function fitUnder(file: File, maxBytes: number): Promise<File> {
+  if (file.size <= maxBytes) return file
+  const url = URL.createObjectURL(file)
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error('Could not load the marked-up image.'))
+      image.src = url
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Could not create the marked-up image.')
+    // JPEG has no alpha channel, so flatten transparency onto white.
+    context.fillStyle = 'white'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0)
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.9),
+    )
+    if (!blob || blob.type !== 'image/jpeg') throw new Error('Could not save the marked-up image.')
+    if (blob.size > maxBytes) throw new Error('too-large')
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.jpg`, {
+      type: 'image/jpeg',
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}

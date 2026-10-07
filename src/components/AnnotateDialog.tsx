@@ -63,7 +63,13 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
 
   function requestClose() {
     if (savingRef.current) return
-    if (shapes.length > 0 || dragRef.current) setDiscard(true)
+    if (dragRef.current) {
+      const pointerId = dragRef.current.pointerId
+      cancelDrag()
+      canvasRef.current?.releasePointerCapture(pointerId)
+      return
+    }
+    if (shapes.length > 0) setDiscard(true)
     else onClose()
   }
 

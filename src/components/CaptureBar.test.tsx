@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { CaptureBar } from './CaptureBar'
+import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 
 const speechState = vi.hoisted(() => ({
   supported: true,
@@ -212,7 +213,7 @@ describe('CaptureBar', () => {
     expect(screen.getByTitle('Voice needs Chrome, Edge, or Safari')).toBeTruthy()
   })
 
-  it('edits a staged image in place and submits the marked-up file', async () => {
+  it.each(['png', 'jpeg', 'too-large'])('saves a staged annotation: %s', async (scenario) => {
     let loaded: HTMLImageElement | undefined
     vi.stubGlobal(
       'Image',
@@ -238,20 +239,24 @@ describe('CaptureBar', () => {
       lineTo: vi.fn(),
       stroke: vi.fn(),
       strokeRect: vi.fn(),
+      fillRect: vi.fn(),
     }
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
       ctx as unknown as CanvasRenderingContext2D,
     )
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
-      callback(new Blob(['marked'], { type: 'image/png' })),
-    )
+    const oversized = new Uint8Array(MAX_ORIGINAL_BYTES + 1)
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) => {
+      const large = type === 'image/png' ? scenario !== 'png' : scenario === 'too-large'
+      callback(new Blob([large ? oversized : 'marked'], { type }))
+    })
     try {
       vi.mocked(URL.createObjectURL)
         .mockReturnValueOnce('blob:first')
         .mockReturnValueOnce('blob:second')
         .mockReturnValueOnce('blob:editor')
+        .mockReturnValueOnce(scenario === 'png' ? 'blob:marked' : 'blob:conversion')
         .mockReturnValueOnce('blob:marked')
-      const { box, onSubmit } = setup()
+      const { box, onSubmit, onToast } = setup()
       const first = new File(['first'], 'first.png', { type: 'image/png' })
       const second = new File(['second'], 'second.png', { type: 'image/png' })
       fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first, second] } })
@@ -280,19 +285,34 @@ describe('CaptureBar', () => {
       fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, button: 0 })
       fireEvent.pointerUp(canvas, { clientX: 80, clientY: 80 })
       await act(async () => fireEvent.keyDown(window, { key: 'Enter' }))
+      if (scenario !== 'png') {
+        if (!loaded) throw new Error('Expected conversion image')
+        await act(async () => fireEvent.load(loaded!))
+      }
+      if (scenario === 'too-large') {
+        expect(onToast).toHaveBeenCalledWith('Marked-up image is too large (max 5MB)')
+        expect(screen.getByAltText('first.png')).toHaveAttribute('src', 'blob:first')
+        expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:first')
+        await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+        expect(onSubmit.mock.calls[0][0].files).toEqual([first, second])
+        return
+      }
+      expect(onToast).not.toHaveBeenCalled()
+      const name = scenario === 'png' ? 'first-marked.png' : 'first-marked.jpg'
       expect(onSubmit).not.toHaveBeenCalled()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Mark up first-marked.png' })).toBeInTheDocument()
-      expect(screen.getByAltText('first-marked.png')).toHaveAttribute('src', 'blob:marked')
+      expect(screen.getByRole('button', { name: `Mark up ${name}` })).toBeInTheDocument()
+      expect(screen.getByAltText(name)).toHaveAttribute('src', 'blob:marked')
       expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:first')
       expect(screen.getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual([
-        'first-marked.png',
+        name,
         'second.png',
       ])
       await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
       const files: File[] = onSubmit.mock.calls[0][0].files
-      expect(files[0].name).toBe('first-marked.png')
-      expect(files[0].type).toBe('image/png')
+      expect(files[0].name).toBe(name)
+      expect(files[0].type).toBe(scenario === 'png' ? 'image/png' : 'image/jpeg')
+      expect(files[0].size).toBeLessThanOrEqual(MAX_ORIGINAL_BYTES)
       expect(files[1]).toBe(second)
     } finally {
       cleanup()

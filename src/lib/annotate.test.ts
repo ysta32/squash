@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { arrowHead, drawShapes, strokeWidthFor, type Shape } from './annotate'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { arrowHead, drawShapes, fitUnder, strokeWidthFor, type Shape } from './annotate'
 
 describe('annotation geometry', () => {
   it('puts arrow wings behind a horizontal tip and mirrors them', () => {
@@ -110,4 +110,89 @@ describe('drawShapes', () => {
       document.documentElement.style.removeProperty('--danger')
     }
   })
+})
+
+describe('fitUnder', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it.each([9, 10])('returns a file of %i bytes unchanged when within the limit', async (size) => {
+    const file = new File([new Uint8Array(size)], 'shot.png', { type: 'image/png' })
+    expect(await fitUnder(file, 10)).toBe(file)
+  })
+
+  function setupConversion(blob: Blob | null, decodeFails = false, contextMissing = false) {
+    const image = document.createElement('img')
+    Object.defineProperties(image, {
+      naturalWidth: { value: 100 },
+      naturalHeight: { value: 80 },
+    })
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          queueMicrotask(() => image.dispatchEvent(new Event(decodeFails ? 'error' : 'load')))
+          return image
+        }
+      },
+    )
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:conversion'),
+      revokeObjectURL: vi.fn(),
+    })
+    const context = { fillStyle: '', fillRect: vi.fn(), drawImage: vi.fn() }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      contextMissing ? null : (context as unknown as CanvasRenderingContext2D),
+    )
+    const toBlob = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+      .mockImplementation((callback) => callback(blob))
+    return { image, context, toBlob }
+  }
+
+  it.each(['shot.png', 'shot'])(
+    'converts %s to a white-backed JPEG at quality 0.9',
+    async (name) => {
+      const { image, context, toBlob } = setupConversion(
+        new Blob(['1234567890'], { type: 'image/jpeg' }),
+      )
+      const file = new File(['12345678901'], name, { type: 'image/png' })
+      const result = await fitUnder(file, 10)
+      expect(result).not.toBe(file)
+      expect(result.name).toBe('shot.jpg')
+      expect(result.type).toBe('image/jpeg')
+      expect(result.size).toBe(10)
+      expect(context.fillStyle).toBe('white')
+      expect(context.fillRect).toHaveBeenCalledWith(0, 0, 100, 80)
+      expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0)
+      expect(context.fillRect.mock.invocationCallOrder[0]).toBeLessThan(
+        context.drawImage.mock.invocationCallOrder[0],
+      )
+      expect(toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', 0.9)
+      const canvas = toBlob.mock.contexts[0] as HTMLCanvasElement
+      expect([canvas.width, canvas.height]).toEqual([100, 80])
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:conversion')
+    },
+  )
+
+  it.each([
+    { blob: new Blob(['12345678901'], { type: 'image/jpeg' }), message: 'too-large' },
+    { blob: null, message: 'Could not save the marked-up image.' },
+    {
+      blob: new Blob(['x'], { type: 'image/png' }),
+      message: 'Could not save the marked-up image.',
+    },
+    { blob: null, decodeFails: true, message: 'Could not load the marked-up image.' },
+    { blob: null, contextMissing: true, message: 'Could not create the marked-up image.' },
+  ])(
+    'rejects with $message and releases the conversion URL',
+    async ({ blob, decodeFails, contextMissing, message }) => {
+      setupConversion(blob, decodeFails, contextMissing)
+      const file = new File(['12345678901'], 'shot.png', { type: 'image/png' })
+      await expect(fitUnder(file, 10)).rejects.toThrow(message)
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:conversion')
+    },
+  )
 })

@@ -6,6 +6,7 @@ import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
 import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
+import { fitUnder } from '../lib/annotate'
 import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, randomId } from '../lib/utils'
@@ -110,6 +111,7 @@ export function CaptureBar({
   useEffect(
     () => () => {
       chipsRef.current.forEach((c) => URL.revokeObjectURL(c.previewUrl))
+      chipsRef.current = []
     },
     [],
   )
@@ -242,6 +244,28 @@ export function CaptureBar({
     }
   }
 
+  const saveMarkedUp = async (file: File): Promise<void> => {
+    try {
+      file = await fitUnder(file, MAX_ORIGINAL_BYTES)
+    } catch (error) {
+      onToast?.(
+        error instanceof Error
+          ? error.message === 'too-large'
+            ? 'Marked-up image is too large (max 5MB)'
+            : error.message
+          : 'Could not save the marked-up image.',
+      )
+      return
+    }
+    const current = chipsRef.current.find((chip) => chip.id === editingId)
+    if (!current) return
+    const previewUrl = URL.createObjectURL(file)
+    URL.revokeObjectURL(current.previewUrl)
+    setChips((previous) =>
+      previous.map((chip) => (chip.id === current.id ? { ...chip, file, previewUrl } : chip)),
+    )
+  }
+
   const canSubmit = value.trim().length > 0
   const editingChip = chips.find((chip) => chip.id === editingId)
 
@@ -300,17 +324,7 @@ export function CaptureBar({
           key={editingChip.id}
           file={editingChip.file}
           onClose={() => setEditingId(null)}
-          onSave={(file) => {
-            const current = chipsRef.current.find((chip) => chip.id === editingChip.id)
-            if (!current) return
-            const previewUrl = URL.createObjectURL(file)
-            URL.revokeObjectURL(current.previewUrl)
-            setChips((previous) =>
-              previous.map((chip) =>
-                chip.id === current.id ? { ...chip, file, previewUrl } : chip,
-              ),
-            )
-          }}
+          onSave={saveMarkedUp}
         />
       )}
 

@@ -152,6 +152,25 @@ describe('AnnotateDialog', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
+  it.each([false, true])('Escape cancels a drag with existing strokes: %s', (hasStroke) => {
+    const { canvas, onClose } = setup()
+    if (hasStroke) drag(canvas)
+    fireEvent.pointerDown(canvas, { pointerId: 7, clientX: 20, clientY: 30, button: 0 })
+    fireEvent.pointerMove(canvas, { pointerId: 7, clientX: 60, clientY: 70 })
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByText('Discard changes?')).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(7)
+    fireEvent.pointerUp(canvas, { pointerId: 7, clientX: 110, clientY: 120 })
+    if (hasStroke) {
+      expect(screen.getByRole('button', { name: 'Use marked-up image' })).toBeEnabled()
+      fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+    }
+    expect(screen.getByRole('button', { name: 'Use marked-up image' })).toBeDisabled()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
   it.each(['click', 'Enter', 'Mod+Enter'])(
     'exports the original image and strokes at natural size using %s',
     async (method) => {
