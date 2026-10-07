@@ -11,6 +11,14 @@
 - Claude Code now finishes bugs on its own. Sent bugs run unattended; when Claude is done its terminal closes, and Squash marks each bug it fixed as resolved with Claude's summary as the resolution note, or comments on bugs it could not finish. Rerun the install command to update the helper.
 - Delete a bug or feature request outright, as an alternative to resolving it (bug #10). The trash button in the detail view asks for confirmation, then removes the item with its screenshots, comments and activity for everyone. Numbers are not reused. Needs migration `0003_bug_delete.sql`.
 
+### Fixed
+
+- On phones, the bug detail header no longer pushes the Resolve button off the screen. Send to Claude shows just its icon below 640 px.
+
+### Docs
+
+- A new README with real product screenshots, an animated capture demo, and a GitHub social preview image. `npm run screenshots` regenerates them all from the real app running on demo data, with no Supabase project needed.
+
 ## v1.1.0 — 2026-10-02
 
 ### Changed
