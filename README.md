@@ -129,7 +129,10 @@ curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/stats-light.png" alt="Stats popover listing bugs filed and resolved per teammate, for the last 7 days and all time" />
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/stats-dark.png" />
+        <img src="docs/screenshots/stats-light.png" alt="Stats popover listing bugs filed and resolved per teammate, for the last 7 days and all time" />
+      </picture>
       <p><b>Who's carrying the load.</b> Bugs filed and resolved per person, all-time and for the last 7 days.</p>
     </td>
     <td width="50%" valign="top">
@@ -143,6 +146,8 @@ curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://
 - **Bugs and Features side by side.** File and track feature requests in their own tab, and move items between the two.
 - **Find anything.** Open, Resolved and All tabs with live counts; filter by who filed or resolved, or by severity; full-text search across titles, descriptions and voice transcripts.
 - **A full history.** Resolve or reopen with an optional note, or delete outright. Each bug has an activity timeline and comments.
+- **Markdown and mentions.** Descriptions and comments render bold, italics, code, lists, quotes and links, and highlight `@name` mentions. Rendering is React-only, so no HTML from a bug ever reaches the page.
+- **Export.** Download the bugs you are looking at as CSV (safe to open in a spreadsheet) or as a Markdown report.
 - **Workspaces.** Invite links, a workspace switcher, and owner controls to rename, regenerate the invite, remove members, transfer ownership or delete. Sign in with Google or a magic link.
 
 <br />
@@ -165,8 +170,16 @@ Light and dark themes that follow your system, and six color schemes: Violet, Oc
 
 ## Keyboard first
 
+Press <kbd>⌘</kbd>+<kbd>K</kbd> (<kbd>Ctrl</kbd>+<kbd>K</kbd> elsewhere) to open the command palette: jump to any bug by number or title, switch workspaces, export, change theme, or open settings.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/palette-dark.png" />
+  <img src="docs/screenshots/palette-light.png" width="640" alt="The command palette listing actions, export commands and bugs" />
+</picture>
+
 | Key                                                  | Action                                   |
 | ---------------------------------------------------- | ---------------------------------------- |
+| <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd>            | Command palette                          |
 | <kbd>N</kbd>                                         | New bug (focus the capture bar)          |
 | <kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd> | File bug / new line                      |
 | <kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>4</kbd>             | Set severity while capturing             |

@@ -62,15 +62,46 @@ export function shots({ desktop, mobile }) {
       clip: claudeClip,
     })),
 
-    // Team stats.
-    {
-      name: 'stats-light',
+    // Team stats: the popover under the header, in both themes.
+    ...['light', 'dark'].map((theme) => ({
+      name: `stats-${theme}`,
       path: `${ws}/bug/23`,
       viewport: desktop,
-      theme: 'light',
+      theme,
       before: (page) => page.getByRole('button', { name: 'Stats' }).click(),
-      clip: { x: 800, y: 0, width: 640, height: 340 },
-    },
+      clip: async (page) => {
+        const box = await page.getByText('Member', { exact: true }).locator('../..').boundingBox()
+        const pad = 48
+        return {
+          x: box.x - pad,
+          y: 0,
+          width: Math.min(box.width + pad * 2, desktop.width - box.x + pad),
+          height: box.y + box.height + pad,
+        }
+      },
+    })),
+
+    // Command palette with every command listed.
+    ...['dark', 'light'].map((theme) => ({
+      name: `palette-${theme}`,
+      path: `${ws}/bug/24`,
+      viewport: desktop,
+      theme,
+      before: async (page) => {
+        await page.keyboard.press('ControlOrMeta+k')
+        await page.waitForTimeout(300)
+      },
+      clip: async (page) => {
+        const box = await page.getByRole('dialog', { name: 'Command palette' }).boundingBox()
+        const pad = 64
+        return {
+          x: box.x - pad,
+          y: box.y - pad,
+          width: box.width + pad * 2,
+          height: box.height + pad * 2,
+        }
+      },
+    })),
 
     // Screenshot lightbox.
     {

@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+## v1.2.0 — 2026-10-07
+
+A design pass across the whole app, plus a command palette, markdown, and export.
+
 ### Added
+
+- A command palette on <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd>. Jump to any bug by number or title, switch workspaces, export, change theme, invite teammates or open settings without leaving the keyboard.
+- Markdown in descriptions and comments: bold, italics, inline code and code blocks, lists, quotes and links, with `@name` mentions highlighted. It is rendered as React elements only, and links are limited to http, https and mailto.
+- Export the bugs you are looking at as CSV or as a Markdown report, from the list toolbar or the command palette. CSV cells that would run as spreadsheet formulas are neutralized.
 
 - A Features tab next to Bugs, so feature requests no longer have to be filed as bugs. The capture bar files into whichever tab is showing, the detail view can move an item between the two, and Claude exports ask Claude to build a feature rather than fix a bug. Needs migration `0002_bug_kind.sql`; existing items stay bugs.
 - Send bugs to Claude Code, one at a time or several at once, with their screenshots and comments. One press opens Claude Code on them in a new terminal, in the project folder chosen for that workspace. The first press walks through a one-command setup that installs a small helper which starts at login. A separate copy button copies a ready-to-paste prompt instead.
@@ -11,13 +19,26 @@
 - Claude Code now finishes bugs on its own. Sent bugs run unattended; when Claude is done its terminal closes, and Squash marks each bug it fixed as resolved with Claude's summary as the resolution note, or comments on bugs it could not finish. Rerun the install command to update the helper.
 - Delete a bug or feature request outright, as an alternative to resolving it. The trash button in the detail view asks for confirmation, then removes the item with its screenshots, comments and activity for everyone. Numbers are not reused. Needs migration `0003_bug_delete.sql`.
 
+### Changed
+
+- A redesigned landing page built around real product screenshots, with a how-it-works section, a self-host section and an FAQ.
+- Sign-in, onboarding, invite and sign-in callback screens share one layout, with clearer copy and errors shown next to the field they belong to.
+- Settings are grouped into titled sections with a side menu. Save buttons stay disabled until something changes and confirm when saved, and destructive actions sit in a separate danger zone.
+- Specific empty states for a new workspace, an empty tab and a search with no matches, with a one-click way to clear filters.
+- One consistent set of buttons, inputs, menus and focus rings across the app, and semantic colors for severity, status and errors so every color scheme and both themes stay readable.
+- The Claude Code guide has copy buttons on every command and a plain explanation of what the local helper can access. The privacy and terms pages are easier to read.
+- The stats popover is wider, so its column headings no longer wrap.
+
 ### Fixed
 
+- Long bug titles wrap instead of being cut off on phones.
+- Changing the theme from one place now updates every theme control at once.
+- Keyboard focus is visible on every menu item.
 - On phones, the bug detail header no longer pushes the Resolve button off the screen. Send to Claude shows just its icon below 640 px.
 
 ### Docs
 
-- A new README with real product screenshots, an animated capture demo, and a GitHub social preview image. `npm run screenshots` regenerates them all from the real app running on demo data, with no Supabase project needed.
+- A new README with real product screenshots, including the command palette, an animated capture demo, and a GitHub social preview image. `npm run screenshots` regenerates them all from the real app running on demo data, with no Supabase project needed.
 
 ## v1.1.0 — 2026-10-02
 
