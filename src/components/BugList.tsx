@@ -48,6 +48,9 @@ export interface BugListProps {
   claudeRuns?: Map<number, ClaudeRun>
 }
 
+const countPill =
+  'inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-fg/[0.06] px-1 text-[11px] font-medium tabular-nums leading-none text-muted'
+
 export function BugList({
   bugs,
   workspaceName,
@@ -79,8 +82,18 @@ export function BugList({
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
   const items = filters.kind === 'feature' ? 'features' : 'bugs'
   const filtered = Boolean(
-    filters.query.trim() || filters.filedBy || filters.resolvedBy || filters.severity,
+    filters.query.trim() ||
+    filters.filedBy ||
+    filters.resolvedBy ||
+    filters.assignee ||
+    filters.severity,
   )
+  const sendLabel =
+    picked.length > 0
+      ? `Send ${picked.length} to Claude`
+      : `Send all ${exportable.length} to Claude`
+  const iconButton =
+    't focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg'
 
   return (
     <section aria-label="Bug list" className="flex h-full min-h-0 flex-col bg-bg text-fg">
@@ -103,20 +116,18 @@ export function BugList({
                   if (!active) onFilters({ ...filters, kind })
                 }}
                 className={cn(
-                  't flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  't flex h-7 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   active ? 'bg-bg text-fg shadow-sm' : 'text-muted hover:text-fg',
                 )}
               >
                 <Icon size={14} aria-hidden="true" />
                 {KIND_LABEL[kind].many}
-                {openByKind && (
-                  <span className="font-mono text-xs text-muted">{openByKind[kind]}</span>
-                )}
+                {openByKind && <span className={countPill}>{openByKind[kind]}</span>}
               </button>
             )
           })}
         </div>
-        <div role="group" aria-label="Bug status" className="flex gap-1">
+        <div role="group" aria-label="Bug status" className="flex items-center gap-1">
           {(['open', 'resolved', 'all'] as const).map((tab) => (
             <button
               key={tab}
@@ -124,25 +135,25 @@ export function BugList({
               aria-pressed={filters.tab === tab}
               onClick={() => onFilters({ ...filters, tab })}
               className={cn(
-                't flex items-center gap-2 rounded-md px-3 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                't flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                 filters.tab === tab
                   ? 'bg-bg-subtle text-fg'
                   : 'text-muted hover:bg-bg-subtle hover:text-fg',
               )}
             >
               {tab === 'open' ? 'Open' : tab === 'resolved' ? 'Resolved' : 'All'}{' '}
-              <span className="font-mono text-muted">{counts[tab]}</span>
+              <span className={countPill}>{counts[tab]}</span>
             </button>
           ))}
           {onSend && exportable.length > 0 && (
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex min-w-0 items-center gap-0.5">
               {picked.length > 0 && onClearPicked && (
                 <button
                   type="button"
                   onClick={onClearPicked}
                   aria-label={`Clear picked ${items}`}
                   title={`Clear picked ${items}`}
-                  className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className={iconButton}
                 >
                   <X size={14} aria-hidden="true" />
                 </button>
@@ -155,12 +166,21 @@ export function BugList({
                     ? `Open Claude Code on the picked ${items} (C)`
                     : `Open Claude Code on every ${KIND_LABEL[filters.kind].one.toLowerCase()} in this view. ⌘/Ctrl-click or press X to pick specific ${items}.`
                 }
-                className="t inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                aria-label={sendLabel}
+                className="t focus-ring inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-medium text-muted hover:bg-bg-subtle hover:text-fg sm:px-2"
               >
                 <Bot size={14} aria-hidden="true" />
-                {picked.length > 0
-                  ? `Send ${picked.length} to Claude`
-                  : `Send all ${exportable.length} to Claude`}
+                <span aria-hidden="true" className="hidden sm:inline">
+                  {sendLabel}
+                </span>
+                {picked.length > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className={cn(countPill, 'bg-accent/15 text-accent sm:hidden')}
+                  >
+                    {picked.length}
+                  </span>
+                )}
               </button>
               {onCopy && (
                 <button
@@ -172,7 +192,7 @@ export function BugList({
                       : `Copy all ${items} for Claude`
                   }
                   title="Copy a prompt to paste into Claude Code"
-                  className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className={iconButton}
                 >
                   <Copy size={14} aria-hidden="true" />
                 </button>
@@ -183,7 +203,7 @@ export function BugList({
                   onClick={onClaudeSetup}
                   aria-label="Claude Code project folder"
                   title="Claude Code: change this workspace's project folder"
-                  className="t rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className={iconButton}
                 >
                   <FolderCog size={14} aria-hidden="true" />
                 </button>
@@ -212,7 +232,7 @@ export function BugList({
                 event.currentTarget.blur()
               }
             }}
-            className="t w-full rounded-md border border-border bg-bg py-2 pl-8 pr-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
+            className="t focus-ring h-9 w-full rounded-md border border-border bg-bg pl-8 pr-3 text-sm text-fg placeholder:text-muted hover:border-fg/20"
           />
         </label>
         <BugFilters
@@ -247,11 +267,22 @@ export function BugList({
             filtered={filtered}
             hasItems={counts.all > 0}
             onClearFilters={() =>
-              onFilters({ ...filters, query: '', filedBy: null, resolvedBy: null, severity: null })
+              onFilters({
+                ...filters,
+                query: '',
+                filedBy: null,
+                resolvedBy: null,
+                assignee: null,
+                severity: null,
+              })
             }
           />
         ) : (
-          <div role="listbox" aria-label={KIND_LABEL[filters.kind].many} className="space-y-1 p-2">
+          <div
+            role="listbox"
+            aria-label={KIND_LABEL[filters.kind].many}
+            className="space-y-px p-1.5"
+          >
             {visible.map((bug) => (
               <BugRow
                 key={bug.id}

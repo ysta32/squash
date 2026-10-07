@@ -67,15 +67,16 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
   ] as const
 
   return (
-    <div className="m-3 rounded-lg border border-border bg-bg-elevated p-3">
-      <div className="mb-2 flex items-center gap-2">
+    <div className="mx-2 mb-1 mt-2 rounded-lg border border-border bg-bg-elevated px-3 pb-2 pt-2.5">
+      <div className="flex items-center gap-2">
         <h2 className="text-sm font-medium">Get started</h2>
-        <span className="text-xs text-muted">{completed} of 4</span>
+        <span className="text-xs tabular-nums text-muted">{completed} of 4</span>
         <Button
           size="sm"
           variant="ghost"
-          className="ml-auto px-1.5"
+          className="-mr-1.5 ml-auto w-7 px-0"
           aria-label="Dismiss getting started"
+          title="Dismiss"
           onClick={() => {
             setDismissed(true)
             try {
@@ -88,21 +89,29 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
           <X size={14} aria-hidden="true" />
         </Button>
       </div>
-      <ol aria-label="Getting started" className="space-y-2">
+      <div aria-hidden="true" className="mb-1.5 mt-2 h-1 overflow-hidden rounded-full bg-fg/[0.07]">
+        <div
+          className="t h-full rounded-full bg-accent"
+          style={{ width: `${(completed / 4) * 100}%` }}
+        />
+      </div>
+      <ol aria-label="Getting started">
         {items.map(({ id, label, action }) => (
-          <li key={id} className="flex flex-wrap items-center gap-2 text-xs">
+          <li key={id} className="flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
             <span
               aria-hidden="true"
               className={cn(
                 'flex h-4 w-4 shrink-0 items-center justify-center rounded-full',
-                steps[id] ? 'bg-success/15 text-success' : 'border border-border',
+                steps[id] ? 'bg-success/15 text-success' : 'border border-dashed border-muted/60',
               )}
             >
-              {steps[id] && <Check size={12} />}
+              {steps[id] && <Check size={11} strokeWidth={2.5} />}
             </span>
             <span className="sr-only">{steps[id] ? 'Done' : 'To do'}</span>
-            <span className={cn(steps[id] && 'text-muted line-through')}>{label}</span>
-            {!steps[id] && <span className="ml-auto text-muted">{action}</span>}
+            <span className={cn(steps[id] ? 'text-muted line-through' : 'text-fg')}>{label}</span>
+            {!steps[id] && (
+              <span className="ml-auto flex items-center gap-1 text-muted">{action}</span>
+            )}
           </li>
         ))}
       </ol>

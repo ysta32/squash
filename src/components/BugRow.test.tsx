@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import { BugRow } from './BugRow'
 
-vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: () => null }))
-
 const members: WorkspaceMember[] = ['Ada', 'Grace'].map((name) => ({
   workspace_id: 'ws',
   user_id: name.toLowerCase(),
@@ -58,11 +56,12 @@ function row(b: BugWithMeta) {
 afterEach(cleanup)
 
 describe('BugRow', () => {
-  it('shows the assignee in the person slot before the time, instead of the filer', () => {
+  it('shows the assignee in the trailing person slot after the time, instead of the filer', () => {
     row(bug({ assignee_id: 'grace' }))
     const assignee = screen.getByTitle('Assigned to Grace')
     expect(assignee).toContainElement(screen.getByLabelText('Grace'))
-    expect(assignee.nextElementSibling).toBe(screen.getByRole('option').querySelector('time'))
+    expect(assignee.previousElementSibling).toBe(screen.getByRole('option').querySelector('time'))
+    expect(assignee.nextElementSibling).toBeNull()
     expect(screen.queryByTitle(/Filed by/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Ada')).not.toBeInTheDocument()
   })
@@ -72,6 +71,7 @@ describe('BugRow', () => {
     expect(screen.queryByTitle(/Assigned to/)).not.toBeInTheDocument()
     const filer = screen.getByTitle('Filed by Ada')
     expect(filer).toContainElement(screen.getByLabelText('Ada'))
-    expect(filer.nextElementSibling).toBe(screen.getByRole('option').querySelector('time'))
+    expect(filer.previousElementSibling).toBe(screen.getByRole('option').querySelector('time'))
+    expect(filer.nextElementSibling).toBeNull()
   })
 })
