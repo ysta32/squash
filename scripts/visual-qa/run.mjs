@@ -3,7 +3,10 @@
 //
 // Run it through the e2e serializer (the machine is CPU-saturated):
 //   ~/.claude/orch/bin/serial e2e -- npm run qa:shots -- --out .orch/shots/latest
-//   node scripts/visual-qa/run.mjs --out <dir> [--routes /,/claude] [--widths 375,1280] [--themes light]
+//   node scripts/visual-qa/run.mjs --out <dir> [--routes /,/claude] [--states palette,toast]
+//     [--widths 375,1280] [--themes light]
+// Routes: `/path` (signed in), `public:/path` (signed out), `state:<name>` (scripted UI state, see STATES).
+// Without --routes/--states the default routes and every state are shot.
 // Env: QA_PORT (default 4210). Uses your installed Google Chrome.
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -14,6 +17,10 @@ import { createServer } from 'vite'
 import { renderFixtures } from '../screenshots/render-fixtures.mjs'
 
 const DEFAULT_ROUTES = [
+  'public:/',
+  'public:/signin',
+  'public:/no-such-page',
+  'public:/privacy',
   '/',
   '/signin',
   '/claude',
@@ -33,7 +40,124 @@ const opt = (name) => {
 }
 const list = (name, fallback) => opt(name)?.split(',').filter(Boolean) ?? fallback
 
-const routes = list('routes', DEFAULT_ROUTES)
+const WS = '/app/ws-lumen'
+const SAMPLE_DESCRIPTION = 'Checkout button is hidden behind the cookie banner on iPhone'
+const SHORT = 15_000
+
+/**
+ * Scripted states. `path` is loaded first (with optional mock `delayBugs` ms), then `run` interacts
+ * until the state is visible. `run` may return a cleanup. A state whose UI never appears
+ * (timeout) is logged as a warning and skipped, never failing the run.
+ */
+const searchbox = (page) => page.getByRole('searchbox', { name: /^Search/ })
+const settingsState = (tab) => ({
+  path: `${WS}/settings?tab=${tab}`,
+  run: (page) =>
+    page
+      .getByRole('navigation', { name: 'Settings tabs' })
+      .getByRole('button', { name: tab, exact: true })
+      .and(page.locator('[aria-current="page"]'))
+      .waitFor({ timeout: SHORT }),
+})
+const STATES = {
+  palette: {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.getByRole('dialog', { name: 'Command palette' }).waitFor({ timeout: SHORT })
+    },
+  },
+  shortcuts: {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('?')
+      await page.getByRole('dialog').waitFor({ timeout: SHORT })
+    },
+  },
+  invite: {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Invite', exact: true }).click({ timeout: SHORT })
+      await page.getByRole('dialog', { name: 'Invite people' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'capture-focused': {
+    path: WS,
+    run: async (page) => {
+      const box = page.getByRole('textbox', { name: /^Describe the/ })
+      await box.click({ timeout: SHORT })
+      await box.fill(SAMPLE_DESCRIPTION)
+      await box.waitFor({ state: 'visible' })
+    },
+  },
+  'filter-empty': {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).fill('zzz-no-such-bug')
+      await page.getByText('No matches', { exact: true }).waitFor({ timeout: SHORT })
+    },
+  },
+  'empty-workspace': {
+    path: '/app/ws-side',
+    run: (page) => page.getByRole('textbox', { name: /^Describe the/ }).waitFor({ timeout: SHORT }),
+  },
+  loading: {
+    path: WS,
+    delayBugs: 120_000,
+    waitUntil: 'domcontentloaded',
+    run: (page) => page.getByRole('status', { name: 'Loading bugs' }).waitFor({ timeout: SHORT }),
+  },
+  offline: {
+    path: WS,
+    run: async (page, context) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await context.setOffline(true)
+      await page.getByRole('status').filter({ hasText: 'Offline' }).waitFor({ timeout: SHORT })
+      return () => context.setOffline(false)
+    },
+  },
+  lightbox: {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Open screenshot 1' }).click({ timeout: SHORT })
+      const dialog = page.getByRole('dialog', { name: 'Screenshot viewer' })
+      await dialog.waitFor({ timeout: SHORT })
+      await dialog
+        .locator('img')
+        .first()
+        .evaluate((img) => img.decode())
+    },
+  },
+  toast: {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      // Resolving shows no toast; deleting does (the mock only changes in this page).
+      await page.getByRole('button', { name: 'Delete bug', exact: true }).click({ timeout: SHORT })
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Delete bug', exact: true })
+        .click({ timeout: SHORT })
+      await page.getByRole('button', { name: 'Dismiss notification' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'settings-profile': settingsState('profile'),
+  'settings-appearance': settingsState('appearance'),
+  'settings-workspace': settingsState('workspace'),
+  'settings-account': settingsState('account'),
+}
+
+const requested = list('routes', null)
+const stateNames = [
+  ...(requested ?? []).filter((r) => r.startsWith('state:')).map((r) => r.slice(6)),
+  ...list('states', []),
+]
+const everything = requested === null && opt('states') === undefined
+const routes = (requested ?? (everything ? DEFAULT_ROUTES : [])).filter(
+  (r) => !r.startsWith('state:'),
+)
+if (everything) stateNames.push(...Object.keys(STATES))
 const widths = list('widths', ['375', '768', '1280', '1920']).map(Number)
 const themes = list('themes', ['light', 'dark'])
 const outDir = resolve(opt('out') ?? '.orch/shots/latest')
@@ -46,8 +170,12 @@ if (!Number.isInteger(port) || FORBIDDEN_PORTS.has(port)) {
 if (widths.some((w) => !Number.isFinite(w) || w <= 0)) throw new Error('invalid --widths')
 if (themes.some((t) => t !== 'light' && t !== 'dark')) throw new Error('--themes: light,dark')
 
-const slug = (route) =>
-  route === '/' ? 'home' : route.replace(/^\/|\/$/g, '').replace(/\W+/g, '-')
+const slug = (route) => {
+  const isPublic = route.startsWith('public:')
+  const path = isPublic ? route.slice(7) : route
+  const base = path === '/' ? 'home' : path.replace(/^\/|\/$/g, '').replace(/\W+/g, '-')
+  return isPublic ? `public-${base}` : base
+}
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const rel = relative(outDir, repoRoot)
@@ -82,16 +210,59 @@ try {
         reducedMotion: 'reduce',
       })
       await context.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
-      const page = await context.newPage()
+      // A fresh page per shot, so mock flags (signed out, delayed fetch) never leak between shots.
+      const open = async (width, { signedOut = false, delayBugs = 0 } = {}) => {
+        const page = await context.newPage()
+        await page.addInitScript(
+          ([out, delay]) => {
+            const set = (key, on, value) =>
+              on ? localStorage.setItem(key, value) : localStorage.removeItem(key)
+            set('squash:demo-signed-out', out, '1')
+            set('squash:demo-delay-bugs', delay > 0, String(delay))
+          },
+          [signedOut, delayBugs],
+        )
+        await page.setViewportSize({ width, height })
+        return page
+      }
       for (const route of routes) {
+        const signedOut = route.startsWith('public:')
+        const path = signedOut ? route.slice(7) : route
         for (const width of widths) {
-          await page.setViewportSize({ width, height })
-          await page.goto(origin + route, { waitUntil: 'networkidle' })
+          const page = await open(width, { signedOut })
+          await page.goto(origin + path, { waitUntil: 'networkidle' })
           await page.waitForTimeout(300)
           const file = `${slug(route)}_${width}_${theme}.png`
           await page.screenshot({ path: `${outDir}/${file}`, fullPage: true })
-          shots.push({ route, width, theme, file })
+          shots.push({ group: route, width, theme, file })
           console.log(file)
+          await page.close()
+        }
+      }
+      for (const name of stateNames) {
+        const state = STATES[name]
+        if (!state) {
+          console.warn(`WARN state:${name} is unknown; skipped`)
+          continue
+        }
+        for (const width of widths) {
+          const page = await open(width, { delayBugs: state.delayBugs })
+          let cleanup
+          try {
+            await page.goto(origin + state.path, { waitUntil: state.waitUntil ?? 'networkidle' })
+            cleanup = await state.run(page, context)
+            await page.waitForTimeout(300)
+            const file = `state-${name}_${width}_${theme}.png`
+            await page.screenshot({ path: `${outDir}/${file}` })
+            shots.push({ group: `state:${name}`, width, theme, file })
+            console.log(file)
+          } catch (err) {
+            const why = err instanceof Error ? err.message.split('\n')[0] : String(err)
+            console.warn(`WARN state:${name} @${width} ${theme} skipped: ${why}`)
+          } finally {
+            await cleanup?.()
+            await page.close()
+          }
         }
       }
       await context.close()
@@ -104,18 +275,28 @@ try {
 }
 
 const esc = (s) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
-const cells = shots
+const groups = new Map()
+for (const s of shots) groups.set(s.group, [...(groups.get(s.group) ?? []), s])
+const cells = [...groups]
   .map(
-    (s) =>
-      `<figure><figcaption>${esc(s.route)} &middot; ${s.width} &middot; ${s.theme}</figcaption>` +
-      `<a href="${s.file}"><img src="${s.file}" loading="lazy" alt="${esc(s.file)}"></a></figure>`,
+    ([group, items]) =>
+      `<section><h2>${esc(group)}</h2><div class="row">` +
+      items
+        .map(
+          (s) =>
+            `<figure><figcaption>${s.width} &middot; ${s.theme}</figcaption>` +
+            `<a href="${s.file}"><img src="${s.file}" loading="lazy" alt="${esc(s.file)}"></a></figure>`,
+        )
+        .join('\n') +
+      '</div></section>',
   )
   .join('\n')
 writeFileSync(
   `${outDir}/index.html`,
   `<!doctype html><meta charset="utf-8"><title>Visual QA</title>
 <style>body{font:12px system-ui;margin:16px;background:#888}
-main{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+h2{margin:16px 0 6px;font:600 14px system-ui}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 figure{margin:0;background:#fff;padding:6px}img{max-width:360px;max-height:600px;object-fit:contain;object-position:top;display:block}</style>
 <main>
 ${cells}

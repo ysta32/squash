@@ -148,7 +148,12 @@ class Query implements PromiseLike<{ data: unknown; error: null; count?: number 
     onfulfilled?: ((value: { data: unknown; error: null }) => A | PromiseLike<A>) | null,
     onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
   ): PromiseLike<A | B> {
-    return Promise.resolve({ data: this.run(), error: null }).then(onfulfilled, onrejected)
+    const delay = this.table === 'bugs' && this.op === 'select' ? bugsDelayMs : 0
+    const result =
+      delay > 0
+        ? new Promise<void>((done) => setTimeout(done, delay)).then(() => this.run())
+        : Promise.resolve(this.run())
+    return result.then((data) => ({ data, error: null })).then(onfulfilled, onrejected)
   }
 }
 
@@ -207,6 +212,9 @@ const signed = (path: string) => uploads.get(path) ?? `/__shots/${path.split('/'
 const signedOut = localStorage.getItem('squash:demo-signed-out') === '1'
 const current = signedOut ? null : session
 
+/** Shots of the loading state hold the bug list fetch this long (ms) so skeletons stay up. */
+const bugsDelayMs = Number(localStorage.getItem('squash:demo-delay-bugs') ?? 0) || 0
+
 const ok = <T>(data: T) => Promise.resolve({ data, error: null })
 
 export const supabase = {
@@ -232,6 +240,7 @@ export const supabase = {
         uploads.set(path, URL.createObjectURL(blob))
         return ok({ path })
       },
+      list: () => ok([]),
       remove: () => ok([]),
     }),
   },
