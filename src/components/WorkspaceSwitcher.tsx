@@ -56,7 +56,7 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
               type="button"
               role="menuitem"
               onClick={() => select(w.id)}
-              className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-visible:bg-bg-subtle focus-visible:outline-none justify-between gap-2"
+              className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring justify-between gap-2"
             >
               <span className="truncate">{w.name}</span>
               {w.id === workspace.id && <Check className="h-3.5 w-3.5 shrink-0" />}
@@ -67,7 +67,7 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
             to="/app?new=1"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-visible:bg-bg-subtle focus-visible:outline-none text-muted"
+            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring text-muted"
           >
             Create or join…
           </Link>

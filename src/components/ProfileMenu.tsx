@@ -47,7 +47,7 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
             to={`/app/${workspaceId}/settings`}
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-visible:bg-bg-subtle focus-visible:outline-none"
+            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring"
           >
             Settings
           </Link>
@@ -60,7 +60,7 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
                 setError(e instanceof Error ? e.message : 'Could not sign out'),
               )
             }}
-            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-visible:bg-bg-subtle focus-visible:outline-none"
+            className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-ring"
           >
             Sign out
           </button>
