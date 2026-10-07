@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -169,6 +169,20 @@ function BugBody({
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
   }, [titleDraft, bug.title])
+
+  useEffect(() => {
+    const el = titleRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight}px`
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   useLayoutEffect(() => {
     const el = descRef.current
