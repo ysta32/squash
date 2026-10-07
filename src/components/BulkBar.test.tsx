@@ -108,6 +108,7 @@ describe('BulkBar', () => {
     expect(props.onResolve).toHaveBeenCalledTimes(2)
     expect(props.onResolve).toHaveBeenCalledWith('1', null)
     expect(props.onResolve).toHaveBeenCalledWith('2', null)
+    expect(props.onClear).toHaveBeenCalledOnce()
   })
 
   it('reopens only selected resolved items', async () => {
@@ -115,6 +116,7 @@ describe('BulkBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Reopened 1 item.'))
     expect(props.onReopen).toHaveBeenCalledExactlyOnceWith('2', null)
+    expect(props.onClear).toHaveBeenCalledOnce()
   })
 
   it('assigns every selected item through the existing member picker', async () => {
@@ -125,6 +127,7 @@ describe('BulkBar', () => {
     expect(props.onAssign).toHaveBeenCalledTimes(2)
     expect(props.onAssign).toHaveBeenCalledWith('1', 'ada')
     expect(props.onAssign).toHaveBeenCalledWith('2', 'ada')
+    expect(props.onClear).toHaveBeenCalledOnce()
   })
 
   it('settles all mutations and reports both success and failure counts', async () => {
@@ -132,13 +135,14 @@ describe('BulkBar', () => {
       .fn()
       .mockRejectedValueOnce(new Error('Denied'))
       .mockResolvedValueOnce(undefined)
-    setup({ onResolve })
+    const props = setup({ onResolve })
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Could not resolve 1 item.'),
     )
     expect(screen.getByRole('status')).toHaveTextContent('Resolved 1 item.')
     expect(onResolve).toHaveBeenCalledTimes(2)
+    expect(props.onClear).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled()
   })
 
@@ -147,12 +151,24 @@ describe('BulkBar', () => {
     const pending = new Promise<void>((resolve) => {
       finish = resolve
     })
-    const props = setup({ onResolve: vi.fn(() => pending) })
+    let attemptedOverlap = false
+    const props = setup({
+      onResolve: vi.fn(() => {
+        if (!attemptedOverlap) {
+          attemptedOverlap = true
+          const resolve = screen.getByRole('button', { name: 'Resolve' })
+          expect(resolve).toBeEnabled()
+          fireEvent.click(resolve)
+        }
+        return pending
+      }),
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
     expect(screen.getByRole('button', { name: 'Resolve' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Assignee: Unassigned' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+    expect(attemptedOverlap).toBe(true)
     expect(props.onResolve).toHaveBeenCalledTimes(2)
+    expect(props.onClear).not.toHaveBeenCalled()
     finish()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled())
   })

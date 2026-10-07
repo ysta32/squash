@@ -369,6 +369,10 @@ export default function Workspace() {
 
   const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
   const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
+  const effectivePickedIds = new Set(
+    visible.filter((bug) => pickedIds.has(bug.id)).map((bug) => bug.id),
+  )
+  if (effectivePickedIds.size !== pickedIds.size) setPickedIds(effectivePickedIds)
   const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
   const openByKind = useMemo(
     () => ({ bug: countBugs(bugs, 'bug').open, feature: countBugs(bugs, 'feature').open }),
@@ -523,7 +527,7 @@ export default function Workspace() {
   useShortcut(
     'c',
     (e) => {
-      const picked = bugs.filter((b) => pickedIds.has(b.id))
+      const picked = visible.filter((b) => effectivePickedIds.has(b.id))
       const target = picked.length > 0 ? picked : selected ? [selected] : []
       if (target.length === 0) return
       e.preventDefault()
@@ -825,7 +829,7 @@ export default function Workspace() {
               viewersOf={presence.viewers}
               highlightIds={highlightIds}
               searchRef={searchRef}
-              pickedIds={pickedIds}
+              pickedIds={effectivePickedIds}
               onTogglePick={togglePick}
               onClearPicked={clearPicked}
               onResolve={resolveBug}

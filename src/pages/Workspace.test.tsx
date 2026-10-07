@@ -248,6 +248,64 @@ afterEach(() => {
 })
 
 describe('Workspace', () => {
+  it.each(['tab', 'query'])('prunes bulk picks hidden by a %s change', (change) => {
+    show('/app/ws')
+    fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
+    expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
+
+    if (change === 'tab')
+      fireEvent.click(
+        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
+          name: /^Resolved/,
+        }),
+      )
+    else
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
+        target: { value: 'number 3' },
+      })
+    expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
+
+    if (change === 'tab')
+      fireEvent.click(
+        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
+          name: /^Open/,
+        }),
+      )
+    else
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
+        target: { value: '' },
+      })
+    expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '#2 Bug number 2' })).toBeInTheDocument()
+  })
+
+  it.each(['resolve', 'delete'])(
+    'prunes bulk picks after a remote %s and preserves visible picks',
+    async (change) => {
+      const view = show('/app/ws')
+      fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
+      fireEvent.click(screen.getByRole('option', { name: '#3 Bug number 3' }), { ctrlKey: true })
+      expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('2 selected')
+
+      mocks.bugs =
+        change === 'delete'
+          ? [makeBug(3), makeBug(1)]
+          : [makeBug(3), makeBug(2, { status: 'resolved' }), makeBug(1)]
+      view.rerender(tree('/app/ws'))
+      expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
+
+      mocks.bugs = [makeBug(3), makeBug(2), makeBug(1)]
+      view.rerender(tree('/app/ws'))
+      expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
+      fireEvent.click(screen.getByRole('button', { name: 'Assignee: Unassigned' }))
+      await act(async () => {
+        fireEvent.click(screen.getByRole('option', { name: 'Assign to me' }))
+      })
+      expect(mocks.assignBug).toHaveBeenCalledExactlyOnceWith('b3', 'u1')
+      expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
+    },
+  )
+
   it('places a skip link before the header and focuses the main landmark', () => {
     const { container } = show('/app/ws')
     const link = screen.getByRole('link', { name: 'Skip to content' })

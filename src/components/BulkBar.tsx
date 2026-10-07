@@ -59,6 +59,7 @@ export function BulkBar({
     } finally {
       inFlight.current = false
       setBusy(false)
+      onClear()
     }
   }
 
