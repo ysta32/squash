@@ -10,6 +10,7 @@ import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, randomId } from '../lib/utils'
 import { AttachmentChip } from './AttachmentChip'
+import { AnnotateDialog } from './AnnotateDialog'
 import { SeverityPicker } from './SeverityPicker'
 import { Button, Kbd } from './ui'
 
@@ -65,6 +66,7 @@ export function CaptureBar({
     setSeverityState(s)
   }
   const [chips, setChips] = useState<Chip[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
   const innerRef = useRef<HTMLTextAreaElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -241,6 +243,7 @@ export function CaptureBar({
   }
 
   const canSubmit = value.trim().length > 0
+  const editingChip = chips.find((chip) => chip.id === editingId)
 
   return (
     <div
@@ -286,9 +289,29 @@ export function CaptureBar({
               name={c.file.name || 'image'}
               previewUrl={c.previewUrl}
               onRemove={() => removeChip(c.id)}
+              onEdit={() => setEditingId(c.id)}
             />
           ))}
         </div>
+      )}
+
+      {editingChip && (
+        <AnnotateDialog
+          key={editingChip.id}
+          file={editingChip.file}
+          onClose={() => setEditingId(null)}
+          onSave={(file) => {
+            const current = chipsRef.current.find((chip) => chip.id === editingChip.id)
+            if (!current) return
+            const previewUrl = URL.createObjectURL(file)
+            URL.revokeObjectURL(current.previewUrl)
+            setChips((previous) =>
+              previous.map((chip) =>
+                chip.id === current.id ? { ...chip, file, previewUrl } : chip,
+              ),
+            )
+          }}
+        />
       )}
 
       <div className="mt-1 flex items-center gap-1">

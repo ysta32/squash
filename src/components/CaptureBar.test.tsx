@@ -211,4 +211,93 @@ describe('CaptureBar', () => {
     expect(screen.queryByLabelText('Start dictation')).toBeNull()
     expect(screen.getByTitle('Voice needs Chrome, Edge, or Safari')).toBeTruthy()
   })
+
+  it('edits a staged image in place and submits the marked-up file', async () => {
+    let loaded: HTMLImageElement | undefined
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          loaded = document.createElement('img')
+          Object.defineProperties(loaded, {
+            naturalWidth: { value: 100 },
+            naturalHeight: { value: 100 },
+          })
+          return loaded
+        }
+      },
+    )
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      strokeRect: vi.fn(),
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    )
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
+      callback(new Blob(['marked'], { type: 'image/png' })),
+    )
+    try {
+      vi.mocked(URL.createObjectURL)
+        .mockReturnValueOnce('blob:first')
+        .mockReturnValueOnce('blob:second')
+        .mockReturnValueOnce('blob:editor')
+        .mockReturnValueOnce('blob:marked')
+      const { box, onSubmit } = setup()
+      const first = new File(['first'], 'first.png', { type: 'image/png' })
+      const second = new File(['second'], 'second.png', { type: 'image/png' })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first, second] } })
+      fireEvent.change(box, { target: { value: 'Annotated screenshot' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Mark up first.png' }))
+      expect(screen.getByRole('dialog', { name: 'Mark up first.png' })).toHaveAttribute(
+        'aria-modal',
+        'true',
+      )
+      if (!loaded) throw new Error('Expected editor image')
+      fireEvent.load(loaded)
+      const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
+      canvas.setPointerCapture = vi.fn()
+      canvas.releasePointerCapture = vi.fn()
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        right: 100,
+        bottom: 100,
+        toJSON: () => ({}),
+      })
+      fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, button: 0 })
+      fireEvent.pointerUp(canvas, { clientX: 80, clientY: 80 })
+      await act(async () => fireEvent.keyDown(window, { key: 'Enter' }))
+      expect(onSubmit).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Mark up first-marked.png' })).toBeInTheDocument()
+      expect(screen.getByAltText('first-marked.png')).toHaveAttribute('src', 'blob:marked')
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:first')
+      expect(screen.getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual([
+        'first-marked.png',
+        'second.png',
+      ])
+      await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+      const files: File[] = onSubmit.mock.calls[0][0].files
+      expect(files[0].name).toBe('first-marked.png')
+      expect(files[0].type).toBe('image/png')
+      expect(files[1]).toBe(second)
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
 })
