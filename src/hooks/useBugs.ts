@@ -48,6 +48,8 @@ export interface BugCounts {
 export interface UseBugsResult {
   bugs: BugWithMeta[]
   loading: boolean
+  error: string | null
+  reload: () => void
   counts: BugCounts
   /** `onOptimistic` runs with the new bug's id as soon as its optimistic row is in the list. */
   fileBug(input: NewBugInput, opts?: { onOptimistic?: (id: string) => void }): Promise<void>
@@ -461,9 +463,14 @@ export function useBugs(
   workspaceId: string,
   opts?: { onRemoteInsert?: (bug: Bug) => void },
 ): UseBugsResult {
+  const [loadError, setLoadError] = useState<{ workspaceId: string; message: string } | null>(null)
+  const reloadRef = useRef<(() => void) | null>(null)
   const [state, setState] = useState<ListState>({ workspaceId, bugs: [], loaded: false })
   /** Workspace whose list is live. Async results for any other workspace are dropped. */
   const liveWsRef = useRef<string | null>(null)
+  const reload = useCallback(() => {
+    if (liveWsRef.current === workspaceId) reloadRef.current?.()
+  }, [workspaceId])
   const selfIdRef = useRef<string | null>(null)
   /** Ids of bugs filed from this hook instance (never announced as remote inserts). */
   const localIdsRef = useRef(new Set<string>())
@@ -548,6 +555,7 @@ export function useBugs(
 
     const load = async () => {
       const seq = ++latest
+      setLoadError(null)
       touched.clear()
       const startSeq = beginFetch(workspaceId)
       try {
@@ -564,6 +572,7 @@ export function useBugs(
         } catch (err) {
           if (!active || seq !== latest) return
           console.error('Failed to load bugs', err)
+          setLoadError({ workspaceId, message: "Couldn't load bugs" })
           mutate(workspaceId, (b) => b, true)
           return
         }
@@ -670,6 +679,11 @@ export function useBugs(
         },
       )
 
+    reloadRef.current = () => {
+      setState((s) => (s.workspaceId === workspaceId ? { ...s, loaded: false } : s))
+      void load()
+    }
+
     // Fetch on every (re)SUBSCRIBED: the first is the initial load, later ones close the gap left
     // by a reconnect. If realtime never connects, fall back to one plain fetch so the list loads.
     let everSubscribed = false
@@ -691,7 +705,10 @@ export function useBugs(
 
     return () => {
       active = false
-      if (liveWsRef.current === workspaceId) liveWsRef.current = null
+      if (liveWsRef.current === workspaceId) {
+        liveWsRef.current = null
+        reloadRef.current = null
+      }
       const mounted = (mountedHooks.get(workspaceId) ?? 1) - 1
       if (mounted > 0) mountedHooks.set(workspaceId, mounted)
       else {
@@ -993,6 +1010,8 @@ export function useBugs(
   return {
     bugs,
     loading,
+    error: loadError?.workspaceId === workspaceId ? loadError.message : null,
+    reload,
     counts,
     fileBug,
     updateBug,

@@ -454,6 +454,28 @@ describe('applySnapshot', () => {
 })
 
 describe('useBugs sync', () => {
+  it('exposes a load error and reloads successfully without reconnecting realtime', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.state.selectResult = { data: null, error: { message: 'Unavailable' } }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.error).toBe("Couldn't load bugs"))
+    expect(result.current.loading).toBe(false)
+    expect(h.state.selectCalls).toBe(1)
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'recovered' }), bug_attachments: [] }],
+      error: null,
+    }
+    act(() => result.current.reload())
+    expect(result.current.error).toBeNull()
+    expect(result.current.loading).toBe(true)
+    await waitFor(() => expect(ids(result.current.bugs)).toEqual(['recovered']))
+    expect(result.current.error).toBeNull()
+    expect(result.current.loading).toBe(false)
+    expect(h.state.selectCalls).toBe(2)
+    expect(h.state.channels).toHaveLength(1)
+    log.mockRestore()
+  })
+
   beforeEach(() => {
     h.state.selectResult = { data: [], error: null }
     h.state.insertResult = { data: null, error: null }

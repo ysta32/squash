@@ -18,6 +18,8 @@ export interface BugListProps {
   bugs: BugWithMeta[]
   workspaceName?: string
   loading: boolean
+  error?: string | null
+  onRetry?: () => void
   /** Status counts for the kind being shown. */
   counts: { open: number; resolved: number; all: number }
   /** Open count per kind, shown on the Bugs / Features switch. */
@@ -55,6 +57,8 @@ export function BugList({
   bugs,
   workspaceName,
   loading,
+  error,
+  onRetry,
   counts,
   openByKind,
   filters,
@@ -245,7 +249,7 @@ export function BugList({
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={loading}>
-        {!loading && workspaceId && (
+        {!loading && !error && workspaceId && (
           <GettingStarted
             workspaceId={workspaceId}
             steps={{
@@ -260,6 +264,17 @@ export function BugList({
         )}
         {loading ? (
           <Skeleton />
+        ) : error ? (
+          <div role="alert" className="space-y-3 p-6 text-center">
+            <p className="text-sm text-fg">{error}</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="focus-ring rounded-md px-3 py-2 text-sm text-accent hover:bg-bg-subtle"
+            >
+              Retry
+            </button>
+          </div>
         ) : visible.length === 0 ? (
           <EmptyState
             kind={filters.kind}

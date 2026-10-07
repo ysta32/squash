@@ -125,6 +125,8 @@ export default function Workspace() {
   const {
     bugs,
     loading,
+    error,
+    reload,
     fileBug,
     updateBug,
     resolveBug,
@@ -668,7 +670,11 @@ export default function Workspace() {
 
   if (ws.notFound) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-fg">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-fg"
+      >
         <p className="text-sm">You&apos;re not a member of this workspace</p>
         <Link to="/app" className="text-sm text-accent underline-offset-4 hover:underline">
           Go to your workspaces
@@ -744,6 +750,13 @@ export default function Workspace() {
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
+      <a
+        href="#main"
+        onClick={() => document.getElementById('main')?.focus()}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-bg focus:px-4 focus:py-2 focus:text-accent focus:outline focus:outline-2 focus:outline-accent"
+      >
+        Skip to content
+      </a>
       <Header
         workspace={workspace}
         workspaces={workspaces}
@@ -754,7 +767,7 @@ export default function Workspace() {
         onShowShortcuts={() => setShortcutsOpen(true)}
         role={ws.role}
       />
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
         <h1 className="sr-only">{workspace.name}</h1>
         <section
           aria-label="File a bug"
@@ -784,6 +797,8 @@ export default function Workspace() {
               bugs={bugs}
               workspaceName={ws.workspace?.name}
               loading={loading}
+              error={error}
+              onRetry={reload}
               counts={counts}
               openByKind={openByKind}
               filters={filters}

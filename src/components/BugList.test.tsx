@@ -102,6 +102,19 @@ function pickFilter(label: string, option: string) {
 }
 
 describe('BugList', () => {
+  it('shows a load error and retries instead of showing an empty list', () => {
+    const onRetry = vi.fn()
+    render(
+      <MemoryRouter>
+        <Harness bugs={[]} error="Couldn't load bugs" onRetry={onRetry} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load bugs")
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('listbox', { name: 'Bugs' })).not.toBeInTheDocument()
+  })
+
   beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
