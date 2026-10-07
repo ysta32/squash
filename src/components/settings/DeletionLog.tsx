@@ -17,6 +17,10 @@ export function DeletionLog({
       title="Recently deleted"
       description="The last 50 bugs and feature requests deleted from this workspace."
     >
+      <p className="mb-3 text-sm text-muted">
+        Deleted bugs are removed for good. Their number, title and who deleted them stay listed here
+        for every member of this workspace.
+      </p>
       {loading ? (
         <p role="status" className="text-sm text-muted">
           Loading deleted items…
@@ -38,7 +42,9 @@ export function DeletionLog({
               <span className="min-w-0 flex-1 text-sm font-medium break-words">{item.title}</span>
               <span className="text-xs text-muted">
                 {(item.deleted_by && names.get(item.deleted_by)) || 'Deleted user'} ·{' '}
-                {relativeTime(item.deleted_at)}
+                <time dateTime={item.deleted_at} title={new Date(item.deleted_at).toLocaleString()}>
+                  {relativeTime(item.deleted_at)}
+                </time>
               </span>
             </li>
           ))}

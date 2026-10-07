@@ -30,6 +30,16 @@ describe('DeletionLog', () => {
     expect(screen.getByText('Title 7')).toBeInTheDocument()
     expect(screen.getByText(/^Ada ·/)).toBeInTheDocument()
     expect(screen.getAllByText(/^Deleted user ·/)).toHaveLength(2)
+    expect(screen.getByText(/Deleted bugs are removed for good/)).toBeInTheDocument()
+    const time = document.querySelector('time')
+    expect(time).toHaveAttribute(
+      'datetime',
+      (state.value.deletions[0] as { deleted_at: string }).deleted_at,
+    )
+    expect(time).toHaveAttribute(
+      'title',
+      new Date((state.value.deletions[0] as { deleted_at: string }).deleted_at).toLocaleString(),
+    )
   })
 
   it('shows an empty state', () => {
