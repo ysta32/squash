@@ -41,6 +41,9 @@ export function BugRow({
   const num = bug.optimistic ? '…' : String(bug.number)
   const filer = members.find((member) => member.user_id === bug.filed_by)?.profile ?? null
   const resolver = members.find((member) => member.user_id === bug.resolved_by)?.profile ?? null
+  const assignee = bug.assignee_id
+    ? (members.find((member) => member.user_id === bug.assignee_id)?.profile ?? null)
+    : null
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -103,6 +106,14 @@ export function BugRow({
       >
         <Avatar profile={filer} size="xs" />
       </span>
+      {bug.assignee_id && (
+        <span
+          className="inline-flex shrink-0"
+          title={`Assigned to ${assignee?.display_name ?? 'a former member'}`}
+        >
+          <Avatar profile={assignee} size="xs" className="ring-1 ring-accent" />
+        </span>
+      )}
       <time
         dateTime={bug.created_at}
         title={new Date(bug.created_at).toLocaleString()}

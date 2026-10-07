@@ -21,6 +21,13 @@ const VERB: Record<EventType, string> = {
   assigned: 'changed the assignee',
 }
 
+/** The 'assigned' event's note is the new assignee id, or null when unassigned. */
+function assignedVerb(ev: BugEvent, names: Map<string, string>): string {
+  if (!ev.note) return 'removed the assignee'
+  if (ev.note === ev.actor_id) return 'assigned themselves'
+  return `assigned ${names.get(ev.note) ?? 'a former member'}`
+}
+
 export interface ActivityTimelineProps {
   events: BugEvent[]
   members: WorkspaceMember[]
@@ -46,7 +53,7 @@ export function ActivityTimeline({ events, members }: ActivityTimelineProps) {
                 <span className="font-medium text-fg">
                   {names.get(ev.actor_id) ?? 'Deleted user'}
                 </span>{' '}
-                {VERB[ev.type]} ·{' '}
+                {ev.type === 'assigned' ? assignedVerb(ev, names) : VERB[ev.type]} ·{' '}
                 <time dateTime={ev.created_at} title={new Date(ev.created_at).toLocaleString()}>
                   {relativeTime(ev.created_at)}
                 </time>

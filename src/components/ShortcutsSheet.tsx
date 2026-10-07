@@ -19,6 +19,8 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['K'], label: 'Previous bug' },
   { keys: ['R'], label: 'Resolve selected bug' },
   { keys: ['O'], label: 'Reopen selected bug' },
+  { keys: ['A'], label: 'Change assignee of selected bug' },
+  { keys: ['I'], label: 'Assign selected bug to me (again to unassign)' },
   { keys: ['X'], label: 'Pick selected bug for a Claude export' },
   { keys: ['C'], label: 'Send picked (or selected) bugs to Claude' },
   { keys: ['Esc'], label: 'Close / back to list' },

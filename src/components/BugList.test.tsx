@@ -317,6 +317,33 @@ describe('BugList', () => {
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
   })
 
+  it('filters by assignee: Me first, then Unassigned, and clears with the other filters', () => {
+    const assigned = [
+      bug({ assignee_id: 'grace' }),
+      bug({ id: 'mine', number: 2, title: 'Slow search', assignee_id: 'ada' }),
+      bug({ id: 'nobody', number: 3, title: 'Typo on pricing' }),
+    ]
+    render(<Harness bugs={assigned} selfId="ada" />)
+    const select = screen.getByRole('combobox', { name: 'Assignee' })
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Anyone', 'Unassigned', 'Me', 'Grace'])
+    const rows = () =>
+      within(screen.getByRole('listbox', { name: /bugs/i }))
+        .getAllByRole('option')
+        .map((o) => o.getAttribute('aria-label'))
+
+    fireEvent.change(select, { target: { value: 'ada' } })
+    expect(rows()).toEqual(['#2 Slow search'])
+    fireEvent.change(select, { target: { value: 'none' } })
+    expect(rows()).toEqual(['#3 Typo on pricing'])
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(select).toHaveValue('')
+    expect(rows()).toHaveLength(3)
+  })
+
   it('binds the external search ref and clears and blurs on Escape', () => {
     const searchRef = createRef<HTMLInputElement>()
     const onFilters = vi.fn()

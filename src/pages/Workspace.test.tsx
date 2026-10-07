@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   setLastWorkspace: vi.fn(),
   getBugByNumber: vi.fn(),
   fileBug: vi.fn(),
+  assignBug: vi.fn(),
+  assigner: null as string | null,
   submit: null as ((input: unknown) => Promise<void>) | null,
 }))
 
@@ -59,7 +61,18 @@ const members: WorkspaceMember[] = [
   },
 ]
 
-vi.mock('../lib/supabase', () => ({ supabase: {} }))
+vi.mock('../lib/supabase', () => {
+  // Only the "who assigned this" lookup reaches the client directly.
+  const query = {
+    select: () => query,
+    eq: () => query,
+    order: () => query,
+    limit: () => query,
+    maybeSingle: () =>
+      Promise.resolve({ data: mocks.assigner ? { actor_id: mocks.assigner } : null, error: null }),
+  }
+  return { supabase: { from: () => query } }
+})
 vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: { id: 'u1' }, profile: members[0].profile, loading: false }),
 }))
@@ -90,6 +103,7 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
         updateBug: vi.fn(),
         resolveBug: vi.fn(),
         reopenBug: vi.fn(),
+        assignBug: mocks.assignBug,
         retryUploads: vi.fn(),
         getBugByNumber: mocks.getBugByNumber,
       }
@@ -203,6 +217,8 @@ beforeEach(() => {
   mocks.bugs = [makeBug(3), makeBug(2), makeBug(1)]
   mocks.notFound = false
   mocks.onRemoteInsert = null
+  mocks.assigner = null
+  mocks.assignBug.mockResolvedValue(undefined)
   mocks.getBugByNumber.mockResolvedValue(null)
 })
 afterEach(() => {
@@ -407,6 +423,54 @@ describe('Workspace', () => {
     act(() => vi.advanceTimersByTime(4000))
     expect(screen.queryByText('Grace filed #4')).toBeNull()
     expect(row).not.toHaveClass('bg-accent/10')
+  })
+
+  it('I assigns the selected bug to me, and unassigns it when it is already mine', () => {
+    const view = show('/app/ws/bug/2')
+    press('i')
+    expect(mocks.assignBug).toHaveBeenLastCalledWith('b2', 'u1')
+
+    mocks.bugs = mocks.bugs.map((b) => (b.id === 'b2' ? { ...b, assignee_id: 'u1' } : b))
+    view.rerender(tree('/app/ws/bug/2'))
+    press('i')
+    expect(mocks.assignBug).toHaveBeenLastCalledWith('b2', null)
+  })
+
+  it('I does nothing without a selected bug', () => {
+    show('/app/ws')
+    press('i')
+    expect(mocks.assignBug).not.toHaveBeenCalled()
+  })
+
+  it('announces a bug a teammate assigned to me, but not one I assigned myself', async () => {
+    const view = show('/app/ws')
+    mocks.assigner = 'u2'
+    mocks.bugs = mocks.bugs.map((b) => (b.id === 'b3' ? { ...b, assignee_id: 'u1' } : b))
+    view.rerender(tree('/app/ws'))
+    expect(await screen.findByText('Grace assigned you #3')).toBeInTheDocument()
+
+    mocks.assigner = 'u1'
+    mocks.bugs = mocks.bugs.map((b) => (b.id === 'b1' ? { ...b, assignee_id: 'u1' } : b))
+    view.rerender(tree('/app/ws'))
+    await act(async () => {})
+    expect(screen.queryByText(/assigned you #1/)).not.toBeInTheDocument()
+  })
+
+  it('palette offers Assign to me for the selected bug and filters to bugs assigned to me', () => {
+    mocks.bugs = [makeBug(3, { assignee_id: 'u2' }), makeBug(2, { assignee_id: 'u1' }), makeBug(1)]
+    show('/app/ws/bug/3')
+    const palette = () => {
+      fireEvent.keyDown(window, { key: 'k', [isMac ? 'metaKey' : 'ctrlKey']: true })
+      return within(screen.getByRole('dialog', { name: 'Command palette' }))
+    }
+    expect(palette().getByRole('option', { name: /Unassign/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: /Assign to me/ }))
+    expect(mocks.assignBug).toHaveBeenLastCalledWith('b3', 'u1')
+
+    fireEvent.click(palette().getByRole('option', { name: /Show bugs assigned to me/ }))
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '#2 Bug number 2' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '#1 Bug number 1' })).not.toBeInTheDocument()
   })
 
   it('a deep link to a feature request switches the list to Features', () => {
