@@ -1,4 +1,7 @@
 import type { ReactNode } from 'react'
+import { MENTION_CHAR } from './mention'
+
+const MENTION_RE = new RegExp(`^@${MENTION_CHAR.source}+`, 'u')
 import { cn } from './utils'
 
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
@@ -145,7 +148,7 @@ function inline(text: string, inLink: boolean): ReactNode[] {
     }
 
     if (ch === '@' && !isWord(prev)) {
-      const m = /^@[\p{L}\p{N}_.-]+/u.exec(rest)
+      const m = MENTION_RE.exec(rest)
       if (m) {
         const name = m[0].replace(/[.-]+$/, '')
         if (name.length > 1) {

@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { Markdown, renderInline } from './markdown'
+import { mentionHandle } from './mention'
 
 function html(source: string) {
   const { container } = render(<Markdown source={source} />)
@@ -127,5 +128,14 @@ describe('Markdown', () => {
 describe('renderInline', () => {
   it('returns plain strings for plain text', () => {
     expect(renderInline('hello')).toEqual(['hello'])
+  })
+})
+
+describe('mentionHandle', () => {
+  it('round-trips: the inserted handle is highlighted in full', () => {
+    const handle = mentionHandle("Mary O'Connor 🎉")
+    expect(handle).toBe('MaryOConnor')
+    const c = html(`hi @${handle} there`)
+    expect(c.querySelector('span.text-accent')?.textContent).toBe(`@${handle}`)
   })
 })

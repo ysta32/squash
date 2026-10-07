@@ -1,10 +1,11 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { WorkspaceMember } from '../lib/types'
+import { MENTION_CHAR, mentionHandle } from '../lib/mention'
 import { Avatar } from './Avatar'
 
 const MAX_RESULTS = 6
-const TOKEN_RE = /(^|\s)@([\p{L}\p{N}_.-]*)$/u
+const TOKEN_RE = new RegExp(`(^|\\s)@(${MENTION_CHAR.source}*)$`, 'u')
 
 export interface MentionInputProps {
   value: string
@@ -14,11 +15,6 @@ export interface MentionInputProps {
   placeholder?: string
   disabled?: boolean
   ariaLabel: string
-}
-
-/** Display name with whitespace removed so the markdown mention regex matches it. */
-function mentionHandle(name: string): string {
-  return name.replace(/\s+/g, '')
 }
 
 /** Textarea with @mention autocomplete. Enter submits only while the list is closed. */

@@ -48,12 +48,13 @@ const DEFAULT_FILTERS: BugFilters = {
 const HIGHLIGHT_MS = 3000
 
 /** Who made the latest assignment change on a bug, from its activity log. */
-async function lastAssigner(bugId: string): Promise<string | null> {
+async function lastAssigner(bugId: string, userId: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('bug_events')
     .select('actor_id')
     .eq('bug_id', bugId)
     .eq('type', 'assigned')
+    .eq('note', userId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -175,7 +176,7 @@ export default function Workspace() {
 
   const announceAssignment = useEffectEvent((bug: Bug) => {
     const live = announceLive.current
-    void lastAssigner(bug.id)
+    void lastAssigner(bug.id, selfId)
       .catch((err: unknown) => {
         console.error('Failed to load who assigned the bug', err)
         return null
