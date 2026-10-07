@@ -115,7 +115,7 @@ function HelperCheck() {
                 : status.version < HARDENED_VERSION
                   ? [
                       'bg-warning',
-                      `Helper v${status.version} is running. Run the command below to update it: the new helper only downloads screenshots from Squash’s storage and limits how many Claude runs start at once.`,
+                      `Helper v${status.version} is running. Run the command below to update it: the new helper pins screenshot downloads to this app’s Supabase storage host and limits how many Claude runs start at once.`,
                     ]
                   : [
                       'bg-success',
@@ -327,10 +327,10 @@ export default function ClaudeGuide() {
                 “Screenshot URLs must be https links to Supabase storage”
               </summary>
               <div className="mt-2 text-muted">
-                The helper only downloads screenshots from{' '}
-                <code className={code}>*.supabase.co</code> and{' '}
-                <code className={code}>*.supabase.in</code>. For self-hosted Supabase or a custom
-                domain, start it with{' '}
+                The installer pins screenshot downloads to this app’s Supabase host. Download paths
+                must start with <code className={code}>/storage/v1/object/</code>. Older installs
+                without a pinned host allow any Supabase project; run the install command again to
+                update them. To allow another storage host, start the helper with{' '}
                 <code className={cn(code, 'break-all')}>
                   SQUASH_DOWNLOAD_HOSTS=files.example.com
                 </code>{' '}

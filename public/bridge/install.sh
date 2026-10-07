@@ -38,13 +38,33 @@ if ! command -v claude >/dev/null 2>&1; then
   echo "Note: Claude Code is not on your PATH yet. Install it: https://claude.com/claude-code"
 fi
 
+CONFIG="$(curl -fsSL "$ORIGIN/bridge/config.json")"
+SUPABASE_HOST="$(printf '%s' "$CONFIG" | "$NODE" --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  try {
+    const config = JSON.parse(readFileSync(0, "utf8"));
+    if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error();
+    if (Object.hasOwn(config, "supabaseHost")) {
+      const host = config.supabaseHost;
+      if (typeof host !== "string" || host.length > 253 ||
+          !host.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))) {
+        throw new Error();
+      }
+      process.stdout.write(host.toLowerCase());
+    }
+  } catch {
+    console.error("Invalid bridge config: expected a Supabase hostname.");
+    process.exit(1);
+  }
+')"
+
 mkdir -p "$DIR"
 curl -fsSL "$ORIGIN/bridge/claude-bridge.mjs" -o "$SCRIPT"
 ORIGINS="$ORIGIN,http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"
 
 if [ "$(uname)" != "Darwin" ]; then
   echo "Starting the Squash bridge. Leave this terminal open."
-  SQUASH_ORIGINS="$ORIGINS" exec "$NODE" "$SCRIPT"
+  SQUASH_ORIGINS="$ORIGINS" SQUASH_SUPABASE_HOST="$SUPABASE_HOST" exec "$NODE" "$SCRIPT"
 fi
 
 mkdir -p "$HOME/Library/LaunchAgents"
@@ -59,6 +79,7 @@ cat >"$PLIST" <<EOF
   <key>EnvironmentVariables</key>
   <dict>
     <key>SQUASH_ORIGINS</key><string>$ORIGINS</string>
+    <key>SQUASH_SUPABASE_HOST</key><string>$SUPABASE_HOST</string>
     <key>PATH</key><string>$(dirname "$NODE"):/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
   </dict>
   <key>RunAtLoad</key><true/>

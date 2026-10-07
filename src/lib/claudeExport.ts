@@ -238,8 +238,8 @@ export const BRIDGE_VERSION = 2
 export const PROGRESS_VERSION = 3
 /** Oldest bridge that runs Claude unattended and resolves bugs from its results. */
 export const AUTO_RESOLVE_VERSION = 4
-/** Oldest bridge that limits downloads to Supabase storage and caps concurrent Claude runs. */
-export const HARDENED_VERSION = 5
+/** Oldest bridge that pins downloads to the app's Supabase storage host. */
+export const HARDENED_VERSION = 6
 
 export interface BridgeStatus {
   version: number

@@ -1,10 +1,10 @@
 // @vitest-environment node
 /// <reference types="node" />
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClaudeRun } from './claudeExport'
 
 interface BridgeEvent {
@@ -180,7 +180,53 @@ describe('summarizeRun', () => {
   })
 })
 
+beforeEach(() => vi.stubEnv('SQUASH_SUPABASE_HOST', ''))
+afterEach(() => vi.unstubAllEnvs())
+
 describe('isAllowedDownload', () => {
+  it('pins the exact project host and storage path, including explicit extra hosts', () => {
+    vi.stubEnv('SQUASH_SUPABASE_HOST', 'abc.supabase.co')
+    expect(bridge.isAllowedDownload('https://ABC.supabase.co./storage/v1/object/sign/x.png')).toBe(
+      true,
+    )
+    expect(
+      bridge.isAllowedDownload('https://files.example.com/storage/v1/object/public/x.png', [
+        'files.example.com',
+      ]),
+    ).toBe(true)
+    for (const url of [
+      'https://other.supabase.co/storage/v1/object/sign/x.png',
+      'https://abc.supabase.in/storage/v1/object/sign/x.png',
+      'https://sub.abc.supabase.co/storage/v1/object/sign/x.png',
+      'https://abc.supabase.co.evil.com/storage/v1/object/sign/x.png',
+      'https://abc.supabase.co/x.png',
+      'https://abc.supabase.co/storage/v1/object',
+      'https://abc.supabase.co/storage/v1/object/../../admin',
+      'https://files.example.com/x.png',
+      'http://abc.supabase.co/storage/v1/object/sign/x.png',
+      'https://user:pw@abc.supabase.co/storage/v1/object/sign/x.png',
+    ])
+      expect(bridge.isAllowedDownload(url, ['files.example.com']), url).toBe(false)
+  })
+
+  it('warns once when an old install uses the suffix fallback', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `
+      const { isAllowedDownload } = await import('./public/bridge/claude-bridge.mjs');
+      if (!isAllowedDownload('https://a.supabase.co/x.png')) process.exit(1);
+      if (!isAllowedDownload('https://b.supabase.in/x.png')) process.exit(1);
+    `,
+      ],
+      { encoding: 'utf8', env: { ...process.env, SQUASH_SUPABASE_HOST: '' } },
+    )
+    expect(result.status).toBe(0)
+    expect(result.stderr.match(/SQUASH_SUPABASE_HOST is unset/g)).toHaveLength(1)
+  })
+
   it('allows https Supabase storage hosts', () => {
     expect(bridge.isAllowedDownload('https://abc.supabase.co/storage/v1/object/sign/x.png')).toBe(
       true,
@@ -215,8 +261,70 @@ describe('isAllowedDownload', () => {
   })
 })
 
+describe('installer config validation', () => {
+  const installer = readFileSync('public/bridge/install.sh', 'utf8')
+  const start = installer.indexOf('SUPABASE_HOST=')
+  const end = installer.indexOf('\nmkdir -p', start)
+  const script = installer.slice(start, end) + '\nprintf "%s" "$SUPABASE_HOST"'
+
+  it.each([
+    ['{}', ''],
+    ['{"supabaseHost":"Project.Supabase.co"}', 'project.supabase.co'],
+    ['{"supabaseHost":"storage.example.com"}', 'storage.example.com'],
+  ])('accepts valid config %s', (config, expected) => {
+    const result = spawnSync('sh', ['-eu', '-c', script], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE: process.execPath, CONFIG: config },
+    })
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout).toBe(expected)
+  })
+
+  it.each([
+    'not json',
+    'null',
+    '[]',
+    ...[
+      '',
+      'https://a.supabase.co',
+      'a.supabase.co/path',
+      'a.supabase.co:443',
+      'a..supabase.co',
+      '-a.supabase.co',
+      'a-.supabase.co',
+      'a\nb.supabase.co',
+      '$(exit 42)',
+      '`exit 42`',
+      'a</string>',
+      'a'.repeat(64) + '.com',
+      null,
+      42,
+    ].map((supabaseHost) => JSON.stringify({ supabaseHost })),
+  ])('rejects invalid config %s', (config) => {
+    const result = spawnSync('sh', ['-eu', '-c', script], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE: process.execPath, CONFIG: config },
+    })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Invalid bridge config')
+    expect(result.stdout).toBe('')
+  })
+})
+
 describe('fetchAllowed', () => {
   const redirect = (location: string) => new Response(null, { status: 302, headers: { location } })
+
+  it.each([
+    'https://other.supabase.co/storage/v1/object/sign/x.png',
+    'https://a.supabase.co/rest/v1/data',
+  ])('rejects a pinned redirect to %s before fetching it', async (location) => {
+    vi.stubEnv('SQUASH_SUPABASE_HOST', 'a.supabase.co')
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(redirect(location))
+    await expect(
+      bridge.fetchAllowed('https://a.supabase.co/storage/v1/object/sign/x.png', [], fetchImpl),
+    ).rejects.toMatchObject({ status: 400 })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
 
   it('follows redirects that stay on allowed hosts', async () => {
     const calls: string[] = []

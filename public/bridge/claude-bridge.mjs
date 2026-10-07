@@ -17,7 +17,7 @@
 // Env: SQUASH_BRIDGE_PORT (4317), SQUASH_ORIGINS (comma-separated allowed app origins),
 // SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
 // with e.g. "--permission-mode acceptEdits"), SQUASH_DOWNLOAD_HOSTS (comma-separated extra hosts
-// screenshots may be downloaded from; *.supabase.co and *.supabase.in are always allowed).
+// screenshots may be downloaded from), SQUASH_SUPABASE_HOST (this app's Supabase project host).
 import { execFile, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import {
@@ -38,7 +38,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 5
+const VERSION = 6
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -366,7 +366,9 @@ export function parseHosts(list) {
     .filter(Boolean)
 }
 
-/** Whether screenshots may be downloaded from this URL: https on Supabase or an allowed host. */
+let warnedUnpinnedDownloads = false
+
+/** Whether screenshots may be downloaded from this URL. */
 export function isAllowedDownload(url, extraHosts = []) {
   let parsed
   try {
@@ -376,6 +378,19 @@ export function isAllowedDownload(url, extraHosts = []) {
   }
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return false
   const host = parsed.hostname.toLowerCase().replace(/\.$/, '')
+  const pinnedHost = process.env.SQUASH_SUPABASE_HOST
+  if (pinnedHost) {
+    return (
+      (host === pinnedHost.toLowerCase().replace(/\.$/, '') || extraHosts.includes(host)) &&
+      parsed.pathname.startsWith('/storage/v1/object/')
+    )
+  }
+  if (!warnedUnpinnedDownloads) {
+    warnedUnpinnedDownloads = true
+    console.warn(
+      'SQUASH_SUPABASE_HOST is unset; downloads allow any Supabase project. Reinstall the helper from your app to pin its storage host.',
+    )
+  }
   return host.endsWith('.supabase.co') || host.endsWith('.supabase.in') || extraHosts.includes(host)
 }
 
