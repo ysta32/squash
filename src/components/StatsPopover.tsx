@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { supabase } from '../lib/supabase'
 import type { WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
@@ -20,6 +21,8 @@ export interface StatsPopoverProps {
 }
 
 export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef)
   const [result, setResult] = useState<{
     workspaceId: string
     rows: StatRow[] | null
@@ -52,6 +55,7 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-label="Team stats"
       className="t absolute right-0 top-full z-30 mt-1 w-[26rem] rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated starting:-translate-y-1 starting:opacity-0 max-sm:fixed max-sm:inset-x-3 max-sm:top-13 max-sm:w-auto"

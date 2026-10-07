@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { cn } from '../lib/utils'
 
 export interface LightboxProps {
@@ -13,6 +14,8 @@ export interface LightboxProps {
 
 export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
   const count = urls.length
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef, count > 0)
   const safeIndex = count === 0 ? 0 : Math.min(Math.max(index, 0), count - 1)
 
   // Latest callbacks/values for the window listener without re-subscribing every render.
@@ -48,6 +51,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Screenshot viewer"
