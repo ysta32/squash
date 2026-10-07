@@ -248,14 +248,15 @@ export function CaptureBar({
     try {
       file = await fitUnder(file, MAX_ORIGINAL_BYTES)
     } catch (error) {
-      onToast?.(
-        error instanceof Error
-          ? error.message === 'too-large'
-            ? 'Marked-up image is too large (max 5MB)'
-            : error.message
-          : 'Could not save the marked-up image.',
+      // Thrown back to the editor, which keeps the marks and shows the message.
+      throw new Error(
+        error instanceof Error && error.message === 'too-large'
+          ? 'The marked-up image is too large to upload (max 5MB).'
+          : error instanceof Error
+            ? error.message
+            : 'Could not save the marked-up image.',
+        { cause: error },
       )
-      return
     }
     const current = chipsRef.current.find((chip) => chip.id === editingId)
     if (!current) return

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { CaptureBar } from './CaptureBar'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 
@@ -290,9 +290,17 @@ describe('CaptureBar', () => {
         await act(async () => fireEvent.load(loaded!))
       }
       if (scenario === 'too-large') {
-        expect(onToast).toHaveBeenCalledWith('Marked-up image is too large (max 5MB)')
+        // The editor stays open with the marks and explains why, instead of dropping the work.
+        const dialog = await screen.findByRole('dialog', { name: 'Mark up first.png' })
+        await waitFor(() => expect(dialog).toHaveTextContent('too large'))
+        expect(dialog).toHaveTextContent('The marked-up image is too large to upload (max 5MB).')
+        expect(onToast).not.toHaveBeenCalled()
         expect(screen.getByAltText('first.png')).toHaveAttribute('src', 'blob:first')
         expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:first')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+        const discard = screen.queryByRole('button', { name: /^Discard/ })
+        if (discard) fireEvent.click(discard)
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
         await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
         expect(onSubmit.mock.calls[0][0].files).toEqual([first, second])
         return

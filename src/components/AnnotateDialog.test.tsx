@@ -217,6 +217,19 @@ describe('AnnotateDialog', () => {
     expect(screen.getByRole('button', { name: 'Use marked-up image' })).toBeEnabled()
   })
 
+  it('stays open with the marks when the caller rejects the saved image', async () => {
+    const { canvas, onSave, onClose } = setup()
+    drag(canvas)
+    onSave.mockRejectedValue(new Error('The marked-up image is too large to upload (max 5MB).'))
+    await act(async () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+    )
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('alert')).toHaveTextContent('too large to upload')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Use marked-up image' })).toBeEnabled()
+  })
+
   it('keeps focus inside while saving and ignores an export completed after unmount', async () => {
     const { canvas, onSave, onClose } = setup()
     let complete: BlobCallback | undefined

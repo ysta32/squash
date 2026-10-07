@@ -5,7 +5,8 @@ import { Button, Kbd } from './ui'
 
 interface AnnotateDialogProps {
   file: File
-  onSave: (file: File) => void
+  /** May reject with a user-facing Error; the dialog then stays open with the marks intact. */
+  onSave: (file: File) => void | Promise<void>
   onClose: () => void
 }
 
@@ -99,7 +100,8 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
       })
       if (!mountedRef.current) return
       const base = file.name.replace(/\.[^.]+$/, '') || 'image'
-      onSave(new File([blob], `${base}-marked.png`, { type: 'image/png' }))
+      await onSave(new File([blob], `${base}-marked.png`, { type: 'image/png' }))
+      if (!mountedRef.current) return
       onClose()
     } catch (err) {
       if (mountedRef.current)
