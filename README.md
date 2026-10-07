@@ -280,9 +280,12 @@ npm run test          # Vitest
 npm run test:db       # every migration (twice) plus the RLS suite, on in-process Postgres
 npm run build         # production build
 npm run screenshots   # regenerate the README images (needs Google Chrome and ffmpeg)
+npm run a11y          # axe-core audit of the demo app in light and dark (needs Google Chrome)
 ```
 
 `npm run screenshots` runs the real app against an in-memory demo workspace (no Supabase needed) and captures every image in [`docs/screenshots/`](docs/screenshots). Pass a name to reshoot only matching images, for example `npm run screenshots -- claude`. The demo data lives in [`scripts/screenshots/seed.ts`](scripts/screenshots/seed.ts).
+
+`npm run a11y` runs axe-core against the same demo app in both themes and fails on serious or critical violations. Like the screenshot harness, it needs Google Chrome. The full report is written to `node_modules/.cache/squash-a11y/report.json`.
 
 ```
 src/

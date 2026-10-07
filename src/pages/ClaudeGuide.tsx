@@ -11,7 +11,7 @@ import {
   type BridgeStatus,
 } from '../lib/claudeExport'
 import { cn } from '../lib/utils'
-import { Badge, Button, Input, Kbd, Logo } from '../components/ui'
+import { Badge, Button, Input, Kbd, Logo, proseLinkClass } from '../components/ui'
 
 const POLL_MS = 2000
 
@@ -213,7 +213,7 @@ export default function ClaudeGuide() {
                   href="https://nodejs.org"
                   target="_blank"
                   rel="noreferrer"
-                  className="focus-ring rounded-md text-accent hover:underline"
+                  className={proseLinkClass}
                 >
                   Node.js 18 or newer
                 </a>{' '}
@@ -222,7 +222,7 @@ export default function ClaudeGuide() {
                   href="https://claude.com/claude-code"
                   target="_blank"
                   rel="noreferrer"
-                  className="focus-ring rounded-md text-accent hover:underline"
+                  className={proseLinkClass}
                 >
                   Claude Code
                 </a>

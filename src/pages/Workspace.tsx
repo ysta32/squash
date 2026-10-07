@@ -748,73 +748,77 @@ export default function Workspace() {
         onInvite={() => setInviteOpen(true)}
         role={ws.role}
       />
-      <div
-        className={cn(
-          'sticky top-0 z-10 border-b border-border bg-bg p-3',
-          showDetail && 'hidden md:block',
-        )}
-      >
-        <div className="mx-auto max-w-5xl">
-          <CaptureBar
-            workspaceId={workspaceId}
-            onSubmit={fileAndSelect}
-            kind={filters.kind}
-            onToast={toast}
-            focusRef={captureRef}
-          />
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_3fr]">
-        <div
+      <main className="flex min-h-0 flex-1 flex-col">
+        <h1 className="sr-only">{workspace.name}</h1>
+        <section
+          aria-label="File a bug"
           className={cn(
-            'h-full min-h-0 md:block md:border-r md:border-border',
-            showDetail && 'hidden',
+            'sticky top-0 z-10 border-b border-border bg-bg p-3',
+            showDetail && 'hidden md:block',
           )}
         >
-          <BugList
-            bugs={bugs}
-            workspaceName={ws.workspace?.name}
-            loading={loading}
-            counts={counts}
-            openByKind={openByKind}
-            filters={filters}
-            onFilters={(next) => {
-              // Switching between Bugs and Features starts fresh: no picks, nothing open.
-              if (next.kind !== filters.kind) {
-                clearPicked()
-                setPendingId(null)
-                if (hasNumberParam) {
-                  navigate({
-                    pathname: basePath,
-                    search: writeFilters(new URLSearchParams(search), next).toString(),
-                  })
-                  return
+          <div className="mx-auto max-w-5xl">
+            <CaptureBar
+              workspaceId={workspaceId}
+              onSubmit={fileAndSelect}
+              kind={filters.kind}
+              onToast={toast}
+              focusRef={captureRef}
+            />
+          </div>
+        </section>
+        <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_3fr]">
+          <div
+            className={cn(
+              'h-full min-h-0 md:block md:border-r md:border-border',
+              showDetail && 'hidden',
+            )}
+          >
+            <BugList
+              bugs={bugs}
+              workspaceName={ws.workspace?.name}
+              loading={loading}
+              counts={counts}
+              openByKind={openByKind}
+              filters={filters}
+              onFilters={(next) => {
+                // Switching between Bugs and Features starts fresh: no picks, nothing open.
+                if (next.kind !== filters.kind) {
+                  clearPicked()
+                  setPendingId(null)
+                  if (hasNumberParam) {
+                    navigate({
+                      pathname: basePath,
+                      search: writeFilters(new URLSearchParams(search), next).toString(),
+                    })
+                    return
+                  }
                 }
-              }
-              setFilters(next)
-            }}
-            selectedId={selected?.id ?? null}
-            onSelect={select}
-            members={ws.members}
-            selfId={selfId}
-            viewersOf={presence.viewers}
-            highlightIds={highlightIds}
-            searchRef={searchRef}
-            pickedIds={pickedIds}
-            onTogglePick={togglePick}
-            onClearPicked={clearPicked}
-            onSend={claude.sendBugs}
-            onCopy={claude.copyBugs}
-            onClaudeSetup={claude.openSetup}
-            onInvite={() => setInviteOpen(true)}
-            claudeConnected={claude.connected}
-            claudeRuns={claude.runs}
-          />
+                setFilters(next)
+              }}
+              selectedId={selected?.id ?? null}
+              onSelect={select}
+              members={ws.members}
+              selfId={selfId}
+              viewersOf={presence.viewers}
+              highlightIds={highlightIds}
+              searchRef={searchRef}
+              pickedIds={pickedIds}
+              onTogglePick={togglePick}
+              onClearPicked={clearPicked}
+              onSend={claude.sendBugs}
+              onCopy={claude.copyBugs}
+              onInvite={() => setInviteOpen(true)}
+              onClaudeSetup={claude.openSetup}
+              claudeConnected={claude.connected}
+              claudeRuns={claude.runs}
+            />
+          </div>
+          <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>
+            {detail}
+          </div>
         </div>
-        <div className={cn('h-full min-h-0 overflow-y-auto md:block', !showDetail && 'hidden')}>
-          {detail}
-        </div>
-      </div>
+      </main>
       <InviteDialog
         workspace={workspace}
         open={inviteOpen}

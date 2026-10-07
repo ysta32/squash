@@ -247,12 +247,12 @@ describe('Settings', () => {
     fireEvent.change(screen.getByLabelText('Display name'), {
       target: { value: '  Ada Lovelace  ' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Avatar color #14b8a6' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Avatar color #0f766e' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await screen.findByText('Profile saved.')
     expect(mocks.update).toHaveBeenCalledWith({
       display_name: 'Ada Lovelace',
-      avatar_color: '#14b8a6',
+      avatar_color: '#0f766e',
     })
     expect(mocks.eq).toHaveBeenCalledWith('id', 'self')
     expect(mocks.refreshProfile).toHaveBeenCalledOnce()

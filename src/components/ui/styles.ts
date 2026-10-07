@@ -32,3 +32,7 @@ export function buttonClass(
 
 export const inputClass =
   't focus-ring h-9 w-full rounded-md border border-border bg-bg px-3 text-sm text-fg placeholder:text-muted hover:border-fg/20 disabled:opacity-50'
+
+/** Inline link inside running text: a persistent underline so it is not told apart by color alone. */
+export const proseLinkClass =
+  'focus-ring rounded-md text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent'
