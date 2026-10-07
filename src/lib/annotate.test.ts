@@ -26,10 +26,10 @@ describe('annotation geometry', () => {
   })
 
   it('scales the stroke width and clamps it to 3..12', () => {
-    expect(strokeWidthFor(0)).toBe(3)
-    expect(strokeWidthFor(100)).toBe(3)
-    expect(strokeWidthFor(1500)).toBe(6)
-    expect(strokeWidthFor(10000)).toBe(12)
+    expect(strokeWidthFor(0)).toBe(4)
+    expect(strokeWidthFor(100)).toBe(4)
+    expect(strokeWidthFor(1500)).toBe(12)
+    expect(strokeWidthFor(10000)).toBe(16)
   })
 })
 

@@ -17,7 +17,7 @@ export function arrowHead(from: Point, to: Point, size: number): [Point, Point] 
 }
 
 export function strokeWidthFor(imageWidth: number): number {
-  return Math.min(12, Math.max(3, imageWidth * 0.004))
+  return Math.min(16, Math.max(4, imageWidth * 0.008))
 }
 
 export function drawShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]): void {
