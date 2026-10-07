@@ -2,11 +2,13 @@ import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { isMac } from '../lib/utils'
+import { Kbd } from './ui'
 
 const ALT = isMac ? '⌥' : 'Alt'
 const MOD = isMac ? '⌘' : 'Ctrl'
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
+  { keys: [MOD, 'K'], label: 'Command palette' },
   { keys: ['N'], label: 'New bug (focus capture bar)' },
   { keys: [MOD, 'V'], label: 'Paste screenshot and start typing' },
   { keys: ['Enter'], label: 'File bug' },
@@ -68,7 +70,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
-        className="w-full max-w-sm rounded-xl border border-border bg-bg-elevated p-5 text-fg shadow-xl"
+        className="w-full max-w-sm rounded-xl border border-border bg-bg-elevated p-5 text-fg shadow-elevated"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="shortcuts-title" className="text-sm font-semibold">
@@ -79,7 +81,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="rounded p-1 text-muted hover:text-fg"
+            className="focus-ring rounded-md p-1 text-muted hover:text-fg"
           >
             <X size={16} aria-hidden="true" />
           </button>
@@ -90,12 +92,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
               <dt className="text-muted">{label}</dt>
               <dd className="flex shrink-0 gap-1">
                 {keys.map((k) => (
-                  <kbd
-                    key={k}
-                    className="rounded border border-border bg-bg-subtle px-1.5 py-0.5 font-mono text-xs"
-                  >
-                    {k}
-                  </kbd>
+                  <Kbd key={k}>{k}</Kbd>
                 ))}
               </dd>
             </div>

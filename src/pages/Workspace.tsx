@@ -19,15 +19,17 @@ import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, useBugs, type BugFilters } from '../hooks/useBugs'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
+import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
-import { useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
+import { isOverlayOpen, useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
 import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
+import { THEME_KEY, useTheme, type Theme } from '../lib/theme'
 import type { Bug, BugKind } from '../lib/types'
-import { cn } from '../lib/utils'
+import { cn, isMac } from '../lib/utils'
 
 const DEFAULT_FILTERS: BugFilters = {
   kind: 'bug',
@@ -38,6 +40,7 @@ const DEFAULT_FILTERS: BugFilters = {
   query: '',
 }
 const HIGHLIGHT_MS = 3000
+const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' }
 
 function isDesktop(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches
@@ -124,6 +127,8 @@ export default function Workspace() {
   const [reopenRequest, setReopenRequest] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
   const captureRef = useRef<HTMLTextAreaElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -285,7 +290,24 @@ export default function Workspace() {
 
   useOverlayOpen(inviteOpen)
   const shortcutsEnabled =
-    !inviteOpen && !shortcutsOpen && !claude.setupOpen && ws.workspace !== null
+    !inviteOpen && !shortcutsOpen && !paletteOpen && !claude.setupOpen && ws.workspace !== null
+
+  const workspaceReady = ws.workspace !== null
+  useEffect(() => {
+    if (!workspaceReady) return
+    function onKey(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.shiftKey) return
+      if (e.key.toLowerCase() !== 'k' || !(isMac ? e.metaKey : e.ctrlKey)) return
+      e.preventDefault()
+      setPaletteOpen((open) => {
+        if (open) return false
+        return !isOverlayOpen()
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [workspaceReady])
+
   const opts = { enabled: shortcutsEnabled }
   useShortcut(
     'n',
@@ -372,6 +394,89 @@ export default function Workspace() {
     },
     opts,
   )
+
+  const currentTheme = (): Theme => {
+    try {
+      const stored = localStorage.getItem(THEME_KEY)
+      if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
+    } catch {
+      // storage unavailable: fall back to this page's theme state
+    }
+    return theme
+  }
+
+  const commands: Command[] = [
+    {
+      id: 'new',
+      label: filters.kind === 'feature' ? 'New feature request' : 'New bug',
+      group: 'Actions',
+      hint: 'N',
+      keywords: ['file', 'capture', 'report'],
+      run: () => focusInList(captureRef),
+    },
+    {
+      id: 'search',
+      label: 'Search',
+      group: 'Actions',
+      hint: '/',
+      keywords: ['find', 'filter'],
+      run: () => focusInList(searchRef),
+    },
+    ...visible
+      .filter((b) => !b.optimistic && b.number > 0)
+      .map((b): Command => ({
+        id: `bug-${b.id}`,
+        label: `#${b.number} ${b.title}`,
+        group: b.kind === 'feature' ? 'Features' : 'Bugs',
+        keywords: [String(b.number)],
+        run: () => select(b.id),
+      })),
+    ...workspaces
+      .filter((w) => w.id !== workspaceId)
+      .map((w): Command => ({
+        id: `ws-${w.id}`,
+        label: `Switch to ${w.name}`,
+        group: 'Switch workspace',
+        keywords: ['workspace'],
+        run: () => navigate(`/app/${w.id}`),
+      })),
+    {
+      id: 'settings',
+      label: 'Settings',
+      group: 'Workspace',
+      keywords: ['preferences', 'members', 'account'],
+      run: () => navigate(`${basePath}/settings`),
+    },
+    {
+      id: 'invite',
+      label: 'Invite teammates',
+      group: 'Workspace',
+      keywords: ['members', 'share', 'link'],
+      run: () => setInviteOpen(true),
+    },
+    {
+      id: 'claude-guide',
+      label: 'Claude Code guide',
+      group: 'Help',
+      keywords: ['claude', 'setup', 'docs'],
+      run: () => navigate('/claude'),
+    },
+    {
+      id: 'theme',
+      label: 'Toggle theme',
+      group: 'Preferences',
+      keywords: ['dark', 'light', 'system', 'appearance'],
+      run: () => setTheme(NEXT_THEME[currentTheme()]),
+    },
+    {
+      id: 'shortcuts',
+      label: 'Keyboard shortcuts',
+      group: 'Help',
+      hint: '?',
+      keywords: ['keys', 'help'],
+      run: () => setShortcutsOpen(true),
+    },
+  ]
 
   if (ws.notFound) {
     return (
@@ -518,6 +623,11 @@ export default function Workspace() {
         onRegenerate={ws.regenerateInviteCode}
       />
       <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
       <ClaudeSetupDialog
         open={claude.setupOpen}
         onClose={claude.closeSetup}
