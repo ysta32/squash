@@ -34,6 +34,19 @@ function open() {
 }
 
 describe('ProfileMenu', () => {
+  it('opens the shortcuts sheet and closes itself', () => {
+    const onShowShortcuts = vi.fn()
+    render(
+      <MemoryRouter>
+        <ProfileMenu workspaceId="ws" onShowShortcuts={onShowShortcuts} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Keyboard shortcuts/ }))
+    expect(onShowShortcuts).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
   it('shows name and email with Settings and Sign out items', () => {
     const menu = open()
     expect(menu).toHaveTextContent('Ada Lovelace')

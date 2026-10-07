@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Settings } from 'lucide-react'
+import { Keyboard, LogOut, Settings } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useDismiss } from '../hooks/useDismiss'
 import { cn } from '../lib/utils'
@@ -11,7 +11,12 @@ const ITEM =
   't focus-ring flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-fg hover:bg-bg-subtle focus-visible:bg-bg-subtle'
 const ITEM_ICON = 'h-3.5 w-3.5 shrink-0 text-muted'
 
-export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
+export interface ProfileMenuProps {
+  workspaceId: string
+  onShowShortcuts?: () => void
+}
+
+export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) {
   const { profile, user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,10 +76,21 @@ export function ProfileMenu({ workspaceId }: { workspaceId: string }) {
             <Settings aria-hidden="true" className={ITEM_ICON} />
             Settings
           </Link>
-          <div role="none" className="flex h-8 items-center gap-2 px-2 text-xs text-muted">
-            <span className="flex-1">Keyboard shortcuts</span>
-            <Kbd>?</Kbd>
-          </div>
+          {onShowShortcuts && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                onShowShortcuts()
+              }}
+              className={ITEM}
+            >
+              <Keyboard aria-hidden="true" className={ITEM_ICON} />
+              <span className="flex-1">Keyboard shortcuts</span>
+              <Kbd>?</Kbd>
+            </button>
+          )}
           <div role="separator" className="-mx-1 my-1 border-t border-border" />
           <button
             type="button"

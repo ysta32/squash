@@ -751,6 +751,7 @@ export default function Workspace() {
         online={presence.online}
         selfId={selfId}
         onInvite={() => setInviteOpen(true)}
+        onShowShortcuts={() => setShortcutsOpen(true)}
         role={ws.role}
       />
       <main className="flex min-h-0 flex-1 flex-col">

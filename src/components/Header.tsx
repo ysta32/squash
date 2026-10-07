@@ -18,6 +18,7 @@ export interface HeaderProps {
   online: PresenceUser[]
   selfId: string
   onInvite: () => void
+  onShowShortcuts?: () => void
   role: MemberRole | null
 }
 
@@ -51,6 +52,7 @@ export function Header({
   online,
   selfId,
   onInvite,
+  onShowShortcuts,
   role,
 }: HeaderProps) {
   const [statsOpen, setStatsOpen] = useState(false)
@@ -100,7 +102,7 @@ export function Header({
           {statsOpen && <StatsPopover workspaceId={workspace.id} members={members} />}
         </div>
         <ThemeToggle />
-        <ProfileMenu workspaceId={workspace.id} />
+        <ProfileMenu workspaceId={workspace.id} onShowShortcuts={onShowShortcuts} />
       </div>
     </header>
   )
