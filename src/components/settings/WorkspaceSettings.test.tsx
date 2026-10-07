@@ -52,6 +52,7 @@ vi.mock('../../hooks/useWorkspaces', () => ({
     deleteWorkspace: mocks.deleteWorkspace,
   }),
 }))
+vi.mock('./DeletionLog', () => ({ DeletionLog: () => null }))
 vi.mock('../../lib/storageCleanup', () => ({
   removeScreenshots: (...args: unknown[]) => mocks.removeScreenshots(...args),
 }))
