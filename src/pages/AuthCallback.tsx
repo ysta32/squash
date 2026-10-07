@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { safeNext } from '../lib/authRedirect'
+import { AuthLayout } from '../components/AuthLayout'
+import { ButtonLink } from '../components/ui'
 
 const SESSION_TIMEOUT_MS = 8000
 
@@ -33,26 +35,30 @@ export default function AuthCallback() {
   const error =
     errorDescription ?? (timedOut && !session ? 'Sign-in link is invalid or has expired.' : null)
 
+  if (error) {
+    return (
+      <AuthLayout title="Could not sign you in" description={<span role="alert">{error}</span>}>
+        <ButtonLink
+          to={`/signin?next=${encodeURIComponent(next)}`}
+          variant="primary"
+          size="lg"
+          className="w-full"
+        >
+          Back to sign in
+        </ButtonLink>
+      </AuthLayout>
+    )
+  }
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg px-4 text-fg">
-      <div className="w-full max-w-sm text-center">
-        {error ? (
-          <>
-            <h1 className="text-base font-medium">Couldn’t sign you in</h1>
-            <p role="alert" className="mt-2 text-sm text-muted">
-              {error}
-            </p>
-            <Link
-              to={`/signin?next=${encodeURIComponent(next)}`}
-              className="mt-6 inline-block text-sm text-fg underline underline-offset-4"
-            >
-              Back to sign in
-            </Link>
-          </>
-        ) : (
-          <p className="text-sm text-muted">Signing you in…</p>
-        )}
+    <AuthLayout title="Signing you in">
+      <div role="status" className="flex items-center gap-3 text-sm text-muted">
+        <span
+          aria-hidden="true"
+          className="size-4 animate-spin rounded-full border-2 border-border border-t-accent"
+        />
+        This only takes a moment.
       </div>
-    </main>
+    </AuthLayout>
   )
 }

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { AuthLayout } from '../components/AuthLayout'
+import { ButtonLink } from '../components/ui'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { friendlyError, setLastWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
@@ -54,37 +56,48 @@ export default function Join() {
 
   const next = encodeURIComponent(`/join/${code}`)
 
+  if (loading || authLoading) {
+    return (
+      <AuthLayout title="Checking invite">
+        <p role="status" className="text-sm text-muted">
+          Loading invite details…
+        </p>
+      </AuthLayout>
+    )
+  }
+
+  if (error || !preview) {
+    return (
+      <AuthLayout
+        title="Invite not available"
+        description={<span role="alert">{error ?? INVALID}</span>}
+      >
+        <p className="mb-4 text-sm text-muted">
+          Ask the person who invited you for a new link, or create a workspace of your own.
+        </p>
+        <ButtonLink to="/" variant="secondary" size="lg" className="w-full">
+          Back to home
+        </ButtonLink>
+      </AuthLayout>
+    )
+  }
+
+  const members = `${preview.member_count} ${preview.member_count === 1 ? 'member' : 'members'}`
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--bg)] p-4 text-[var(--fg)]">
-      <div className="w-full max-w-sm rounded-xl border border-[var(--border)] p-6 text-center">
-        {loading || authLoading ? (
-          <p className="text-sm text-[var(--muted)]">Loading…</p>
-        ) : error ? (
-          <>
-            <p className="text-sm">{error}</p>
-            <Link to="/" className="mt-4 inline-block text-sm text-[var(--accent)]">
-              Back to home
-            </Link>
-          </>
-        ) : preview ? (
-          <>
-            <h1 className="text-lg font-semibold">
-              {preview.name} · {preview.member_count}{' '}
-              {preview.member_count === 1 ? 'member' : 'members'}
-            </h1>
-            {user ? (
-              <p className="mt-3 text-sm text-[var(--muted)]">Joining…</p>
-            ) : (
-              <Link
-                to={`/signin?next=${next}`}
-                className="mt-4 inline-block rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white"
-              >
-                Sign in to join
-              </Link>
-            )}
-          </>
-        ) : null}
-      </div>
-    </main>
+    <AuthLayout
+      title={`Join ${preview.name}`}
+      description={`You have been invited to this workspace. It has ${members}.`}
+    >
+      {user ? (
+        <p role="status" className="text-sm text-muted">
+          Joining workspace…
+        </p>
+      ) : (
+        <ButtonLink to={`/signin?next=${next}`} variant="primary" size="lg" className="w-full">
+          Sign in to join
+        </ButtonLink>
+      )}
+    </AuthLayout>
   )
 }

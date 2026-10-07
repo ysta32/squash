@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { safeNext } from '../lib/authRedirect'
+import { AuthLayout } from '../components/AuthLayout'
+import { Button, Field, Input } from '../components/ui'
 
 function GoogleIcon() {
   return (
@@ -77,80 +79,78 @@ export default function SignIn() {
     }
   }
 
+  if (sentTo) {
+    return (
+      <AuthLayout
+        title="Check your email"
+        description={
+          <>
+            We sent a sign-in link to <strong className="font-semibold text-fg">{sentTo}</strong>.
+            Open it on this device to finish signing in. It can take a minute to arrive, so check
+            your spam folder if you do not see it.
+          </>
+        }
+      >
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setSentTo(null)
+            setEmail('')
+          }}
+          className="w-full"
+        >
+          Use a different email
+        </Button>
+      </AuthLayout>
+    )
+  }
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg px-4 text-fg">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Squash</h1>
-          <p className="mt-1 text-sm text-muted">Sign in to continue</p>
+    <AuthLayout title="Sign in to Squash" description="Use Google or get a one-time link by email.">
+      <div className="space-y-4">
+        <Button
+          size="lg"
+          onClick={() => void handleGoogle()}
+          disabled={googleBusy}
+          className="w-full"
+        >
+          <GoogleIcon />
+          {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+        </Button>
+
+        <div className="flex items-center gap-3 text-xs text-muted">
+          <div className="h-px flex-1 bg-border" />
+          or
+          <div className="h-px flex-1 bg-border" />
         </div>
 
-        {sentTo ? (
-          <div className="rounded-lg border border-border p-6 text-center">
-            <h2 className="text-base font-medium">Check your email</h2>
-            <p className="mt-2 text-sm text-muted">
-              We sent a sign-in link to <span className="text-fg">{sentTo}</span>.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSentTo(null)
-                setEmail('')
-              }}
-              className="mt-4 text-sm text-muted underline-offset-4 hover:text-fg hover:underline"
-            >
-              Use a different email
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <button
-              type="button"
-              onClick={() => void handleGoogle()}
-              disabled={googleBusy}
-              className="flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-border bg-bg text-sm font-medium transition-colors hover:border-fg/30 disabled:opacity-60"
-            >
-              <GoogleIcon />
-              {googleBusy ? 'Redirecting…' : 'Continue with Google'}
-            </button>
-
-            <div className="flex items-center gap-3 text-xs text-muted">
-              <div className="h-px flex-1 bg-border" />
-              or
-              <div className="h-px flex-1 bg-border" />
-            </div>
-
-            <form onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
-              <label htmlFor="signin-email" className="sr-only">
-                Email
-              </label>
-              <input
-                id="signin-email"
+        <form onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
+          <Field label="Email" error={error}>
+            {({ id, describedBy }) => (
+              <Input
+                id={id}
                 type="email"
                 required
                 autoComplete="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm outline-none placeholder:text-muted focus:border-accent"
+                aria-describedby={describedBy}
+                aria-invalid={error ? true : undefined}
               />
-              <button
-                type="submit"
-                disabled={sending || !email.trim()}
-                className="h-10 w-full rounded-lg bg-accent text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-              >
-                {sending ? 'Sending…' : 'Send magic link'}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {error && (
-          <p role="alert" className="mt-4 text-center text-sm text-red-500">
-            {error}
-          </p>
-        )}
+            )}
+          </Field>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={sending || !email.trim()}
+            className="w-full"
+          >
+            {sending ? 'Sending…' : 'Email me a link'}
+          </Button>
+        </form>
       </div>
-    </main>
+    </AuthLayout>
   )
 }
