@@ -43,21 +43,21 @@ Most bug trackers are built for teams with a project manager. Squash is built fo
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h4>📸&nbsp; Capture beats triage</h4>
+      <h4>Capture beats triage</h4>
       One input, always on screen. Paste an image, type or talk, press Enter. No forms, no required fields, no ticket templates.
     </td>
     <td width="50%" valign="top">
-      <h4>⚡&nbsp; Live by default</h4>
+      <h4>Live by default</h4>
       New bugs, edits, comments and resolutions reach everyone in about a second. You can see which bug a teammate has open.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h4>🤖&nbsp; Claude Code fixes them</h4>
+      <h4>Claude Code fixes them</h4>
       Send one bug or the whole list to Claude Code with screenshots and comments attached. Follow along live; fixed bugs resolve themselves.
     </td>
     <td width="50%" valign="top">
-      <h4>🔒&nbsp; Accountable and secure</h4>
+      <h4>Accountable and secure</h4>
       Every action is written to an append-only log by database triggers. Row Level Security on every table and private screenshot storage.
     </td>
   </tr>
@@ -286,11 +286,3 @@ Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) fi
 ## License
 
 [MIT](LICENSE) © Squash contributors
-
-<br />
-
-<div align="center">
-  <sub>Built for small teams who'd rather ship than triage.</sub>
-  <br /><br />
-  <a href="https://squash-livid.vercel.app"><b>Try Squash free →</b></a>
-</div>
