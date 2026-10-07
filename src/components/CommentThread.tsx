@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useBug } from '../hooks/useBug'
 import type { WorkspaceMember } from '../lib/types'
+import { Markdown } from '../lib/markdown'
 import { relativeTime } from '../lib/utils'
 import { ActivityTimeline } from './ActivityTimeline'
 import { Avatar } from './Avatar'
@@ -76,7 +77,7 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
                         {relativeTime(c.created_at)}
                       </time>
                     </p>
-                    <p className="mt-0.5 text-sm break-words whitespace-pre-wrap">{c.body}</p>
+                    <Markdown source={c.body} className="mt-0.5" />
                   </div>
                 </li>
               )

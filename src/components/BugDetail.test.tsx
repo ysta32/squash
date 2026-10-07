@@ -154,7 +154,7 @@ describe('BugDetail', () => {
 
   it('shows a placeholder when no bug is selected', () => {
     setup(null)
-    expect(screen.getByText('Select a bug')).toBeTruthy()
+    expect(screen.getByText('Select a bug to see its details')).toBeTruthy()
   })
 
   it('renders title, number and filed attribution', () => {
@@ -433,7 +433,8 @@ describe('BugDetail', () => {
     ]
     addComment.mockResolvedValue()
     setup(makeBug())
-    expect(screen.getByText(/line1/).textContent).toBe('line1\nline2')
+    const body = screen.getByText(/line1/)
+    expect(body.innerHTML).toBe('line1<br>line2')
     const items = screen.getAllByRole('listitem').map((li) => li.textContent ?? '')
     const filedIdx = items.findIndex((t) => t.includes('Deleted user filed'))
     const resolvedIdx = items.findIndex((t) => t.includes('Grace Hopper resolved'))

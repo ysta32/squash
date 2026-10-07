@@ -8,6 +8,7 @@ import {
   Copy,
   Lightbulb,
   Mic,
+  MousePointerClick,
   RotateCcw,
   RotateCw,
   Trash2,
@@ -24,12 +25,14 @@ import type {
   WorkspaceMember,
 } from '../lib/types'
 import { KIND_LABEL, SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
+import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { Avatar } from './Avatar'
 import { ClaudeProgress } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
 import { Lightbox } from './Lightbox'
 import { ResolvePopover } from './ResolvePopover'
+import { Kbd } from './ui'
 
 export type BugPatch = Partial<Pick<Bug, 'title' | 'description' | 'severity' | 'kind'>>
 
@@ -90,8 +93,12 @@ export function BugDetail(props: BugDetailProps) {
 
   if (!bug) {
     return (
-      <div className="hidden h-full items-center justify-center text-sm text-muted md:flex">
-        Select a bug
+      <div className="hidden h-full flex-col items-center justify-center gap-2 px-6 text-center md:flex">
+        <MousePointerClick className="h-6 w-6 text-muted" aria-hidden="true" />
+        <p className="text-sm text-muted">Select a bug to see its details</p>
+        <p className="text-xs text-muted">
+          <Kbd>J</Kbd>/<Kbd>K</Kbd> to move, <Kbd>N</Kbd> to file one
+        </p>
       </div>
     )
   }
@@ -138,6 +145,7 @@ function BugBody({
 }: BugBodyProps) {
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
   const [descDraft, setDescDraft] = useState<string | null>(null)
+  const [descFocused, setDescFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [signed, setSigned] = useState<Record<string, string>>({})
   const [lightboxKey, setLightboxKey] = useState<string | null>(null)
@@ -153,6 +161,7 @@ function BugBody({
   const isOpen = bug.status === 'open'
 
   const description = descDraft ?? bug.description
+  const showRendered = !descFocused && description.trim() !== ''
   useLayoutEffect(() => {
     const el = descRef.current
     if (!el) return
@@ -442,7 +451,11 @@ function BugBody({
           aria-label="Description"
           placeholder="Add a description…"
           onChange={(e) => setDescDraft(e.target.value)}
-          onBlur={saveDescription}
+          onFocus={() => setDescFocused(true)}
+          onBlur={() => {
+            setDescFocused(false)
+            saveDescription()
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.preventDefault()
@@ -452,8 +465,21 @@ function BugBody({
               cancelRef.current = false
             }
           }}
-          className="w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted"
+          className={cn(
+            'w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted',
+            showRendered && 'sr-only',
+          )}
         />
+        {showRendered && (
+          <div
+            onClick={(e) => {
+              if (editable && !(e.target as HTMLElement).closest('a')) descRef.current?.focus()
+            }}
+            className={editable ? 'cursor-text' : undefined}
+          >
+            <Markdown source={description} />
+          </div>
+        )}
         {bug.transcript !== null && (
           <div className="mt-3 rounded-md bg-bg-subtle px-3 py-2 text-xs text-muted">
             <p className="mb-1 flex items-center gap-1 font-medium">
