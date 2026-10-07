@@ -731,6 +731,7 @@ do $$ declare cid uuid; begin
   insert into public.comments (bug_id, author_id, body)
     values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'secret one') returning id into cid;
   perform set_config('t.cm_r', cid::text, true);
+  perform set_config('t.ev_r', (select id::text from public.bug_events where comment_id = cid), true);
   if not exists (select 1 from public.bug_events where comment_id = cid and type = 'commented' and note = 'secret one') then
     raise exception 'FAIL[79]: commented event not linked to its comment'; end if;
   update public.comments set body = 'public v2' where id = cid;
@@ -749,8 +750,8 @@ delete from public.comments where id = current_setting('t.cm_r')::uuid;
 do $$ begin
   if exists (select 1 from public.bug_events where note in ('secret one', 'public v2')) then
     raise exception 'FAIL[80]: deleted comment text still readable'; end if;
-  if not exists (select 1 from public.bug_events where comment_id = current_setting('t.cm_r')::uuid and note is null) then
-    raise exception 'FAIL[80]: commented event missing or not redacted'; end if;
+  if not exists (select 1 from public.bug_events where id = current_setting('t.ev_r')::uuid and note is null and comment_id is null) then
+    raise exception 'FAIL[80]: commented event missing, not redacted or still linked'; end if;
 end $$;
 -- [81] legacy events (no comment_id) are redacted by author + identical text, on edit and on delete
 :as_b
@@ -784,6 +785,23 @@ do $$ begin
      or has_function_privilege('anon', 'public.comments_redact_events()', 'execute')
      or has_function_privilege('authenticated', 'public.comments_guard()', 'execute') then
     raise exception 'FAIL[82]: comment trigger functions callable by clients'; end if;
+end $$;
+
+:as_a
+-- [83] reusing a deleted comment's id can't rewrite the original author's retained event
+insert into public.comments (id, bug_id, author_id, body)
+  values (current_setting('t.cm_r')::uuid, current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000001', 'reuse v1');
+update public.comments set body = 'reuse v2' where id = current_setting('t.cm_r')::uuid;
+delete from public.comments where id = current_setting('t.cm_r')::uuid;
+do $$ begin
+  if not exists (select 1 from public.bug_events where id = current_setting('t.ev_r')::uuid and note is null) then
+    raise exception 'FAIL[83]: id reuse rewrote another member''s event'; end if;
+end $$;
+:as_pg
+-- [84] bug_events replica identity is DEFAULT, so redacted notes don't persist in old-row images
+do $$ begin
+  if (select relreplident from pg_class where oid = 'public.bug_events'::regclass) <> 'd' then
+    raise exception 'FAIL[84]: bug_events replica identity is not default'; end if;
 end $$;
 
 :as_pg

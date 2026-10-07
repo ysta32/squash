@@ -116,17 +116,22 @@ declare
   v_note text := case when tg_op = 'UPDATE' then new.body end;
 begin
   update public.bug_events e
-  set note = v_note
+  set note = v_note,
+      -- On delete, unlink the event so a later comment reusing this id can't reach it.
+      comment_id = case when tg_op = 'DELETE' then null else e.comment_id end
   where e.type = 'commented'
     and e.bug_id = old.bug_id
-    and e.note is distinct from v_note
-    and (e.comment_id = old.id
+    and (e.note is distinct from v_note or tg_op = 'DELETE')
+    and ((e.comment_id = old.id and e.actor_id = old.author_id)
          or (e.comment_id is null and e.actor_id = old.author_id and e.note = old.body));
   return null;
 end;
 $$;
 
 revoke execute on function public.comments_redact_events() from public, anon, authenticated;
+
+-- Redacted notes must not survive in replication old-row images either.
+alter table public.bug_events replica identity default;
 
 create or replace trigger comments_redact_events
   after update of body or delete on public.comments
