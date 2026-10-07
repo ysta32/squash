@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useBug } from '../hooks/useBug'
 import type { WorkspaceMember } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { relativeTime } from '../lib/utils'
 import { ActivityTimeline } from './ActivityTimeline'
 import { Avatar } from './Avatar'
+import { MentionInput } from './MentionInput'
 
 export interface CommentThreadProps {
   /** null while the bug is still optimistic (not yet persisted). */
@@ -38,13 +38,6 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
       setError(err instanceof Error ? err.message : 'Could not post comment.')
     } finally {
       setSending(false)
-    }
-  }
-
-  function onKeyDown(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault()
-      void send()
     }
   }
 
@@ -84,15 +77,14 @@ export function CommentThread({ bugId, members }: CommentThreadProps) {
             })}
           </ul>
         )}
-        <textarea
+        <MentionInput
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={setDraft}
+          onSubmit={() => void send()}
+          members={members}
           disabled={!bugId}
-          rows={2}
-          aria-label="Comment"
+          ariaLabel="Comment"
           placeholder={bugId ? 'Leave a comment…' : 'Comments open once the bug is saved'}
-          className="w-full resize-none rounded-md border border-border bg-bg-subtle px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent disabled:opacity-60"
         />
         <div className="mt-1 flex items-center justify-between text-xs text-muted">
           <span>Enter to send · Shift+Enter for a new line</span>
