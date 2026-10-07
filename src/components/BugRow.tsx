@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { Bot, CircleCheck, Image as ImageIcon, SquareCheck } from 'lucide-react'
 import type { PresenceUser } from '../hooks/usePresence'
 import type { ClaudeRunState } from '../lib/claudeExport'
@@ -21,7 +21,8 @@ export interface BugRowProps {
   claudeState?: ClaudeRunState
 }
 
-export function BugRow({
+// Keep bug, members, viewers, onSelect, and onTogglePick references stable for memoization.
+export const BugRow = memo(function BugRow({
   bug,
   selected,
   onSelect,
@@ -178,6 +179,6 @@ export function BugRow({
       </span>
     </button>
   )
-}
+})
 
 const MAX_VIEWERS = 3
