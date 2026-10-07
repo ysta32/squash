@@ -127,7 +127,9 @@ const STATES = {
       await dialog
         .locator('img')
         .first()
-        .evaluate((img) => img.decode())
+        .evaluate((img) =>
+          Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 5_000))]),
+        )
     },
   },
   toast: {
@@ -261,6 +263,8 @@ try {
             console.warn(`WARN state:${name} @${width} ${theme} skipped: ${why}`)
           } finally {
             await cleanup?.()
+            // Always restore the shared context, even if a state failed before returning its cleanup.
+            await context.setOffline(false)
             await page.close()
           }
         }
