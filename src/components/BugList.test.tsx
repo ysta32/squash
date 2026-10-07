@@ -431,7 +431,7 @@ describe('BugList', () => {
     const row = screen.getByRole('option', { name: '#1 Broken login' })
     expect(row).toHaveClass('bg-accent/10')
     expect(viewersOf).toHaveBeenCalledWith('open')
-    expect(within(row).getByTitle('Grace is viewing').firstChild).toHaveClass('ring-green-500')
+    expect(within(row).getByTitle('Grace is viewing').firstChild).toHaveClass('ring-success')
     rerender(<Harness />)
     expect(row).not.toHaveClass('bg-accent/10')
     expect(screen.queryByLabelText('Currently viewing')).not.toBeInTheDocument()

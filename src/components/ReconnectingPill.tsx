@@ -14,10 +14,7 @@ export function ReconnectingPill() {
     >
       <span
         aria-hidden="true"
-        className={cn(
-          'h-2 w-2 rounded-full',
-          offline ? 'bg-zinc-400' : 'animate-pulse bg-amber-500',
-        )}
+        className={cn('h-2 w-2 rounded-full', offline ? 'bg-muted/60' : 'animate-pulse bg-warning')}
       />
       {offline ? 'Offline' : 'Reconnecting…'}
     </div>
