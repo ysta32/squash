@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Check, UserMinus, UserPlus } from 'lucide-react'
+import { Check, ChevronDown, UserMinus, UserPlus } from 'lucide-react'
 import { useDismiss } from '../hooks/useDismiss'
 import type { Profile, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
@@ -103,6 +103,11 @@ export function AssigneePicker({
     else listRef.current?.focus()
   }, [open, filterable])
 
+  useEffect(() => {
+    if (!open || activeIndex < 0) return
+    document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' })
+  }, [open, activeIndex, listId])
+
   function pick(option: Option) {
     setOpen(false)
     triggerRef.current?.focus()
@@ -152,6 +157,7 @@ export function AssigneePicker({
       >
         {current ? (
           <>
+            <span className="text-muted">Assigned to</span>
             <span aria-hidden="true" className="inline-flex">
               <Avatar profile={current.profile} size="xs" />
             </span>
@@ -160,9 +166,10 @@ export function AssigneePicker({
         ) : (
           <>
             <UserPlus size={14} aria-hidden="true" className="text-muted" />
-            <span className="text-muted">Unassigned</span>
+            <span className="text-muted">Assign</span>
           </>
         )}
+        <ChevronDown size={12} aria-hidden="true" className="text-muted" />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated">

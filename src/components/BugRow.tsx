@@ -100,18 +100,19 @@ export function BugRow({
           className="h-8 w-8 shrink-0 rounded object-cover"
         />
       )}
-      <span
-        className="inline-flex shrink-0"
-        title={`Filed by ${filer?.display_name ?? 'Unknown user'}`}
-      >
-        <Avatar profile={filer} size="xs" />
-      </span>
-      {bug.assignee_id && (
+      {bug.assignee_id ? (
         <span
           className="inline-flex shrink-0"
           title={`Assigned to ${assignee?.display_name ?? 'a former member'}`}
         >
-          <Avatar profile={assignee} size="xs" className="ring-1 ring-accent" />
+          <Avatar profile={assignee} size="xs" />
+        </span>
+      ) : (
+        <span
+          className="inline-flex shrink-0"
+          title={`Filed by ${filer?.display_name ?? 'Unknown user'}`}
+        >
+          <Avatar profile={filer} size="xs" />
         </span>
       )}
       <time

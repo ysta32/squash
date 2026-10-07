@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   fileBug: vi.fn(),
   assignBug: vi.fn(),
   assigner: null as string | null,
+  /** Overrides the assigner lookup's response while set. */
+  lookup: null as Promise<unknown> | null,
+  notify: vi.fn(),
   submit: null as ((input: unknown) => Promise<void>) | null,
 }))
 
@@ -69,6 +72,7 @@ vi.mock('../lib/supabase', () => {
     order: () => query,
     limit: () => query,
     maybeSingle: () =>
+      mocks.lookup ??
       Promise.resolve({ data: mocks.assigner ? { actor_id: mocks.assigner } : null, error: null }),
   }
   return { supabase: { from: () => query } }
@@ -110,6 +114,15 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
     },
   }
 })
+vi.mock('../hooks/useNotifications', () => ({
+  useNotifications: () => ({
+    supported: false,
+    permission: 'unsupported',
+    enabled: false,
+    setEnabled: vi.fn(),
+    notify: mocks.notify,
+  }),
+}))
 vi.mock('../hooks/useBug', () => ({
   useBug: () => ({ comments: [], events: [], addComment: vi.fn(), loading: false }),
 }))
@@ -218,6 +231,7 @@ beforeEach(() => {
   mocks.notFound = false
   mocks.onRemoteInsert = null
   mocks.assigner = null
+  mocks.lookup = null
   mocks.assignBug.mockResolvedValue(undefined)
   mocks.getBugByNumber.mockResolvedValue(null)
 })
@@ -448,12 +462,57 @@ describe('Workspace', () => {
     mocks.bugs = mocks.bugs.map((b) => (b.id === 'b3' ? { ...b, assignee_id: 'u1' } : b))
     view.rerender(tree('/app/ws'))
     expect(await screen.findByText('Grace assigned you #3')).toBeInTheDocument()
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Grace assigned you #3', tag: 'assigned:b3' }),
+    )
 
     mocks.assigner = 'u1'
     mocks.bugs = mocks.bugs.map((b) => (b.id === 'b1' ? { ...b, assignee_id: 'u1' } : b))
     view.rerender(tree('/app/ws'))
     await act(async () => {})
     expect(screen.queryByText(/assigned you #1/)).not.toBeInTheDocument()
+  })
+
+  it.each(['rollback first', 'failure first'])(
+    'does not announce the rollback of my own failed unassign (%s)',
+    async (order) => {
+      mocks.assigner = 'u2'
+      mocks.bugs = [makeBug(3), makeBug(2, { assignee_id: 'u1' }), makeBug(1)]
+      const view = show('/app/ws/bug/2')
+      let fail = () => {}
+      mocks.assignBug.mockImplementation(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            fail = () => reject(new Error('Network down'))
+          }),
+      )
+      const setAssignee = (assignee_id: string | null) => {
+        mocks.bugs = mocks.bugs.map((b) => (b.id === 'b2' ? { ...b, assignee_id } : b))
+        view.rerender(tree('/app/ws/bug/2'))
+      }
+      press('i')
+      setAssignee(null)
+      if (order === 'rollback first') setAssignee('u1')
+      await act(async () => fail())
+      if (order === 'failure first') setAssignee('u1')
+      await act(async () => {})
+      expect(screen.getByText('Network down')).toBeInTheDocument()
+      expect(screen.queryByText(/assigned you/)).not.toBeInTheDocument()
+    },
+  )
+
+  it('drops a pending assigner lookup when leaving the workspace', async () => {
+    let answer: (value: unknown) => void = () => {}
+    mocks.assigner = 'u2'
+    const view = show('/app/ws')
+    mocks.lookup = new Promise((resolve) => {
+      answer = resolve
+    })
+    mocks.bugs = mocks.bugs.map((b) => (b.id === 'b3' ? { ...b, assignee_id: 'u1' } : b))
+    view.rerender(tree('/app/ws'))
+    view.unmount()
+    await act(async () => answer({ data: { actor_id: 'u2' }, error: null }))
+    expect(mocks.notify).not.toHaveBeenCalled()
   })
 
   it('palette offers Assign to me for the selected bug and filters to bugs assigned to me', () => {

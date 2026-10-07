@@ -84,7 +84,7 @@ export function BugFilters({
           value={filters.assignee ?? ''}
           onChange={(event) => onFilters({ ...filters, assignee: event.target.value || null })}
         >
-          <option value="">Anyone</option>
+          <option value="">Assignee</option>
           <option value="none">Unassigned</option>
           {self && <option value={self.user_id}>Me</option>}
           {members

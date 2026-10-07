@@ -141,31 +141,47 @@ export default function Workspace() {
     getBugByNumber,
   } = useBugs(workspaceId, { onRemoteInsert })
 
-  // Bugs this tab assigned to the signed-in user, so the change is not announced back to them.
-  const selfAssigned = useRef(new Set<string>())
+  // Assignment changes this tab made (in flight, or just rolled back after a failure), so their
+  // optimistic updates and rollbacks are never announced as a teammate's assignment.
+  const localAssigns = useRef(new Map<string, number>())
+  const rolledBack = useRef(new Set<string>())
   const assign = useCallback(
     async (id: string, userId: string | null) => {
-      const bug = bugs.find((b) => b.id === id)
-      const mine = selfId !== '' && userId === selfId && bug?.assignee_id !== selfId
-      if (mine) selfAssigned.current.add(id)
+      const inFlight = localAssigns.current
+      inFlight.set(id, (inFlight.get(id) ?? 0) + 1)
       try {
         await assignBug(id, userId)
       } catch (err) {
-        if (mine) selfAssigned.current.delete(id)
+        rolledBack.current.add(id)
         throw err
+      } finally {
+        const left = (inFlight.get(id) ?? 1) - 1
+        if (left > 0) inFlight.set(id, left)
+        else inFlight.delete(id)
       }
     },
-    [bugs, selfId, assignBug],
+    [assignBug],
   )
 
+  // Replaced per workspace (and on unmount) so pending assigner lookups go quiet.
+  const announceLive = useRef({ current: true })
+  useEffect(() => {
+    const live = { current: true }
+    announceLive.current = live
+    return () => {
+      live.current = false
+    }
+  }, [workspaceId])
+
   const announceAssignment = useEffectEvent((bug: Bug) => {
+    const live = announceLive.current
     void lastAssigner(bug.id)
       .catch((err: unknown) => {
         console.error('Failed to load who assigned the bug', err)
         return null
       })
       .then((actorId) => {
-        if (actorId === selfId) return
+        if (!live.current || actorId === selfId) return
         const name =
           ws.members.find((m) => m.user_id === actorId)?.profile.display_name ?? 'Someone'
         const title = `${name} assigned you #${bug.number}`
@@ -186,12 +202,16 @@ export default function Workspace() {
   useEffect(() => {
     const prev = prevAssignees.current
     prevAssignees.current = new Map(bugs.map((b) => [b.id, b.assignee_id]))
-    if (!prev || selfId === '') return
-    for (const bug of bugs) {
-      if (bug.assignee_id !== selfId || !prev.has(bug.id) || prev.get(bug.id) === selfId) continue
-      if (selfAssigned.current.delete(bug.id) || bug.optimistic) continue
-      announceAssignment(bug)
+    const local = (id: string) => localAssigns.current.has(id) || rolledBack.current.has(id)
+    if (prev && selfId !== '') {
+      for (const bug of bugs) {
+        if (bug.assignee_id !== selfId || !prev.has(bug.id) || prev.get(bug.id) === selfId) continue
+        if (bug.optimistic || local(bug.id)) continue
+        announceAssignment(bug)
+      }
     }
+    // A rollback is seen by at most the next update after the failure.
+    rolledBack.current.clear()
   }, [bugs, selfId])
 
   const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)

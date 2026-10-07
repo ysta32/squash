@@ -329,7 +329,7 @@ describe('BugList', () => {
       within(select)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Anyone', 'Unassigned', 'Me', 'Grace'])
+    ).toEqual(['Assignee', 'Unassigned', 'Me', 'Grace'])
     const rows = () =>
       within(screen.getByRole('listbox', { name: /bugs/i }))
         .getAllByRole('option')

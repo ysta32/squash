@@ -58,16 +58,20 @@ function row(b: BugWithMeta) {
 afterEach(cleanup)
 
 describe('BugRow', () => {
-  it('shows the assignee avatar before the time', () => {
+  it('shows the assignee in the person slot before the time, instead of the filer', () => {
     row(bug({ assignee_id: 'grace' }))
     const assignee = screen.getByTitle('Assigned to Grace')
     expect(assignee).toContainElement(screen.getByLabelText('Grace'))
-    const time = screen.getByRole('option').querySelector('time')
-    expect(assignee.nextElementSibling).toBe(time)
+    expect(assignee.nextElementSibling).toBe(screen.getByRole('option').querySelector('time'))
+    expect(screen.queryByTitle(/Filed by/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Ada')).not.toBeInTheDocument()
   })
 
-  it('shows nothing for an unassigned bug', () => {
+  it('shows the filer when the bug is unassigned', () => {
     row(bug())
     expect(screen.queryByTitle(/Assigned to/)).not.toBeInTheDocument()
+    const filer = screen.getByTitle('Filed by Ada')
+    expect(filer).toContainElement(screen.getByLabelText('Ada'))
+    expect(filer.nextElementSibling).toBe(screen.getByRole('option').querySelector('time'))
   })
 })

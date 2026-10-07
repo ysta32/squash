@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceMember } from '../lib/types'
 import { AssigneePicker } from './AssigneePicker'
 
@@ -30,12 +30,21 @@ const names = () =>
     return copy.textContent
   })
 
-afterEach(cleanup)
+const scrollIntoView = vi.fn()
+
+beforeEach(() => {
+  Element.prototype.scrollIntoView = scrollIntoView
+})
+afterEach(() => {
+  cleanup()
+  scrollIntoView.mockClear()
+})
 
 describe('AssigneePicker', () => {
   it('shows Unassigned and lists Assign to me first, then the other members', () => {
     render(<AssigneePicker members={members} value={null} onChange={vi.fn()} selfId="ada" />)
     const trigger = screen.getByRole('button', { name: 'Assignee: Unassigned' })
+    expect(trigger).toHaveTextContent(/^Assign$/)
     fireEvent.click(trigger)
     expect(names()).toEqual(['Assign to me', 'Grace', 'Linus'])
     const options = within(screen.getByRole('listbox')).getAllByRole('option')
@@ -55,6 +64,10 @@ describe('AssigneePicker', () => {
       'aria-activedescendant',
       within(listbox).getByRole('option', { name: 'Linus' }).id,
     )
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' })
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(
+      within(listbox).getByRole('option', { name: 'Linus' }),
+    )
     fireEvent.keyDown(listbox, { key: 'ArrowDown' }) // wraps to the top
     fireEvent.keyDown(listbox, { key: 'ArrowUp' })
     fireEvent.keyDown(listbox, { key: 'Enter' })
@@ -66,7 +79,9 @@ describe('AssigneePicker', () => {
   it('marks the current assignee and offers Unassign last', () => {
     const onChange = vi.fn()
     render(<AssigneePicker members={members} value="grace" onChange={onChange} selfId="ada" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Assignee: Grace' }))
+    const trigger = screen.getByRole('button', { name: 'Assignee: Grace' })
+    expect(trigger).toHaveTextContent(/^Assigned to.*Grace$/)
+    fireEvent.click(trigger)
     expect(screen.getByRole('option', { name: 'Grace' })).toHaveAttribute('aria-selected', 'true')
     const listbox = screen.getByRole('listbox')
     fireEvent.keyDown(listbox, { key: 'End' })
