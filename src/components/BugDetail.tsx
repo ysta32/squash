@@ -182,14 +182,23 @@ function BugBody({
     const el = titleRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
     let width = el.clientWidth
+    let frame = 0
+    // Resizing inside the observer callback would trigger a ResizeObserver loop error, so the
+    // height is recomputed on the next frame instead.
     const observer = new ResizeObserver(() => {
       if (el.clientWidth === width) return
       width = el.clientWidth
-      el.style.height = 'auto'
-      el.style.height = `${el.scrollHeight}px`
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        el.style.height = 'auto'
+        el.style.height = `${el.scrollHeight}px`
+      })
     })
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
   }, [])
 
   useLayoutEffect(() => {
@@ -277,302 +286,329 @@ function BugBody({
   const lightboxIndex = lightboxKey ? viewable.findIndex((g) => g.key === lightboxKey) : -1
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
-      <div className="flex items-center gap-2 px-6 pt-4 sm:gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back"
-          className="-ml-2 rounded-md p-1.5 text-muted hover:bg-bg-subtle hover:text-fg md:hidden"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <span className="font-mono text-xs text-muted">#{bug.optimistic ? '…' : bug.number}</span>
-        <button
-          type="button"
-          disabled={!editable}
-          onClick={() => run(() => onUpdate(bug.id, { kind: otherKind }))}
-          aria-label={`${KIND_LABEL[bug.kind].one}: move to ${KIND_LABEL[otherKind].many}`}
-          title={`Move to ${KIND_LABEL[otherKind].many}`}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-bg-subtle hover:text-fg disabled:cursor-default disabled:hover:bg-transparent"
-        >
-          <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          {KIND_LABEL[bug.kind].one}
-        </button>
-        <div role="group" aria-label="Severity" className="flex items-center gap-1">
-          {SEVERITIES.map((s) => {
-            const active = s === bug.severity
-            return (
-              <button
-                key={s}
-                type="button"
-                disabled={!editable}
-                aria-label={`Severity: ${SEVERITY_LABEL[s]}`}
-                aria-pressed={active}
-                title={SEVERITY_LABEL[s]}
-                onClick={() => setSeverity(s)}
-                className="rounded p-1 hover:bg-bg-subtle disabled:cursor-default"
-              >
-                <span
-                  className={cn(
-                    'block h-2 w-2 rounded-full',
-                    SEVERITY_COLOR[s],
-                    !active && 'opacity-25',
-                  )}
-                />
-              </button>
-            )
-          })}
-        </div>
-        {(onSend || onCopy) && (
-          <div className="ml-auto flex items-center">
-            {onSend && (
-              <button
-                type="button"
-                disabled={!editable}
-                onClick={() => onSend(bug)}
-                aria-label="Send to Claude"
-                title="Open Claude Code on this bug (C)"
-                className={cn(
-                  'inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm whitespace-nowrap text-fg hover:bg-bg-subtle disabled:opacity-50',
-                  onCopy ? 'rounded-l-md' : 'rounded-md',
-                )}
-              >
-                <Bot className="h-4 w-4" />
-                <span className="hidden sm:inline">Send to Claude</span>
-              </button>
-            )}
-            {onCopy && (
-              <button
-                type="button"
-                disabled={!editable}
-                onClick={() => onCopy(bug)}
-                aria-label="Copy for Claude"
-                title="Copy a prompt to paste into Claude Code"
-                className={cn(
-                  'inline-flex items-center border border-border px-2.5 py-2 text-sm text-fg hover:bg-bg-subtle disabled:opacity-50',
-                  onSend ? '-ml-px rounded-r-md' : 'rounded-md',
-                )}
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            )}
+    <div className="h-full min-w-0 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl min-w-0 px-4 pb-12 sm:px-6">
+        <header className="flex flex-wrap items-center gap-2 pt-4">
+          <div className="flex min-w-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Back"
+              title="Back"
+              className="t focus-ring -ml-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg md:hidden"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <span className="px-1 font-mono text-xs text-muted tabular-nums">
+              #{bug.optimistic ? '…' : bug.number}
+            </span>
+            <button
+              type="button"
+              disabled={!editable}
+              onClick={() => run(() => onUpdate(bug.id, { kind: otherKind }))}
+              aria-label={`${KIND_LABEL[bug.kind].one}: move to ${KIND_LABEL[otherKind].many}`}
+              title={`Move to ${KIND_LABEL[otherKind].many}`}
+              className="t focus-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted hover:bg-bg-subtle hover:text-fg disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted"
+            >
+              <KindIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              {KIND_LABEL[bug.kind].one}
+            </button>
+            <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
+            <div role="group" aria-label="Severity" className="flex items-center">
+              {SEVERITIES.map((s) => {
+                const active = s === bug.severity
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={!editable}
+                    aria-label={`Severity: ${SEVERITY_LABEL[s]}`}
+                    aria-pressed={active}
+                    title={SEVERITY_LABEL[s]}
+                    onClick={() => setSeverity(s)}
+                    className="t focus-ring inline-flex h-7 w-6 items-center justify-center rounded-md hover:bg-bg-subtle disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <span
+                      className={cn(
+                        't block rounded-full',
+                        SEVERITY_COLOR[s],
+                        active ? 'h-2.5 w-2.5' : 'h-2 w-2 opacity-25',
+                      )}
+                    />
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        )}
-        <div className={cn('relative', !onSend && !onCopy && 'ml-auto')}>
-          <button
-            type="button"
-            disabled={!editable}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => onPopover(popover ? null : isOpen ? 'resolve' : 'reopen')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap disabled:opacity-50 sm:px-4',
-              isOpen
-                ? 'bg-accent text-accent-fg hover:opacity-90'
-                : 'border border-border text-fg hover:bg-bg-subtle',
-            )}
-          >
-            {isOpen ? <Check className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
-            {isOpen ? 'Resolve' : 'Reopen'}
-          </button>
-          <ResolvePopover
-            mode={isOpen ? 'resolve' : 'reopen'}
-            open={popover !== null && editable}
-            onClose={() => onPopover(null)}
-            onConfirm={confirmPopover}
-          />
-        </div>
-        {onDelete && (
-          <button
-            type="button"
-            disabled={!editable}
-            onClick={() => setConfirmDelete(true)}
-            aria-label={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
-            title={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
-            className="-mr-2 rounded-md p-2 text-muted hover:bg-bg-subtle hover:text-danger disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      {onDelete && confirmDelete && (
-        <DeleteDialog
-          bug={bug}
-          onCancel={() => setConfirmDelete(false)}
-          onDelete={() => onDelete(bug.id)}
-        />
-      )}
 
-      <section className="px-6 pt-3 pb-4">
-        <textarea
-          ref={titleRef}
-          rows={1}
-          value={titleDraft ?? bug.title}
-          readOnly={!editable}
-          aria-label="Title"
-          onChange={(e) => setTitleDraft(e.target.value)}
-          onBlur={saveTitle}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              e.currentTarget.blur()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              cancelRef.current = true
-              setTitleDraft(null)
-              e.currentTarget.blur()
-              cancelRef.current = false
-            }
-          }}
-          className="block w-full resize-none overflow-hidden bg-transparent text-xl font-semibold tracking-tight outline-none"
-        />
-        <div className="mt-2 space-y-1 text-xs text-muted">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <p className="flex items-center gap-1.5">
-              <Avatar profile={filer} size="xs" />
-              <span>
-                Filed by <span className="text-fg">{filer?.display_name ?? 'Deleted user'}</span> ·{' '}
-                <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
-                  {relativeTime(bug.created_at)}
-                </time>
-              </span>
-            </p>
-            <AssigneePicker
-              members={members}
-              value={bug.assignee_id}
-              selfId={selfId}
-              disabled={!editable || !onAssign}
-              openRequest={assignRequest}
-              onChange={(userId) => {
-                if (onAssign) run(() => onAssign(bug.id, userId))
-              }}
-            />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {(onSend || onCopy) && (
+              <div className="inline-flex h-8 items-stretch rounded-md border border-border bg-bg">
+                {onSend && (
+                  <button
+                    type="button"
+                    disabled={!editable}
+                    onClick={() => onSend(bug)}
+                    aria-label="Send to Claude"
+                    title="Open Claude Code on this bug (C)"
+                    className={cn(
+                      't focus-ring inline-flex w-[30px] items-center justify-center gap-1.5 text-sm font-medium whitespace-nowrap text-fg hover:bg-bg-subtle disabled:pointer-events-none disabled:opacity-50 sm:w-auto sm:px-2.5',
+                      onCopy ? 'rounded-l-[5px]' : 'rounded-[5px]',
+                    )}
+                  >
+                    <Bot className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="hidden sm:inline">Send to Claude</span>
+                  </button>
+                )}
+                {onSend && onCopy && <span aria-hidden="true" className="w-px bg-border" />}
+                {onCopy && (
+                  <button
+                    type="button"
+                    disabled={!editable}
+                    onClick={() => onCopy(bug)}
+                    aria-label="Copy for Claude"
+                    title="Copy a prompt to paste into Claude Code"
+                    className={cn(
+                      't focus-ring inline-flex w-[30px] items-center justify-center text-muted hover:bg-bg-subtle hover:text-fg disabled:pointer-events-none disabled:opacity-50',
+                      onSend ? 'rounded-r-[5px]' : 'rounded-[5px]',
+                    )}
+                  >
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="relative">
+              <button
+                type="button"
+                disabled={!editable}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => onPopover(popover ? null : isOpen ? 'resolve' : 'reopen')}
+                title={isOpen ? 'Resolve (R)' : 'Reopen'}
+                className={buttonClass(isOpen ? 'primary' : 'secondary', 'md', 'h-8 gap-1.5 px-3')}
+              >
+                {isOpen ? (
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                )}
+                {isOpen ? 'Resolve' : 'Reopen'}
+              </button>
+              <ResolvePopover
+                mode={isOpen ? 'resolve' : 'reopen'}
+                open={popover !== null && editable}
+                onClose={() => onPopover(null)}
+                onConfirm={confirmPopover}
+              />
+            </div>
+            {onDelete && (
+              <button
+                type="button"
+                disabled={!editable}
+                onClick={() => setConfirmDelete(true)}
+                aria-label={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
+                title={`Delete ${KIND_LABEL[bug.kind].one.toLowerCase()}`}
+                className="t focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
           </div>
-          {bug.status === 'resolved' && (
-            <>
-              <p className="flex items-center gap-1.5">
-                <Avatar profile={resolver} size="xs" />
-                <span>
-                  Resolved by{' '}
-                  <span className="text-fg">{resolver?.display_name ?? 'Deleted user'}</span>
-                  {bug.resolved_at && (
-                    <>
-                      {' · '}
-                      <time
-                        dateTime={bug.resolved_at}
-                        title={new Date(bug.resolved_at).toLocaleString()}
-                      >
-                        {relativeTime(bug.resolved_at)}
-                      </time>
-                    </>
-                  )}
+        </header>
+        {onDelete && confirmDelete && (
+          <DeleteDialog
+            bug={bug}
+            onCancel={() => setConfirmDelete(false)}
+            onDelete={() => onDelete(bug.id)}
+          />
+        )}
+
+        <div className="mt-5">
+          <textarea
+            ref={titleRef}
+            rows={1}
+            value={titleDraft ?? bug.title}
+            readOnly={!editable}
+            aria-label="Title"
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={saveTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                e.currentTarget.blur()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                cancelRef.current = true
+                setTitleDraft(null)
+                e.currentTarget.blur()
+                cancelRef.current = false
+              }
+            }}
+            className="block w-full resize-none overflow-hidden bg-transparent text-xl leading-snug font-semibold tracking-tight break-words outline-none sm:text-2xl"
+          />
+          <div className="mt-3 space-y-2 text-xs text-muted">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <p className="flex min-w-0 items-center gap-1.5">
+                <Avatar profile={filer} size="xs" />
+                <span className="min-w-0 truncate">
+                  Filed by <span className="text-fg">{filer?.display_name ?? 'Deleted user'}</span>{' '}
+                  ·{' '}
+                  <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
+                    {relativeTime(bug.created_at)}
+                  </time>
                 </span>
               </p>
-              {bug.resolution_note && (
-                <blockquote className="ml-6 border-l-2 border-border pl-2 whitespace-pre-wrap italic">
-                  “{bug.resolution_note}”
-                </blockquote>
-              )}
-            </>
+              <AssigneePicker
+                members={members}
+                value={bug.assignee_id}
+                selfId={selfId}
+                disabled={!editable || !onAssign}
+                openRequest={assignRequest}
+                onChange={(userId) => {
+                  if (onAssign) run(() => onAssign(bug.id, userId))
+                }}
+              />
+            </div>
+            {bug.status === 'resolved' && (
+              <>
+                <p className="flex items-center gap-1.5">
+                  <Avatar profile={resolver} size="xs" />
+                  <span>
+                    Resolved by{' '}
+                    <span className="text-fg">{resolver?.display_name ?? 'Deleted user'}</span>
+                    {bug.resolved_at && (
+                      <>
+                        {' · '}
+                        <time
+                          dateTime={bug.resolved_at}
+                          title={new Date(bug.resolved_at).toLocaleString()}
+                        >
+                          {relativeTime(bug.resolved_at)}
+                        </time>
+                      </>
+                    )}
+                  </span>
+                </p>
+                {bug.resolution_note && (
+                  <blockquote className="ml-2 border-l-2 border-border pl-3 [overflow-wrap:anywhere] whitespace-pre-wrap italic">
+                    “{bug.resolution_note}”
+                  </blockquote>
+                )}
+              </>
+            )}
+          </div>
+          {error && (
+            <p role="alert" className="mt-3 flex items-center gap-1.5 text-xs text-danger">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {error}
+            </p>
           )}
         </div>
-        {error && (
-          <p role="alert" className="mt-2 flex items-center gap-1 text-xs text-danger">
-            <AlertCircle className="h-3.5 w-3.5" />
-            {error}
-          </p>
-        )}
-      </section>
 
-      {claudeRun && <ClaudeProgress run={claudeRun} />}
+        <div className="mt-8 space-y-8">
+          {claudeRun && <ClaudeProgress run={claudeRun} />}
 
-      <section className="border-t border-border px-6 py-4">
-        <textarea
-          ref={descRef}
-          value={description}
-          readOnly={!editable}
-          rows={1}
-          aria-label="Description"
-          placeholder="Add a description…"
-          onChange={(e) => setDescDraft(e.target.value)}
-          onFocus={() => setDescFocused(true)}
-          onBlur={() => {
-            setDescFocused(false)
-            saveDescription()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault()
-              cancelRef.current = true
-              setDescDraft(null)
-              e.currentTarget.blur()
-              cancelRef.current = false
-            }
-          }}
-          className={cn(
-            'w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted',
-            showRendered && 'sr-only',
+          <section className="relative min-w-0">
+            <h2 className={SECTION_HEADING}>Description</h2>
+            <textarea
+              ref={descRef}
+              value={description}
+              readOnly={!editable}
+              rows={1}
+              aria-label="Description"
+              placeholder={editable ? 'Add a description…' : 'No description'}
+              onChange={(e) => setDescDraft(e.target.value)}
+              onFocus={() => setDescFocused(true)}
+              onBlur={() => {
+                setDescFocused(false)
+                saveDescription()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  cancelRef.current = true
+                  setDescDraft(null)
+                  e.currentTarget.blur()
+                  cancelRef.current = false
+                }
+              }}
+              // The sr-only state must not keep w-full: an absolutely positioned full-width
+              // textarea stretches the page sideways.
+              className={
+                showRendered
+                  ? 'sr-only'
+                  : 'block w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted'
+              }
+            />
+            {showRendered && (
+              <div
+                onClick={(e) => {
+                  if (editable && !(e.target as HTMLElement).closest('a')) descRef.current?.focus()
+                }}
+                className={cn('min-w-0 [overflow-wrap:anywhere]', editable && 'cursor-text')}
+              >
+                <Markdown source={description} />
+              </div>
+            )}
+            {bug.transcript !== null && (
+              <div className="mt-4 rounded-lg border border-border bg-bg-subtle px-3 py-2.5 text-xs text-muted">
+                <p className="mb-1 flex items-center gap-1.5 font-medium text-fg">
+                  <Mic className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                  Voice transcript
+                </p>
+                <p className="leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
+                  {bug.transcript}
+                </p>
+              </div>
+            )}
+          </section>
+
+          {gallery.length > 0 && (
+            <section className="min-w-0">
+              <h2 className={SECTION_HEADING}>
+                Attachments <span className="ml-1 tabular-nums">{gallery.length}</span>
+              </h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {bug.attachments.map((a, i) => (
+                  <AttachmentThumb
+                    key={a.id}
+                    attachment={a}
+                    caption={`Screenshot ${i + 1}`}
+                    label={`Open screenshot ${i + 1}`}
+                    onSigned={onSigned}
+                    onOpen={() => setLightboxKey(a.id)}
+                  />
+                ))}
+                {pending.map((p, i) => (
+                  <PendingThumb
+                    key={p.localId}
+                    upload={p}
+                    label={`Open screenshot ${bug.attachments.length + i + 1}`}
+                    onOpen={() => setLightboxKey(p.localId)}
+                    onRetry={onRetryUploads}
+                  />
+                ))}
+              </div>
+            </section>
           )}
-        />
-        {showRendered && (
-          <div
-            onClick={(e) => {
-              if (editable && !(e.target as HTMLElement).closest('a')) descRef.current?.focus()
-            }}
-            className={editable ? 'cursor-text' : undefined}
-          >
-            <Markdown source={description} />
-          </div>
+
+          <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} />
+        </div>
+
+        {lightboxIndex >= 0 && (
+          <Lightbox
+            urls={viewable.map((g) => g.url)}
+            index={lightboxIndex}
+            onClose={() => setLightboxKey(null)}
+            onIndex={(i) => setLightboxKey(viewable[i]?.key ?? null)}
+          />
         )}
-        {bug.transcript !== null && (
-          <div className="mt-3 rounded-md bg-bg-subtle px-3 py-2 text-xs text-muted">
-            <p className="mb-1 flex items-center gap-1 font-medium">
-              <Mic className="h-3 w-3" aria-hidden="true" />
-              Voice transcript
-            </p>
-            <p className="whitespace-pre-wrap">{bug.transcript}</p>
-          </div>
-        )}
-      </section>
-
-      {gallery.length > 0 && (
-        <section className="border-t border-border px-6 py-4">
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {bug.attachments.map((a, i) => (
-              <AttachmentThumb
-                key={a.id}
-                attachment={a}
-                label={`Open screenshot ${i + 1}`}
-                onSigned={onSigned}
-                onOpen={() => setLightboxKey(a.id)}
-              />
-            ))}
-            {pending.map((p, i) => (
-              <PendingThumb
-                key={p.localId}
-                upload={p}
-                label={`Open screenshot ${bug.attachments.length + i + 1}`}
-                onOpen={() => setLightboxKey(p.localId)}
-                onRetry={onRetryUploads}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <CommentThread bugId={bug.optimistic ? null : bug.id} members={members} />
-
-      {lightboxIndex >= 0 && (
-        <Lightbox
-          urls={viewable.map((g) => g.url)}
-          index={lightboxIndex}
-          onClose={() => setLightboxKey(null)}
-          onIndex={(i) => setLightboxKey(viewable[i]?.key ?? null)}
-        />
-      )}
+      </div>
     </div>
   )
 }
+
+const SECTION_HEADING = 'mb-3 text-xs font-medium tracking-wide text-muted uppercase'
 
 function DeleteDialog({
   bug,
@@ -608,7 +644,7 @@ function DeleteDialog({
         if (!busy) onCancel()
       }}
       aria-labelledby="delete-bug-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg-elevated p-6 text-fg backdrop:bg-black/50"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-bg-elevated p-6 text-fg shadow-elevated backdrop:bg-black/50"
     >
       <form
         onSubmit={(event) => {
@@ -617,7 +653,7 @@ function DeleteDialog({
         }}
         className="space-y-4 text-sm"
       >
-        <h3 id="delete-bug-title" className="text-lg font-medium">
+        <h3 id="delete-bug-title" className="text-base font-semibold">
           Delete {noun} #{bug.number}?
         </h3>
         <p className="text-muted">
@@ -629,12 +665,12 @@ function DeleteDialog({
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-2">
           <button
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="rounded-md border border-border px-3 py-2 hover:bg-bg-subtle disabled:opacity-50"
+            className={buttonClass('secondary')}
           >
             Cancel
           </button>
@@ -648,15 +684,17 @@ function DeleteDialog({
 }
 
 const THUMB_CLASS =
-  'relative block aspect-video overflow-hidden rounded-md border border-border bg-bg-subtle'
+  't focus-ring group relative block aspect-video w-full overflow-hidden rounded-lg border border-border bg-bg-subtle hover:-translate-y-0.5 hover:border-fg/20 hover:shadow-elevated'
 
 function AttachmentThumb({
   attachment,
+  caption,
   label,
   onSigned,
   onOpen,
 }: {
   attachment: BugAttachment
+  caption: string
   label: string
   onSigned: (path: string, url: string | null) => void
   onOpen: () => void
@@ -672,10 +710,26 @@ function AttachmentThumb({
       aria-label={label}
       disabled={!url}
       onClick={onOpen}
-      className={cn(THUMB_CLASS, 'cursor-zoom-in disabled:cursor-default')}
+      className={cn(
+        THUMB_CLASS,
+        'cursor-zoom-in disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-none',
+      )}
     >
       {url ? (
-        <img src={url} alt="" className="h-full w-full object-cover" />
+        <>
+          <img src={url} alt="" className="h-full w-full object-cover" />
+          <span
+            aria-hidden="true"
+            className="t absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+          >
+            <span className="truncate">{caption}</span>
+            {attachment.width > 0 && attachment.height > 0 && (
+              <span className="shrink-0 text-white/70 tabular-nums">
+                {attachment.width}×{attachment.height}
+              </span>
+            )}
+          </span>
+        </>
       ) : (
         <span className="absolute inset-0 animate-pulse bg-bg-subtle" />
       )}
@@ -700,7 +754,7 @@ function PendingThumb({
   const shown = Math.max(0.25, Math.min(1, upload.progress))
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         type="button"
         aria-label={label}
@@ -747,7 +801,7 @@ function PendingThumb({
           </span>
         )}
         {upload.error && (
-          <span className="absolute right-1 bottom-1 left-1 rounded bg-danger px-1.5 py-0.5 text-center text-xs font-medium text-white">
+          <span className="absolute right-1.5 bottom-1.5 left-1.5 rounded-md bg-danger px-1.5 py-0.5 text-center text-xs font-medium text-white">
             Upload failed
           </span>
         )}
@@ -758,7 +812,7 @@ function PendingThumb({
           aria-label="Retry upload"
           title="Retry upload"
           onClick={onRetry}
-          className="absolute top-1 right-1 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white hover:bg-black/85"
+          className="t focus-ring absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white hover:bg-black/85"
         >
           <RotateCw size={10} aria-hidden="true" />
           Retry

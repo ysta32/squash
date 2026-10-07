@@ -63,7 +63,7 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
       ref={rootRef}
       role="dialog"
       aria-label={`${verb} bug`}
-      className="absolute top-full right-0 z-30 mt-2 w-72 rounded-lg border border-border bg-bg-elevated p-3 shadow-elevated"
+      className="absolute top-full right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-bg-elevated p-3 shadow-elevated"
     >
       <textarea
         autoFocus
@@ -73,9 +73,9 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
         rows={3}
         placeholder="Add a note (optional)"
         aria-label="Note"
-        className="w-full resize-none focus-ring rounded-md border border-border bg-bg-subtle px-2 py-1.5 text-sm placeholder:text-muted focus:border-accent"
+        className="t block w-full resize-none rounded-md border border-border bg-bg px-2.5 py-2 text-sm leading-relaxed outline-none placeholder:text-muted hover:border-fg/20 focus:border-accent/60 focus:ring-3 focus:ring-accent/15"
       />
-      <div className="mt-2 flex items-center justify-end gap-2">
+      <div className="mt-3 flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={() => confirm(false)}>
           {verb} without note
         </Button>
@@ -86,6 +86,9 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
           title={`${isMac ? '⌘' : 'Ctrl'}+Enter`}
         >
           {verb}
+          <span aria-hidden="true" className="-mr-0.5 text-[11px] opacity-70">
+            {isMac ? '⌘↵' : 'Ctrl↵'}
+          </span>
         </Button>
       </div>
     </div>

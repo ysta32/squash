@@ -64,7 +64,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
           e.stopPropagation()
           onClose()
         }}
-        className="absolute top-3 right-3 z-10 rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
+        className="t focus-ring absolute top-3 right-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 hover:bg-white/10 hover:text-white"
       >
         <X className="h-5 w-5" />
       </button>
@@ -77,7 +77,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
               e.stopPropagation()
               onIndex((safeIndex - 1 + count) % count)
             }}
-            className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            className="t focus-ring absolute left-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
@@ -88,7 +88,7 @@ export function Lightbox({ urls, index, onClose, onIndex }: LightboxProps) {
               e.stopPropagation()
               onIndex((safeIndex + 1) % count)
             }}
-            className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            className="t focus-ring absolute right-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
           >
             <ChevronRight className="h-6 w-6" />
           </button>
@@ -141,7 +141,7 @@ function ZoomImage({ url, alt }: { url: string; alt: string }) {
       onWheel={onWheel}
       style={{ transform: zoomed ? 'scale(2)' : 'scale(1)', transformOrigin: origin }}
       className={cn(
-        'max-h-[90vh] max-w-[90vw] object-contain transition-transform duration-150 select-none',
+        'max-h-[90vh] max-w-[90vw] rounded-md object-contain shadow-elevated transition-transform duration-150 select-none',
         zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
       )}
     />

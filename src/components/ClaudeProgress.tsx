@@ -47,13 +47,13 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
     <section
       aria-label="Claude progress"
       aria-live="polite"
-      className="border-t border-border px-6 py-4 text-sm"
+      className="min-w-0 rounded-lg border border-border bg-bg-subtle/50 p-4 text-sm"
     >
       <div className="flex items-center gap-2">
         <Bot className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
         <span className={cn('h-2 w-2 shrink-0 rounded-full', STATE_DOT[run.state])} />
-        <span className="font-medium">{STATE_LABEL[run.state]}</span>
-        <span className="ml-auto text-xs text-muted">
+        <span className="min-w-0 truncate font-medium">{STATE_LABEL[run.state]}</span>
+        <span className="ml-auto shrink-0 text-xs text-muted tabular-nums">
           {live ? (
             <>
               {elapsed(run.startedAt, now)} · {run.stepCount} steps
@@ -72,7 +72,10 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
       )}
 
       {run.activity && (
-        <p className="mt-2 truncate font-mono text-xs text-fg" title={run.activity}>
+        <p
+          className="mt-3 min-w-0 truncate rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-xs text-fg"
+          title={run.activity}
+        >
           {run.activity}
         </p>
       )}
@@ -80,7 +83,7 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
       {run.todos && run.todos.length > 0 && (
         <ul aria-label="Claude's plan" className="mt-3 space-y-1 text-xs">
           {run.todos.map((todo, i) => (
-            <li key={i} className="flex items-start gap-1.5">
+            <li key={i} className="flex min-w-0 items-start gap-2">
               {todo.status === 'completed' ? (
                 <Check className="mt-0.5 h-3 w-3 shrink-0 text-success" aria-label="Done" />
               ) : todo.status === 'in_progress' ? (
@@ -90,6 +93,7 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
               )}
               <span
                 className={cn(
+                  'min-w-0 [overflow-wrap:anywhere]',
                   todo.status === 'completed' && 'text-muted line-through',
                   todo.status === 'in_progress' && 'font-medium',
                 )}
@@ -102,17 +106,19 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
       )}
 
       {run.message && (
-        <div className="mt-3 max-h-64 overflow-y-auto rounded-md bg-bg-subtle px-3 py-2 text-xs whitespace-pre-wrap">
+        <div className="mt-3 max-h-64 overflow-y-auto rounded-md border border-border bg-bg px-3 py-2 text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
           {run.message}
         </div>
       )}
 
       {run.steps.length > 0 && (
         <details className="mt-3 text-xs text-muted">
-          <summary className="cursor-pointer select-none hover:text-fg">Recent steps</summary>
+          <summary className="t focus-ring w-fit cursor-pointer rounded-md select-none hover:text-fg">
+            Recent steps
+          </summary>
           <ol className="mt-1 space-y-0.5">
             {run.steps.map((step, i) => (
-              <li key={i} className="flex gap-2">
+              <li key={i} className="flex min-w-0 gap-2">
                 <time dateTime={step.t} className="shrink-0 font-mono tabular-nums">
                   {new Date(step.t).toLocaleTimeString([], {
                     hour: '2-digit',
@@ -120,7 +126,7 @@ export function ClaudeProgress({ run }: { run: ClaudeRun }) {
                     second: '2-digit',
                   })}
                 </time>
-                <span className="truncate" title={step.text}>
+                <span className="min-w-0 truncate" title={step.text}>
                   {step.text}
                 </span>
               </li>

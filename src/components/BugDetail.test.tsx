@@ -494,4 +494,29 @@ describe('BugDetail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalled()
   })
+
+  it('posts a comment with the Comment button, which is disabled while the draft is empty', async () => {
+    addComment.mockResolvedValue()
+    setup(makeBug())
+    const button = screen.getByRole('button', { name: 'Comment' })
+    expect(button).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'via button' } })
+    expect(button).toBeEnabled()
+    await act(async () => {
+      fireEvent.click(button)
+    })
+    expect(addComment).toHaveBeenCalledWith('via button')
+  })
+
+  it('keeps the hidden description textarea out of the layout width', () => {
+    // A visually hidden textarea that keeps w-full is absolutely positioned at 100% of the
+    // viewport and widened the whole page sideways.
+    setup(makeBug())
+    const box = screen.getByLabelText('Description')
+    expect(box.className.split(' ')).toContain('sr-only')
+    expect(box.className.split(' ')).not.toContain('w-full')
+    fireEvent.focus(box)
+    expect(box.className.split(' ')).not.toContain('sr-only')
+    expect(box.className.split(' ')).toContain('w-full')
+  })
 })
