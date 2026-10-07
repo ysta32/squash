@@ -5,11 +5,13 @@
 //   ~/.claude/orch/bin/serial e2e -- npm run qa:shots -- --out .orch/shots/latest
 //   node scripts/visual-qa/run.mjs --out <dir> [--routes /,/claude] [--widths 375,1280] [--themes light]
 // Env: QA_PORT (default 4210). Uses your installed Google Chrome.
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer } from 'vite'
+import { renderFixtures } from '../screenshots/render-fixtures.mjs'
 
 const DEFAULT_ROUTES = [
   '/',
@@ -47,8 +49,16 @@ if (themes.some((t) => t !== 'light' && t !== 'dark')) throw new Error('--themes
 const slug = (route) =>
   route === '/' ? 'home' : route.replace(/^\/|\/$/g, '').replace(/\W+/g, '-')
 
-rmSync(outDir, { recursive: true, force: true })
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+const rel = relative(outDir, repoRoot)
+if (outDir === sep || outDir === resolve(homedir()) || rel === '' || !rel.startsWith('..')) {
+  throw new Error(`refusing to use ${outDir} as --out (root, home, repo, or a repo ancestor)`)
+}
 mkdirSync(outDir, { recursive: true })
+// Only remove files this tool itself writes.
+for (const f of readdirSync(outDir)) {
+  if (f === 'index.html' || f.endsWith('.png')) rmSync(`${outDir}/${f}`, { force: true })
+}
 
 const configFile = fileURLToPath(new URL('../screenshots/vite.config.ts', import.meta.url))
 const server = await createServer({
@@ -57,35 +67,39 @@ const server = await createServer({
   server: { port, strictPort: true },
   define: { 'import.meta.env.VITE_SITE_URL': JSON.stringify(`http://localhost:${port}`) },
 })
-await server.listen()
-const origin = `http://localhost:${port}`
-
-const browser = await chromium.launch({ channel: 'chrome' })
 const shots = []
 try {
-  for (const theme of themes) {
-    const context = await browser.newContext({
-      viewport: { width: widths[0], height },
-      colorScheme: theme,
-      reducedMotion: 'reduce',
-    })
-    await context.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
-    const page = await context.newPage()
-    for (const route of routes) {
-      for (const width of widths) {
-        await page.setViewportSize({ width, height })
-        await page.goto(origin + route, { waitUntil: 'networkidle' })
-        await page.waitForTimeout(300)
-        const file = `${slug(route)}_${width}_${theme}.png`
-        await page.screenshot({ path: `${outDir}/${file}`, fullPage: true })
-        shots.push({ route, width, theme, file })
-        console.log(file)
+  await server.listen()
+  const origin = `http://localhost:${port}`
+  const browser = await chromium.launch({ channel: 'chrome' })
+  try {
+    // Bug attachments are served from this cache; (re)build it so they never render broken.
+    await renderFixtures(browser)
+    for (const theme of themes) {
+      const context = await browser.newContext({
+        viewport: { width: widths[0], height },
+        colorScheme: theme,
+        reducedMotion: 'reduce',
+      })
+      await context.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
+      const page = await context.newPage()
+      for (const route of routes) {
+        for (const width of widths) {
+          await page.setViewportSize({ width, height })
+          await page.goto(origin + route, { waitUntil: 'networkidle' })
+          await page.waitForTimeout(300)
+          const file = `${slug(route)}_${width}_${theme}.png`
+          await page.screenshot({ path: `${outDir}/${file}`, fullPage: true })
+          shots.push({ route, width, theme, file })
+          console.log(file)
+        }
       }
+      await context.close()
     }
-    await context.close()
+  } finally {
+    await browser.close()
   }
 } finally {
-  await browser.close()
   await server.close()
 }
 
