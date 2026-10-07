@@ -260,10 +260,27 @@ describe('Workspace', () => {
   })
 
   it('passes the load error and retry action to the bug list', () => {
+    mocks.bugs = []
     mocks.error = "Couldn't load bugs"
     show('/app/ws')
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load bugs")
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(mocks.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes the load error and retry action to the status banner when bugs are present', () => {
+    mocks.bugs = [makeBug(1)]
+    mocks.error = "Couldn't load bugs"
+    show('/app/ws')
+    const banners = screen
+      .getAllByRole('status')
+      .filter((element) => element.textContent?.includes("Couldn't refresh — showing saved results"))
+    expect(banners).toHaveLength(1)
+    const [banner] = banners
+    expect(banner).toHaveTextContent("Couldn't refresh — showing saved results")
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText('Bug number 1')).toBeInTheDocument()
+    fireEvent.click(within(banner).getByRole('button', { name: 'Retry' }))
     expect(mocks.reload).toHaveBeenCalledTimes(1)
   })
 
