@@ -205,6 +205,9 @@ describe('isAllowedDownload', () => {
       'https://files.example.com/x.png',
       'http://abc.supabase.co/storage/v1/object/sign/x.png',
       'https://user:pw@abc.supabase.co/storage/v1/object/sign/x.png',
+      'https://abc.supabase.co:444/storage/v1/object/sign/x.png',
+      'https://abc.supabase.co/storage/v1/object/..%2f..%2frest/v1/x',
+      'https://abc.supabase.co/storage/v1/object/%2E%2E/x',
     ])
       expect(bridge.isAllowedDownload(url, ['files.example.com']), url).toBe(false)
   })

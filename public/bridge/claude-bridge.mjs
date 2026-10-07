@@ -382,7 +382,10 @@ export function isAllowedDownload(url, extraHosts = []) {
   if (pinnedHost) {
     return (
       (host === pinnedHost.toLowerCase().replace(/\.$/, '') || extraHosts.includes(host)) &&
-      parsed.pathname.startsWith('/storage/v1/object/')
+      parsed.port === '' &&
+      parsed.pathname.startsWith('/storage/v1/object/') &&
+      // Encoded separators or dots could walk out of the storage path on the server side.
+      !/%2f|%5c|%2e/i.test(parsed.pathname)
     )
   }
   if (!warnedUnpinnedDownloads) {
