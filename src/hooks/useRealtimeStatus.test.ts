@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, configure, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { openChannel, useRealtimeStatus } from './useRealtimeStatus'
 
@@ -6,6 +6,7 @@ type StatusCb = (status: string) => void
 
 const h = vi.hoisted(() => ({
   cb: null as null | ((s: string) => void),
+  cbs: [] as ((s: string) => void)[],
   channels: [] as { topic: string }[],
   channel: vi.fn(),
   removeChannel: vi.fn(),
@@ -26,11 +27,13 @@ function setOnline(value: boolean) {
 describe('useRealtimeStatus', () => {
   beforeEach(() => {
     h.cb = null
+    h.cbs = []
     h.channels = []
     h.channel.mockReset().mockImplementation((topic: string) => ({
       topic,
       subscribe: (cb: StatusCb) => {
         h.cb = cb
+        h.cbs.push(cb)
       },
     }))
     h.removeChannel.mockReset()
@@ -65,14 +68,24 @@ describe('useRealtimeStatus', () => {
     unmount()
   })
 
-  it('removes the channel on unmount and ignores late status callbacks', () => {
-    const { result, unmount } = renderHook(() => useRealtimeStatus())
-    const cb = h.cb
+  it('removes the channel on unmount', () => {
+    const { unmount } = renderHook(() => useRealtimeStatus())
     unmount()
     expect(h.removeChannel).toHaveBeenCalledTimes(1)
     expect(h.removeChannel.mock.calls[0][0].topic).toBe('status')
-    expect(() => act(() => cb?.('CHANNEL_ERROR'))).not.toThrow()
+  })
+
+  it('ignores status callbacks from a replaced subscription', () => {
+    configure({ reactStrictMode: true })
+    const { result, unmount } = renderHook(() => useRealtimeStatus())
+    expect(h.cbs).toHaveLength(2)
+    const [stale, live] = h.cbs
+    act(() => stale('CHANNEL_ERROR'))
     expect(result.current).toBe('connected')
+    act(() => live('CLOSED'))
+    expect(result.current).toBe('reconnecting')
+    unmount()
+    configure({ reactStrictMode: false })
   })
 })
 
