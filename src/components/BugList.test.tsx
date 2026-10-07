@@ -135,17 +135,118 @@ describe('BugList', () => {
   })
 
   it('shows feature wording when there are no feature requests', () => {
-    render(<Harness bugs={[]} filters={{ ...filters, kind: 'feature' }} />)
-    expect(screen.getByText('No open feature requests.')).toBeInTheDocument()
+    render(
+      <Harness
+        bugs={[]}
+        counts={{ open: 0, resolved: 0, all: 0 }}
+        filters={{ ...filters, kind: 'feature' }}
+      />,
+    )
+    expect(
+      screen.getByRole('heading', { name: 'File your first feature request' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Paste a screenshot anywhere, describe your feature request, press Enter.'),
+    ).toBeInTheDocument()
   })
 
   it.each([
-    ['open', 'No open bugs. Ship it.'],
-    ['resolved', 'Nothing resolved yet.'],
-    ['all', 'File your first bug above.'],
+    ['open', 'File your first bug'],
+    ['resolved', 'Nothing resolved yet'],
+    ['all', 'File your first bug'],
   ] as const)('shows the %s empty state', (tab, message) => {
-    render(<Harness bugs={[]} filters={{ ...filters, tab }} />)
-    expect(screen.getByText(message)).toBeInTheDocument()
+    render(
+      <Harness bugs={[]} counts={{ open: 0, resolved: 0, all: 0 }} filters={{ ...filters, tab }} />,
+    )
+    expect(screen.getByRole('heading', { name: message })).toBeInTheDocument()
+    if (tab === 'resolved') {
+      expect(screen.queryByRole('list', { name: 'How to file' })).not.toBeInTheDocument()
+    } else {
+      expect(
+        screen.getByText("Paste a screenshot anywhere, describe what's wrong, press Enter."),
+      ).toBeInTheDocument()
+      const guide = screen.getByRole('list', { name: 'How to file' })
+      expect(within(guide).getAllByRole('listitem')).toHaveLength(3)
+      expect(Array.from(guide.querySelectorAll('kbd'), (key) => key.textContent)).toEqual([
+        '⌘V',
+        'type',
+        'Enter',
+      ])
+    }
+  })
+
+  it.each(['bug', 'feature'] as const)('shows a resolved backlog for %s items', (kind) => {
+    render(
+      <Harness
+        bugs={[bug({ kind, status: 'resolved' })]}
+        counts={{ open: 0, resolved: 1, all: 1 }}
+        filters={{ ...filters, kind }}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Nothing open' })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        `Every ${kind === 'feature' ? 'feature request' : 'bug'} here has been resolved.`,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'How to file' })).not.toBeInTheDocument()
+  })
+
+  it('shows the resolved empty state when only open bugs exist', () => {
+    render(
+      <Harness
+        bugs={[bug()]}
+        counts={{ open: 1, resolved: 0, all: 1 }}
+        filters={{ ...filters, tab: 'resolved' }}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Nothing resolved yet' })).toBeInTheDocument()
+  })
+
+  it.each(['bug', 'feature'] as const)(
+    'clears all unmatched %s filters and preserves kind and tab',
+    (kind) => {
+      const onFilters = vi.fn()
+      render(
+        <Harness
+          bugs={[bug({ kind })]}
+          counts={{ open: 1, resolved: 0, all: 1 }}
+          filters={{
+            ...filters,
+            kind,
+            tab: 'all',
+            query: 'missing',
+            filedBy: 'grace',
+            resolvedBy: 'ada',
+            severity: 'low',
+          }}
+          onFilters={onFilters}
+        />,
+      )
+      expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          `No ${kind === 'feature' ? 'feature requests' : 'bugs'} match these filters.`,
+        ),
+      ).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+      expect(onFilters).toHaveBeenLastCalledWith({ ...filters, kind, tab: 'all' })
+      expect(screen.getByRole('option', { name: '#1 Broken login' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('prioritizes unmatched filters in a new workspace', () => {
+    render(
+      <Harness
+        bugs={[]}
+        counts={{ open: 0, resolved: 0, all: 0 }}
+        filters={{ ...filters, query: 'missing' }}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByRole('heading', { name: 'File your first bug' })).toBeInTheDocument()
   })
 
   it('shows six skeleton rows while loading and hides stale rows and empty messages', () => {
@@ -153,7 +254,7 @@ describe('BugList', () => {
     const status = screen.getByRole('status', { name: 'Loading bugs' })
     expect(status.querySelectorAll(':scope > div[aria-hidden="true"]')).toHaveLength(6)
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-    expect(screen.queryByText('No open bugs. Ship it.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument()
   })
 
   it('searches descriptions and bug numbers and reports unmatched queries', () => {
@@ -165,7 +266,7 @@ describe('BugList', () => {
     fireEvent.change(search, { target: { value: 'Password' } })
     expect(screen.getByRole('option', { name: '#1 Broken login' })).toBeInTheDocument()
     fireEvent.change(search, { target: { value: 'no match' } })
-    expect(screen.getByText('No bugs match.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
   })
 
   it('combines member and severity filters and clears them while preserving the tab', () => {
@@ -181,7 +282,7 @@ describe('BugList', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Severity' }), {
       target: { value: 'high' },
     })
-    expect(screen.getByText('No bugs match.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('button', { name: 'All 2' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)

@@ -211,7 +211,15 @@ export function BugList({
         {loading ? (
           <Skeleton />
         ) : visible.length === 0 ? (
-          <EmptyState kind={filters.kind} tab={filters.tab} filtered={filtered} />
+          <EmptyState
+            kind={filters.kind}
+            tab={filters.tab}
+            filtered={filtered}
+            hasItems={counts.all > 0}
+            onClearFilters={() =>
+              onFilters({ ...filters, query: '', filedBy: null, resolvedBy: null, severity: null })
+            }
+          />
         ) : (
           <div role="listbox" aria-label={KIND_LABEL[filters.kind].many} className="space-y-1 p-2">
             {visible.map((bug) => (
