@@ -3,6 +3,7 @@ import { Bot, Bug, Copy, FolderCog, Lightbulb, Search, X } from 'lucide-react'
 import { filterBugs } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
+import { useWorkspaces } from '../hooks/useWorkspaces'
 import { KIND_LABEL } from '../lib/types'
 import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
@@ -64,6 +65,9 @@ export function BugList({
   claudeConnected = false,
   claudeRuns,
 }: BugListProps) {
+  const { workspaces } = useWorkspaces()
+  const workspaceId = bugs[0]?.workspace_id ?? members[0]?.workspace_id
+  const workspaceName = workspaces.find((workspace) => workspace.id === workspaceId)?.name
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
@@ -205,7 +209,13 @@ export function BugList({
             className="t w-full rounded-md border border-border bg-bg py-2 pl-8 pr-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </label>
-        <BugFilters filters={filters} onFilters={onFilters} members={members} />
+        <BugFilters
+          filters={filters}
+          onFilters={onFilters}
+          members={members}
+          bugs={visible}
+          workspaceName={workspaceName}
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={loading}>
         {loading ? (

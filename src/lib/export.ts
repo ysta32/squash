@@ -3,7 +3,7 @@ import type { BugWithMeta as BugWithAttachments } from './types'
 
 function csvCell(value: string | number | null): string {
   const text = String(value ?? '')
-  const guarded = /^[=+\-@]/.test(text) ? `'${text}` : text
+  const guarded = /^\s*[=+\-@]|^[\t\r]/.test(text) ? `'${text}` : text
   return /[,"\r\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded
 }
 
@@ -50,7 +50,7 @@ export function bugsToMarkdown(bugs: BugWithAttachments[], workspaceName: string
       '',
       `## ${KIND_LABEL[bug.kind].one} #${bug.number}: ${markdownCell(bug.title)}`,
       '',
-      bug.description,
+      bug.description.replace(/^( {0,3})#/gm, '$1\\#'),
     )
   }
   return lines.join('\n') + '\n'

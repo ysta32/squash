@@ -4,11 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugFilters } from '../hooks/useBugs'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
+import * as bugExport from '../lib/export'
 import { BugList } from './BugList'
 import type { BugListProps } from './BugList'
 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: vi.fn(() => null) }))
+vi.mock('../hooks/useWorkspaces', () => ({
+  useWorkspaces: () => ({
+    workspaces: [
+      { id: 'other-workspace', name: 'Other Team' },
+      { id: 'workspace', name: 'Acme Team' },
+    ],
+  }),
+}))
 
 const filters: BugFilters = {
   kind: 'bug',
@@ -101,6 +110,30 @@ describe('BugList', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    vi.restoreAllMocks()
+  })
+
+  it.each(['CSV', 'Markdown'])('offers %s export for the visible bugs and workspace', (format) => {
+    const download = vi.spyOn(bugExport, 'downloadText').mockImplementation(() => {})
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Resolved 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    expect(screen.getByRole('menuitem', { name: 'CSV' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Markdown' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: format }))
+    expect(download).toHaveBeenCalledWith(
+      expect.stringMatching(
+        format === 'CSV'
+          ? /^squash-acme-team-\d{4}-\d{2}-\d{2}\.csv$/
+          : /^squash-acme-team-\d{4}-\d{2}-\d{2}\.md$/,
+      ),
+      expect.stringContaining('Fixed layout'),
+      format === 'CSV' ? 'text/csv;charset=utf-8' : 'text/markdown;charset=utf-8',
+    )
+    expect(download.mock.calls[0][1]).not.toContain('Broken login')
+    if (format === 'Markdown') {
+      expect(download.mock.calls[0][1]).toContain('# Acme Team bugs')
+    }
   })
 
   it('renders open rows by default and switches status tabs using counts from props', () => {

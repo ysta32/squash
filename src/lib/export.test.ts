@@ -71,6 +71,19 @@ describe('bugsToCsv', () => {
     )
   })
 
+  it.each([
+    [' =cmd', "' =cmd"],
+    ['\t=1+1', "'\t=1+1"],
+    ['\r@x', '"\'\r@x"'],
+    ['\tplain', "'\tplain"],
+    ['\rplain', '"\'\rplain"'],
+    ['  +123', "'  +123"],
+  ])('guards whitespace-prefixed cells: %s', (value, guarded) => {
+    expect(bugsToCsv([bug({ title: value, filed_by: value, description: value })])).toContain(
+      `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded}\r\n`,
+    )
+  })
+
   it('exports just the header for an empty list', () => {
     expect(bugsToCsv([])).toBe(
       'number,kind,title,severity,status,filed_by,created_at,resolved_at,description\r\n',
@@ -79,6 +92,19 @@ describe('bugsToCsv', () => {
 })
 
 describe('bugsToMarkdown', () => {
+  it('escapes description headings while preserving bug section headings', () => {
+    const markdown = bugsToMarkdown(
+      [
+        bug({ description: '# Heading\n## Fake bug\r\n   ### Indented\r# Final' }),
+        bug({ number: 8 }),
+      ],
+      'Acme',
+    )
+    expect(markdown).toContain('\\# Heading\n\\## Fake bug\r\n   \\### Indented\r\\# Final')
+    expect(markdown.match(/^## /gm)).toHaveLength(2)
+    expect(markdown).toContain('## Bug #8: Login fails')
+  })
+
   it('escapes pipes and backslashes and keeps multiline titles within one table row', () => {
     const markdown = bugsToMarkdown([bug({ title: 'A\\|B\r\nC', filed_by: 'ada|dev' })], 'Acme')
     expect(markdown).toContain('| 7 | A\\\\\\|B C | High | open | ada\\|dev |')
