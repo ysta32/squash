@@ -73,37 +73,68 @@ function row(b: BugWithMeta) {
 afterEach(cleanup)
 
 describe('BugRow', () => {
-  it('skips rendering for identical props when its parent renders again', () => {
+  it('skips rendering for equivalent viewers but renders when row props change', () => {
     const props: BugRowProps = {
       bug: bug(),
       selected: false,
       onSelect: vi.fn(),
       members,
-      viewers: [],
+      viewers: [{ user_id: 'ada', viewing: 'b1', online_at: '2026-10-01T10:00:00Z' }],
       highlighted: false,
       picked: false,
       onTogglePick: vi.fn(),
     }
-    function Parent({ revision, picked = false }: { revision: number; picked?: boolean }) {
+    function Parent({
+      revision,
+      picked = false,
+      viewers = props.viewers,
+      bug = props.bug,
+    }: {
+      revision: number
+      picked?: boolean
+      viewers?: BugRowProps['viewers']
+      bug?: BugWithMeta
+    }) {
       return (
         <div>
           <span>Parent revision {revision}</span>
-          <BugRow {...props} picked={picked} />
+          <BugRow
+            {...props}
+            bug={bug}
+            viewers={viewers.map((viewer) => ({ ...viewer }))}
+            picked={picked}
+          />
         </div>
       )
     }
 
     onRowRender.mockClear()
     const { rerender } = render(<Parent revision={0} />)
-    expect(onRowRender).toHaveBeenCalledTimes(1)
+    expect(onRowRender).toHaveBeenCalledTimes(2)
 
     rerender(<Parent revision={1} />)
     expect(screen.getByText('Parent revision 1')).toBeInTheDocument()
-    expect(onRowRender).toHaveBeenCalledTimes(1)
+    expect(onRowRender).toHaveBeenCalledTimes(2)
 
     rerender(<Parent revision={2} picked />)
-    expect(onRowRender).toHaveBeenCalledTimes(2)
+    expect(onRowRender).toHaveBeenCalledTimes(4)
     expect(screen.getByLabelText('Picked')).toBeInTheDocument()
+
+    const viewers = [...props.viewers, { ...props.viewers[0], user_id: 'grace' }]
+    rerender(<Parent revision={3} picked viewers={viewers} />)
+    expect(onRowRender).toHaveBeenCalledTimes(7)
+    expect(screen.getByTitle('Grace is viewing')).toBeInTheDocument()
+
+    rerender(
+      <Parent
+        revision={4}
+        picked
+        viewers={viewers}
+        bug={{ ...props.bug, title: 'Updated login' }}
+      />,
+    )
+    expect(onRowRender).toHaveBeenCalledTimes(10)
+    expect(screen.getByRole('option', { name: '#1 Updated login' })).toBeInTheDocument()
   })
 
   it('shows the assignee in the trailing person slot after the time, instead of the filer', () => {
