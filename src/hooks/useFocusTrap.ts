@@ -3,6 +3,8 @@ import { useEffect, type RefObject } from 'react'
 const FOCUSABLE =
   'a[href],button:not(:disabled),input:not(:disabled),select,textarea,[tabindex]:not([tabindex="-1"])'
 
+const stack: HTMLElement[] = []
+
 /**
  * Traps keyboard focus inside `ref` while `active`. Focuses the first focusable
  * element on activation, wraps Tab / Shift+Tab, and restores the previously
@@ -12,6 +14,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
   useEffect(() => {
     const root = ref.current
     if (!active || !root) return
+    stack.push(root)
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
 
     const focusables = () =>
@@ -28,6 +31,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab' || event.isComposing) return
+      if (stack[stack.length - 1] !== root) return
       const items = focusables()
       if (items.length === 0) {
         event.preventDefault()
@@ -51,6 +55,8 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
+      const at = stack.lastIndexOf(root)
+      if (at >= 0) stack.splice(at, 1)
       if (previous?.isConnected) previous.focus()
     }
   }, [ref, active])

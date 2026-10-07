@@ -135,4 +135,41 @@ describe('useFocusTrap', () => {
     rerender(<Harness show={false} />)
     expect(document.activeElement).toBe(screen.getByText('outside'))
   })
+
+  it('only the topmost of nested traps handles Tab', () => {
+    function Nested({ inner }: { inner: boolean }) {
+      const lower = useRef<HTMLDivElement>(null)
+      const upper = useRef<HTMLDivElement>(null)
+      useFocusTrap(lower)
+      return (
+        <>
+          <div ref={lower}>
+            <button>l1</button>
+            <button>l2</button>
+          </div>
+          {inner && <Upper innerRef={upper} />}
+        </>
+      )
+    }
+    function Upper({ innerRef }: { innerRef: React.RefObject<HTMLDivElement | null> }) {
+      useFocusTrap(innerRef)
+      return (
+        <div ref={innerRef}>
+          <button>u1</button>
+          <button>u2</button>
+        </div>
+      )
+    }
+    const { rerender } = render(<Nested inner={false} />)
+    rerender(<Nested inner />)
+    expect(document.activeElement).toBe(screen.getByText('u1'))
+    screen.getByText('u2').focus()
+    fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
+    expect(document.activeElement).toBe(screen.getByText('u1'))
+    rerender(<Nested inner={false} />)
+    expect(document.activeElement).toBe(screen.getByText('l1'))
+    screen.getByText('l2').focus()
+    fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
+    expect(document.activeElement).toBe(screen.getByText('l1'))
+  })
 })
