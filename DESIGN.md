@@ -819,3 +819,6 @@ Notes for implementers:
 ## 9. Progress log
 
 - 2026-10-07: Direction "Specimen" written (research, identity, tokens, voice, surfaces, IA). Brief v2 amendments added. Baseline screenshots captured (73 shots; 375/768/1280/1920 × light/dark).
+- 2026-10-07: Critique round 0 on the baseline (`.orch/critique/round0.md`): 4 P0s (landing/404/auth never reachable in demo capture, placeholder legal copy live, broken demo attachments, dark accent-button contrast) and a stock purple/Inter look across every surface.
+- 2026-10-07: D2 landed the foundation: IBM Plex Sans/Mono self-hosted (Inter removed), paper/darkroom tokens, grain, cabinet light, glass, focus ring, scrollbars, reduced motion, schemes reduced to accent-only (purple retired). Several status/severity colours darkened to pass AA.
+- 2026-10-07: Restyle passes started: brand mark and UI primitives (B1), bug detail and Claude panel (S2), capture bar, palette, dialogs and toasts (S3), settings, auth and onboarding (S4).
