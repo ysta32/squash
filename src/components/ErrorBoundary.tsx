@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
 import { Bug } from 'lucide-react'
 
 const CHUNK_ERROR =
@@ -11,6 +11,23 @@ function isChunkLoadError(error: unknown): boolean {
 
 interface Props {
   children: ReactNode
+  /** When this changes while the fallback is showing, the boundary retries its children. */
+  resetKey?: string
+}
+
+/**
+ * Render inside Suspense next to the routes: once real content has committed, a later deploy
+ * may auto-reload again, so the reload-once flag is cleared.
+ */
+export function ChunkReloadReset() {
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem(RELOAD_FLAG)
+    } catch {
+      // Storage unavailable: nothing to clear.
+    }
+  }, [])
+  return null
 }
 
 interface State {
@@ -20,6 +37,14 @@ interface State {
 /** Catches render crashes and shows a recovery screen instead of a blank page. */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null }
+  private focusHeading = (el: HTMLHeadingElement | null) => el?.focus()
+
+  componentDidUpdate(prev: Props, prevState: State) {
+    const { error } = this.state
+    if (error && prev.resetKey !== this.props.resetKey && prevState.error === error) {
+      this.setState({ error: null })
+    }
+  }
 
   static getDerivedStateFromError(error: Error): State {
     return { error }
@@ -47,11 +72,13 @@ export class ErrorBoundary extends Component<Props, State> {
     const githubUrl: string = import.meta.env.VITE_GITHUB_URL || ''
     const details = `${error.name}: ${error.message}${error.stack ? `\n\n${error.stack}` : ''}`
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-bg p-6 text-fg">
+      <main role="alert" className="flex min-h-dvh items-center justify-center bg-bg p-6 text-fg">
         <div className="w-full max-w-md rounded-xl border border-border bg-bg-subtle p-6">
           <div className="mb-4 flex items-center gap-2 font-semibold">
             <Bug className="h-5 w-5 text-accent" aria-hidden="true" />
-            Something went wrong
+            <h1 ref={this.focusHeading} tabIndex={-1} className="font-semibold outline-none">
+              Something went wrong
+            </h1>
           </div>
           <p className="text-sm text-muted">
             Squash hit an unexpected error. Reloading usually fixes it, and your bugs are safe.

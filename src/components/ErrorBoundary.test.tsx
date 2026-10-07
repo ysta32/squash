@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { MemoryRouter, Link, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ErrorBoundary } from './ErrorBoundary'
+import { ChunkReloadReset, ErrorBoundary } from './ErrorBoundary'
 
 function Boom({ message }: { message: string }): never {
   throw new Error(message)
@@ -57,7 +58,7 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
   })
 
-  it('resets when keyed by a new route', () => {
+  it('resets an errored boundary when resetKey changes', () => {
     function Page() {
       const { pathname } = useLocation()
       return pathname === '/bad' ? <Boom message="bad page" /> : <p>fine page</p>
@@ -67,7 +68,7 @@ describe('ErrorBoundary', () => {
       return (
         <>
           <Link to="/ok">go ok</Link>
-          <ErrorBoundary key={pathname}>
+          <ErrorBoundary resetKey={pathname}>
             <Page />
           </ErrorBoundary>
         </>
@@ -81,5 +82,53 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Something went wrong')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: 'go ok' }))
     expect(screen.getByText('fine page')).toBeInTheDocument()
+  })
+
+  it('keeps a healthy child mounted (state intact) across a resetKey change', () => {
+    function Counter() {
+      const [n, setN] = useState(0)
+      return <button onClick={() => setN(n + 1)}>count {n}</button>
+    }
+    function Shell() {
+      const { pathname } = useLocation()
+      return (
+        <>
+          <Link to="/other">go other</Link>
+          <ErrorBoundary resetKey={pathname}>
+            <Counter />
+          </ErrorBoundary>
+        </>
+      )
+    }
+    render(
+      <MemoryRouter initialEntries={['/a']}>
+        <Shell />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'count 0' }))
+    fireEvent.click(screen.getByRole('link', { name: 'go other' }))
+    expect(screen.getByRole('button', { name: 'count 1' })).toBeInTheDocument()
+  })
+
+  it('announces the fallback with an h1 that receives focus', () => {
+    render(
+      <ErrorBoundary>
+        <Boom message="kaput" />
+      </ErrorBoundary>,
+    )
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    const heading = screen.getByRole('heading', { level: 1, name: 'Something went wrong' })
+    expect(heading).toHaveFocus()
+  })
+
+  it('clears the reload flag once content commits, and tolerates broken storage', () => {
+    sessionStorage.setItem('squash:chunk-reload', '1')
+    const { unmount } = render(<ChunkReloadReset />)
+    expect(sessionStorage.getItem('squash:chunk-reload')).toBeNull()
+    unmount()
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('denied')
+    })
+    expect(() => render(<ChunkReloadReset />)).not.toThrow()
   })
 })

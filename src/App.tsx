@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { ChunkReloadReset, ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/auth'
 import Landing from './pages/Landing'
@@ -73,7 +73,7 @@ function PrefetchWorkspace() {
 /** Resets the boundary on navigation so a crash on one page doesn't stick. */
 function RoutedBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
-  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
 }
 
 export function App() {
@@ -84,6 +84,7 @@ export function App() {
           <PrefetchWorkspace />
           <RoutedBoundary>
             <Suspense fallback={<DelayedSkeleton />}>
+              <ChunkReloadReset />
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/privacy" element={<Privacy />} />
