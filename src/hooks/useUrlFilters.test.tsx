@@ -64,9 +64,17 @@ it('supports the functional updater', () => {
 it('replaces history while typing a search and pushes other changes', () => {
   const { result } = setup('/app/w')
   act(() => result.current.setFilters((f) => ({ ...f, query: 'a' })))
-  expect(result.current.type).toBe('PUSH')
+  expect(result.current.type).toBe('REPLACE')
   act(() => result.current.setFilters((f) => ({ ...f, query: 'ab' })))
   expect(result.current.type).toBe('REPLACE')
   act(() => result.current.setFilters((f) => ({ ...f, tab: 'all' })))
   expect(result.current.type).toBe('PUSH')
+  act(() => result.current.setFilters((f) => ({ ...f, tab: 'resolved', query: '' })))
+  expect(result.current.type).toBe('PUSH')
+})
+
+it('does not navigate for an unchanged update', () => {
+  const { result } = setup('/app/w?kind=feature')
+  act(() => result.current.setFilters((f) => ({ ...f })))
+  expect(result.current.type).toBe('POP')
 })

@@ -19,7 +19,7 @@ import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, useBugs } from '../hooks/useBugs'
-import { useUrlFilters } from '../hooks/useUrlFilters'
+import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
@@ -273,7 +273,9 @@ export default function Workspace() {
   }
   useEffect(() => {
     if (selectedKind === null) return
-    setFilters((f) => (f.kind === selectedKind ? f : { ...f, kind: selectedKind }))
+    setFilters((f) => (f.kind === selectedKind ? f : { ...f, kind: selectedKind }), {
+      replace: true,
+    })
   }, [selectedKind, setFilters])
 
   useEffect(() => {
@@ -780,7 +782,14 @@ export default function Workspace() {
               // Switching between Bugs and Features starts fresh: no picks, nothing open.
               if (next.kind !== filters.kind) {
                 clearPicked()
-                deselect()
+                if (hasNumberParam) {
+                  setPendingId(null)
+                  navigate({
+                    pathname: basePath,
+                    search: writeFilters(new URLSearchParams(search), next).toString(),
+                  })
+                  return
+                }
               }
               setFilters(next)
             }}

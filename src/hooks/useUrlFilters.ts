@@ -50,7 +50,7 @@ export function writeFilters(base: URLSearchParams, f: BugFilters): URLSearchPar
 /** The list filters, kept in the URL query so a view can be shared and Back restores it. */
 export function useUrlFilters(): [
   BugFilters,
-  (next: BugFilters | ((f: BugFilters) => BugFilters)) => void,
+  (next: BugFilters | ((f: BugFilters) => BugFilters), opts?: { replace?: boolean }) => void,
 ] {
   const [params, setParams] = useSearchParams()
   const filters = useMemo(() => parseFilters(params), [params])
@@ -60,16 +60,17 @@ export function useUrlFilters(): [
   }, [filters])
 
   const setFilters = useCallback(
-    (next: BugFilters | ((f: BugFilters) => BugFilters)) => {
+    (next: BugFilters | ((f: BugFilters) => BugFilters), opts?: { replace?: boolean }) => {
       const prev = latest.current
       const value = typeof next === 'function' ? next(prev) : next
-      const typingOnly = value.query !== prev.query && value.query !== '' && prev.query !== ''
-      const sameElsewhere =
+      const queryOnly =
         JSON.stringify({ ...value, query: '' }) === JSON.stringify({ ...prev, query: '' })
+      const out = writeFilters(params, value)
+      if (out.toString() === params.toString()) return
       latest.current = value
-      setParams((p) => writeFilters(p, value), { replace: typingOnly && sameElsewhere })
+      setParams(out, { replace: opts?.replace || queryOnly })
     },
-    [setParams],
+    [params, setParams],
   )
 
   return [filters, setFilters]
