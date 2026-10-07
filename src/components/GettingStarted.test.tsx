@@ -3,6 +3,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GettingStarted } from './GettingStarted'
 import { BugList, type BugListProps } from './BugList'
+import { isMac } from '../lib/utils'
+
+const PASTE = isMac ? '⌘V' : 'Ctrl+V'
 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 
@@ -30,7 +33,7 @@ describe('GettingStarted', () => {
       expect(within(list).getByText(label)).not.toHaveClass('line-through')
     }
     expect(screen.getByText('0 of 4')).toBeInTheDocument()
-    for (const key of ['⌘V', 'Enter', 'R']) {
+    for (const key of [PASTE, 'Enter', 'R']) {
       expect(within(list).getByText(key).tagName).toBe('KBD')
     }
   })
@@ -43,7 +46,7 @@ describe('GettingStarted', () => {
     expect(screen.getAllByText('To do')).toHaveLength(2)
     expect(screen.getByText('File your first bug')).toHaveClass('line-through', 'text-muted')
     expect(screen.getByText('Connect Claude Code')).toHaveClass('line-through', 'text-muted')
-    expect(screen.queryByText('⌘V')).not.toBeInTheDocument()
+    expect(screen.queryByText(PASTE)).not.toBeInTheDocument()
     rerender(<GettingStarted workspaceId="one" steps={done} />)
     expect(screen.queryByText('Get started')).not.toBeInTheDocument()
   })

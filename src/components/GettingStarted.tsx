@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, X } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { cn, isMac } from '../lib/utils'
 import { Button, Kbd } from './ui'
 
 export interface GettingStartedProps {
@@ -33,7 +33,7 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
       label: 'File your first bug',
       action: (
         <span>
-          <Kbd>⌘V</Kbd> a screenshot, then <Kbd>Enter</Kbd>
+          <Kbd>{isMac ? '⌘V' : 'Ctrl+V'}</Kbd> a screenshot, then <Kbd>Enter</Kbd>
         </span>
       ),
     },
