@@ -782,8 +782,8 @@ export default function Workspace() {
               // Switching between Bugs and Features starts fresh: no picks, nothing open.
               if (next.kind !== filters.kind) {
                 clearPicked()
+                setPendingId(null)
                 if (hasNumberParam) {
-                  setPendingId(null)
                   navigate({
                     pathname: basePath,
                     search: writeFilters(new URLSearchParams(search), next).toString(),
