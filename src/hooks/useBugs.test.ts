@@ -20,6 +20,7 @@ const h = vi.hoisted(() => {
     selectResult: { data: [] as unknown[], error: null } as Result,
     insertResult: { data: null, error: null } as Result,
     inserted: [] as unknown[],
+    insertFailOnce: null as Result | null,
     resolveInsert: null as null | ((r: Result) => void),
     deferInsert: false,
     selectCalls: 0,
@@ -63,21 +64,29 @@ vi.mock('../lib/supabase', () => {
         return {
           select: () => ({
             single: () =>
-              state.deferInsert
-                ? new Promise<Result>((resolve) => {
-                    state.resolveInsert = resolve
-                  })
-                : Promise.resolve(
-                    state.insertResult.data
-                      ? {
-                          data: {
-                            ...(state.insertResult.data as object),
-                            id: (row as { id: string }).id,
-                          },
-                          error: null,
-                        }
-                      : state.insertResult,
-                  ),
+              state.insertFailOnce
+                ? Promise.resolve(
+                    (() => {
+                      const fail = state.insertFailOnce as Result
+                      state.insertFailOnce = null
+                      return fail
+                    })(),
+                  )
+                : state.deferInsert
+                  ? new Promise<Result>((resolve) => {
+                      state.resolveInsert = resolve
+                    })
+                  : Promise.resolve(
+                      state.insertResult.data
+                        ? {
+                            data: {
+                              ...(state.insertResult.data as object),
+                              id: (row as { id: string }).id,
+                            },
+                            error: null,
+                          }
+                        : state.insertResult,
+                    ),
           }),
         }
       },
@@ -351,6 +360,29 @@ describe('useBugs', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.counts).toEqual({ open: 1, resolved: 1, all: 2 })
     expect(h.state.channels.map((c) => c.topic)).toContain('ws:ws1:bugs')
+  })
+
+  it('fileBug retries without context when the server lacks the column (migration 0007 pending)', async () => {
+    h.state.insertResult = { data: bug({ id: 'tmp', number: 9 }), error: null }
+    h.state.insertFailOnce = {
+      data: null,
+      error: { code: 'PGRST204', message: "Could not find the 'context' column of 'bugs'" },
+    } as unknown as Result
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.fileBug({
+        description: 'Old server',
+        context: { browser: 'Chrome 131' },
+        transcript: null,
+        severity: 'low',
+        kind: 'bug',
+        files: [],
+      })
+    })
+    expect(h.state.inserted).toHaveLength(2)
+    expect((h.state.inserted[1] as { row: object }).row).not.toHaveProperty('context')
+    expect(result.current.bugs[0].number).toBe(9)
   })
 
   it('fileBug inserts optimistically and clears the optimistic flag once the insert resolves', async () => {

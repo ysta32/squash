@@ -86,6 +86,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 /** Maps DB/storage/compression error codes (raised as the message) to user-facing text. */
+/** PostgREST's error when a column is missing from the schema (e.g. a migration not yet applied). */
+export function isMissingColumn(error: unknown, column: string): boolean {
+  if (!error || typeof error !== 'object') return false
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  const text = typeof message === 'string' ? message : ''
+  return (code === 'PGRST204' || code === '42703') && text.includes(column)
+}
+
 export function friendlyError(err: unknown, fallback = 'Something went wrong. Try again.'): string {
   const message =
     err instanceof Error
@@ -842,21 +850,24 @@ export function useBugs(
       let inserted: BugRow | null = null
       let failure: unknown = null
       try {
-        const { data, error } = await supabase
-          .from('bugs')
-          .insert({
-            id,
-            workspace_id: ws,
-            title,
-            description,
-            transcript,
-            context,
-            severity: input.severity,
-            kind: input.kind,
-            filed_by: filedBy,
-          })
-          .select()
-          .single()
+        const row = {
+          id,
+          workspace_id: ws,
+          title,
+          description,
+          transcript,
+          context,
+          severity: input.severity,
+          kind: input.kind,
+          filed_by: filedBy,
+        }
+        let { data, error } = await supabase.from('bugs').insert(row).select().single()
+        if (error && context && isMissingColumn(error, 'context')) {
+          // The server hasn't run migration 0007 yet: file the bug without its context.
+          const { context: _omit, ...withoutContext } = row
+          void _omit
+          ;({ data, error } = await supabase.from('bugs').insert(withoutContext).select().single())
+        }
         if (error) failure = error
         else inserted = data
       } catch (err) {

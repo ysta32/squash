@@ -2,9 +2,30 @@
 
 ## Unreleased
 
+## v1.7.0 — 2026-10-07
+
+Context on every bug, editable comments, a deletion log you can read, and a Claude Code helper that only talks to your own storage.
+
+### Added
+
+- Bugs now record where they happened. When you file a bug, Squash notes your browser, OS and window size, and picks up the first link in the description as the page URL (shown as a chip in the capture bar that you can remove before filing). The bug shows this as a compact line under its title, with the URL as a link, and it is included in exports and in what Claude Code receives.
+- Edit or delete your own comments. Comments show "edited" after a change, and <kbd>Esc</kbd> cancels an edit.
+- Workspace settings has a "Recently deleted" section listing the last 50 deleted bugs and feature requests (number, title, who deleted it and when). Deleted bugs are gone for good; only this record stays.
+
 ### Fixed
 
 - A page that crashes now shows a "Something went wrong" screen with Reload, a link back to your workspaces and error details, instead of a blank page. If a new deploy replaces the page's files, Squash reloads once by itself to pick up the update.
+
+### Security
+
+- Editing or deleting a comment also updates or clears its text in the activity log, so the old text can't be read there. Live updates no longer carry the full old row of a comment or activity event.
+- The Claude Code helper (v6) only downloads screenshots from your own app's Supabase storage. The install command now records your project's storage host, and the helper rejects other Supabase projects, other ports and encoded path tricks, including across redirects. Older installs keep the previous rule and print a warning; rerun the install command from the Claude page to update.
+
+**Needs migrations `0006_comment_edit.sql` and `0007_bug_context.sql`.** Run them after `0001`–`0005` (see MAINTAINER.md → Applying migrations to production). Until `0007` runs, bugs are filed without their context; until `0006` runs, editing and deleting comments is refused by the server.
+
+### Developer
+
+- `npm run qa:shots` captures screenshots of every main page at 375, 768, 1280 and 1920 px in light and dark mode, with a contact sheet, for visual review.
 
 ## v1.6.0 — 2026-10-07
 
