@@ -81,10 +81,17 @@ Paste a screenshot anywhere on the page with <kbd>⌘V</kbd> / <kbd>Ctrl+V</kbd>
   <img src="docs/screenshots/capture-light.png" width="100%" alt="The capture bar with a typed description and an attached screenshot, above the live bug list" />
 </picture>
 
+- **Mark it up first.** Click a staged screenshot to draw arrows, boxes and freehand strokes on it (<kbd>A</kbd>, <kbd>B</kbd>, <kbd>P</kbd>; <kbd>⌘Z</kbd> to undo), then file the marked-up image.
 - **Paste, drop, pick or shoot.** Drag-and-drop and a file picker work too, and the picker opens the camera on mobile.
 - **Small uploads, automatically.** Images are compressed in the browser to WebP: at most 1920 px on the long edge, a target of 300 KB, and a 5 MB cap per original.
 - **Talk instead of typing.** Voice dictation uses the Web Speech API with a live transcript, in Chrome, Edge and Safari.
 - **File from any app on macOS.** Press <kbd>⌃⌥S</kbd>, drag over what's broken, and Squash comes to the front with the screenshot ready to paste. [Set up the hotkey ↓](#global-capture-hotkey-macos)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/annotate-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/annotate-light.png" />
+  <img src="docs/screenshots/annotate-light.png" width="100%" alt="The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button" />
+</picture>
 
 <br />
 
@@ -146,7 +153,7 @@ curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://
 - **Assignees.** Give a bug an owner from the detail view, the command palette or one keypress (<kbd>I</kbd> takes it yourself). The list shows who owns what, and you can filter to what's yours or what nobody has picked up.
 - **Notifications that respect focus.** When Squash is in a background tab, a teammate filing a bug or assigning you one raises a desktop notification and an unread count in the tab title. Turn it on in Settings.
 - **Bugs and Features side by side.** File and track feature requests in their own tab, and move items between the two.
-- **Find anything.** Open, Resolved and All tabs with live counts; filter by assignee, by who filed or resolved, or by severity; full-text search across titles, descriptions and voice transcripts.
+- **Find anything.** Open, Resolved and All tabs with live counts, kept in the URL so a filtered view can be shared; filter by assignee, by who filed or resolved, or by severity; full-text search across titles, descriptions and voice transcripts.
 - **A full history.** Resolve or reopen with an optional note, or delete outright. Each bug has an activity timeline and comments.
 - **Markdown and mentions.** Descriptions and comments render bold, italics, code, lists, quotes and links, and `@name` mentions, which autocomplete from your teammates as you type (any script, IME friendly). Rendering is React-only, so no HTML from a bug ever reaches the page.
 - **Export.** Download the bugs you are looking at as CSV (safe to open in a spreadsheet) or as a Markdown report.

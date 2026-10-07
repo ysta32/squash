@@ -109,7 +109,7 @@ describe('Landing', () => {
   it('shows sized product screenshots with alt text, lazy below the fold', () => {
     renderLanding()
     const images = screen.getAllByRole('img')
-    expect(images).toHaveLength(5)
+    expect(images).toHaveLength(6)
     for (const img of images) {
       expect(img.getAttribute('alt')?.length).toBeGreaterThan(20)
       expect(img).toHaveAttribute('src', expect.stringMatching(/^\/product\/[a-z-]+\.webp$/))

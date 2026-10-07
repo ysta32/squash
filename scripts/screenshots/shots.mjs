@@ -110,7 +110,7 @@ export function shots({ desktop, mobile }) {
       viewport: desktop,
       theme,
       before: async (page) => {
-        await capture(page)
+        await page.getByTestId('file-input').setInputFiles(fixture('checkout-desktop.png'))
         await page
           .getByRole('button', { name: /^Mark up / })
           .first()
@@ -130,9 +130,9 @@ export function shots({ desktop, mobile }) {
           await page.mouse.up()
         }
         await page.keyboard.press('b')
-        await drag(at(0.05, 0.75), at(0.95, 0.985))
+        await drag(at(0.012, 0.865), at(0.988, 0.992))
         await page.keyboard.press('a')
-        await drag(at(0.78, 0.5), at(0.62, 0.72))
+        await drag(at(0.36, 0.8), at(0.59, 0.67))
         await page.waitForTimeout(200)
       },
       clip: async (page) => {
