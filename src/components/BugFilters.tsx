@@ -1,19 +1,58 @@
-import { ChevronDown, X } from 'lucide-react'
+import { useCallback, useId, useRef, useState } from 'react'
+import { ChevronDown, Download, X } from 'lucide-react'
+import { useDismiss } from '../hooks/useDismiss'
 import type { BugFilters as Filters } from '../hooks/useBugs'
+import { bugsToCsv, bugsToMarkdown, downloadText } from '../lib/export'
 import { SEVERITIES, SEVERITY_LABEL } from '../lib/types'
-import type { WorkspaceMember } from '../lib/types'
+import type { BugWithMeta, WorkspaceMember } from '../lib/types'
+import { Button, inputClass } from './ui'
 
 export interface BugFiltersProps {
   filters: Filters
   onFilters: (filters: Filters) => void
   members: WorkspaceMember[]
+  bugs?: BugWithMeta[]
+  workspaceName?: string
+  onExport?: (format: 'csv' | 'md') => void
 }
 
-const selectClass =
-  't max-w-40 appearance-none rounded-md border border-border bg-bg py-1.5 pl-2 pr-7 text-xs text-muted hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent'
+const selectClass = `${inputClass} h-auto w-auto max-w-40 appearance-none py-1.5 pl-2 pr-7 text-xs text-muted hover:text-fg`
 
-export function BugFilters({ filters, onFilters, members }: BugFiltersProps) {
+export function BugFilters({
+  filters,
+  onFilters,
+  members,
+  bugs = [],
+  workspaceName,
+  onExport,
+}: BugFiltersProps) {
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
+  const closeExport = useCallback(() => setExportOpen(false), [])
+  useDismiss(exportRef, closeExport, exportOpen)
   const active = filters.filedBy || filters.resolvedBy || filters.severity || filters.query
+
+  function exportBugs(format: 'csv' | 'md'): void {
+    closeExport()
+    triggerRef.current?.focus()
+    if (onExport) {
+      onExport(format)
+    } else if (workspaceName !== undefined) {
+      const slug =
+        workspaceName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'workspace'
+      const date = new Date().toISOString().slice(0, 10)
+      downloadText(
+        `squash-${slug}-${date}.${format}`,
+        format === 'csv' ? bugsToCsv(bugs) : bugsToMarkdown(bugs, workspaceName),
+        format === 'csv' ? 'text/csv;charset=utf-8' : 'text/markdown;charset=utf-8',
+      )
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -65,16 +104,72 @@ export function BugFilters({ filters, onFilters, members }: BugFiltersProps) {
         />
       </label>
       {active && (
-        <button
-          type="button"
-          className="t inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() =>
             onFilters({ ...filters, filedBy: null, resolvedBy: null, severity: null, query: '' })
           }
         >
           <X size={12} aria-hidden="true" /> Clear
-        </button>
+        </Button>
       )}
+      <div ref={exportRef} className="relative">
+        <Button
+          ref={triggerRef}
+          variant="ghost"
+          size="sm"
+          aria-haspopup="menu"
+          aria-expanded={exportOpen}
+          aria-controls={exportOpen ? menuId : undefined}
+          onClick={() => setExportOpen((open) => !open)}
+        >
+          <Download size={14} aria-hidden="true" /> Export
+        </Button>
+        {exportOpen && (
+          <div
+            id={menuId}
+            role="menu"
+            aria-label="Export bugs"
+            className="absolute right-0 top-full z-30 mt-1 w-36 rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated"
+            onKeyDown={(event) => {
+              const items = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+              )
+              const index = items.indexOf(document.activeElement as HTMLButtonElement)
+              if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                event.preventDefault()
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? items.length - 1
+                      : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                items[next]?.focus()
+              } else if (event.key === 'Escape') {
+                triggerRef.current?.focus()
+              }
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) closeExport()
+            }}
+          >
+            {(['csv', 'md'] as const).map((format, index) => (
+              <Button
+                key={format}
+                autoFocus={index === 0}
+                role="menuitem"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                onClick={() => exportBugs(format)}
+              >
+                {format === 'csv' ? 'CSV' : 'Markdown'}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
