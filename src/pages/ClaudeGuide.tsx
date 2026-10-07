@@ -324,6 +324,21 @@ export default function ClaudeGuide() {
             </details>
             <details className="py-3">
               <summary className="focus-ring cursor-pointer rounded-md font-medium">
+                “Screenshot URLs must be https links to Supabase storage”
+              </summary>
+              <div className="mt-2 text-muted">
+                The helper only downloads screenshots from{' '}
+                <code className={code}>*.supabase.co</code> and{' '}
+                <code className={code}>*.supabase.in</code>. For self-hosted Supabase or a custom
+                domain, start it with{' '}
+                <code className={cn(code, 'break-all')}>
+                  SQUASH_DOWNLOAD_HOSTS=files.example.com
+                </code>{' '}
+                (a comma-separated list of exact host names).
+              </div>
+            </details>
+            <details className="py-3">
+              <summary className="focus-ring cursor-pointer rounded-md font-medium">
                 Check the helper by hand
               </summary>
               <div className="mt-2 text-muted">

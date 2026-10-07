@@ -1,8 +1,9 @@
 // @vitest-environment node
 /// <reference types="node" />
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ClaudeRun } from './claudeExport'
 
@@ -25,12 +26,16 @@ interface Bridge {
     maxRunning?: number
     maxLaunches?: number
     windowMs?: number
-    isRunning?: (dir: string | null, ageMs: number, since: number) => boolean
+    isRunning?: (run: string, msSinceLaunch: number) => boolean
     now?: () => number
   }): {
-    acquire(): { track(dir: string): void; release(): void } | null
+    acquire(): { track(run: string): void; release(): void } | null
     readonly running: number
   }
+  isReservedName(file: string): boolean
+  runnerPidFile(batchDir: string, runId: string): string
+  pidAlive(pid: number): boolean
+  runnerLive(pidFile: string, msSinceLaunch: number, graceMs?: number): boolean
 }
 
 // The bridge is a standalone script served from /bridge; importing it must not start the server.
@@ -317,17 +322,35 @@ describe('createLaunchLimiter', () => {
     const limiter = bridge.createLaunchLimiter({
       maxRunning: 2,
       now: () => t,
-      isRunning: (dir, ageMs) => ageMs < 1000 && !(dir && done.has(dir)),
+      isRunning: (run, msSinceLaunch) => msSinceLaunch < 1000 && !done.has(run),
     })
     limiter.acquire()!.track('/a')
     limiter.acquire()!.track('/b')
     expect(limiter.acquire()).toBeNull()
     done.add('/a')
-    expect(limiter.acquire()).not.toBeNull()
+    const third = limiter.acquire()
+    expect(third).not.toBeNull()
     expect(limiter.acquire()).toBeNull()
+    t = 500
+    third!.track('/c')
     t = 1000
+    // '/b' (launched at 0) has expired; '/c' (launched at 500) still runs.
     expect(limiter.acquire()).not.toBeNull()
-    expect(limiter.running).toBe(1)
+    expect(limiter.running).toBe(2)
+  })
+
+  it('always counts a slot that is still preparing, however long it takes', () => {
+    let t = 0
+    const limiter = bridge.createLaunchLimiter({
+      maxRunning: 1,
+      now: () => t,
+      isRunning: () => false,
+    })
+    const slot = limiter.acquire()
+    t = 10 * 60 * 60_000
+    expect(limiter.acquire()).toBeNull()
+    slot!.track('/a')
+    expect(limiter.acquire()).not.toBeNull()
   })
 
   it('allows at most maxLaunches per window, even when runs finish', () => {
@@ -356,5 +379,76 @@ describe('createLaunchLimiter', () => {
     expect(limiter.acquire()).toBeNull()
     first!.release()
     expect(limiter.acquire()).not.toBeNull()
+  })
+})
+
+describe('isReservedName', () => {
+  it('reserves the files the bridge and runner use, in any case', () => {
+    for (const name of [
+      'done.json',
+      'DONE.json',
+      'result.json',
+      'run.json',
+      'applied',
+      'prompt.md',
+      'events.jsonl',
+      'settings.json',
+      'claude.log',
+      'runner.log',
+      'runner.pid',
+      'runs.json',
+      'runner-0123456789abcdef0123456789abcdef.pid',
+    ]) {
+      expect(bridge.isReservedName(name), name).toBe(true)
+    }
+  })
+
+  it('allows ordinary screenshot names', () => {
+    for (const name of ['bug-12-1.png', 'done.png', 'result-shot.jpeg', 'runner.png']) {
+      expect(bridge.isReservedName(name), name).toBe(false)
+    }
+  })
+
+  it('gives each launch its own pid file', () => {
+    const a = bridge.runnerPidFile('/p/.squash/bugs/b', 'a'.repeat(32))
+    const b = bridge.runnerPidFile('/p/.squash/bugs/b', 'b'.repeat(32))
+    expect(a).not.toBe(b)
+    expect(bridge.isReservedName(basename(a))).toBe(true)
+  })
+})
+
+describe('runnerLive', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'squash-runner-'))
+  const deadPid = spawnSync(process.execPath, ['-e', '']).pid!
+
+  it('tells live and dead pids apart', () => {
+    expect(bridge.pidAlive(process.pid)).toBe(true)
+    expect(bridge.pidAlive(deadPid)).toBe(false)
+    expect(bridge.pidAlive(0)).toBe(false)
+    expect(bridge.pidAlive(Number.NaN)).toBe(false)
+  })
+
+  it('holds the slot while the runner process is alive, with no time limit', () => {
+    const file = join(dir, 'live.pid')
+    writeFileSync(file, String(process.pid))
+    expect(bridge.runnerLive(file, 0)).toBe(true)
+    expect(bridge.runnerLive(file, 48 * 60 * 60_000)).toBe(true)
+  })
+
+  it('frees the slot as soon as the runner has exited (e.g. its window was closed)', () => {
+    const file = join(dir, 'dead.pid')
+    writeFileSync(file, String(deadPid))
+    expect(bridge.runnerLive(file, 0)).toBe(false)
+  })
+
+  it('waits a grace period for a runner that has not written its pid yet', () => {
+    const missing = join(dir, 'missing.pid')
+    expect(bridge.runnerLive(missing, 0, 30_000)).toBe(true)
+    expect(bridge.runnerLive(missing, 29_999, 30_000)).toBe(true)
+    expect(bridge.runnerLive(missing, 30_000, 30_000)).toBe(false)
+    const empty = join(dir, 'empty.pid')
+    writeFileSync(empty, '')
+    expect(bridge.runnerLive(empty, 0, 30_000)).toBe(true)
+    expect(bridge.runnerLive(empty, 30_000, 30_000)).toBe(false)
   })
 })

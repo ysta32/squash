@@ -26,12 +26,14 @@ import {
   existsSync,
   fstatSync,
   openSync,
+  readFileSync,
   readSync,
   realpathSync,
   statSync,
 } from 'node:fs'
 import { appendFile, chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
@@ -72,8 +74,9 @@ const MAX_REDIRECTS = 3
 const MAX_RUNNING = 3
 const MAX_LAUNCHES = 20
 const LAUNCH_WINDOW_MS = 10 * 60_000
-// A run that never reports done (its window was closed, the machine slept…) frees its slot after this.
-const MAX_RUN_MS = 2 * 60 * 60_000
+// A launched run holds its slot while its runner process is alive. A runner that has not written its
+// pid file this long after launch never started (or its window was closed first) and frees the slot.
+const RUNNER_START_GRACE_MS = 60_000
 // Files the bridge writes hold prompts, screenshots and paths: only this user may read them.
 const FILE_MODE = 0o600
 const DIR_MODE = 0o700
@@ -82,6 +85,22 @@ const RUN_FILE = 'run.json' // claude flags for the runner
 const RESULT_FILE = 'result.json' // written by Claude as its last step
 const DONE_FILE = 'done.json' // written by the runner when Claude exits
 const CLAIM_FILE = 'applied' // created by the Squash tab that applied the result
+// Names the bridge or runner use in a batch folder; screenshots may not take them.
+const RESERVED_FILES = new Set([
+  RUN_FILE,
+  RESULT_FILE,
+  DONE_FILE,
+  CLAIM_FILE,
+  'prompt.md',
+  'events.jsonl',
+  'settings.json',
+  'claude.log',
+  'runner.log',
+  'runner.pid',
+  'runs.json',
+  'bridge.json',
+])
+const RUN_ID = /^[0-9a-f]{32}$/
 const CLOSE_AFTER_MS = 4000
 
 // ── Hook mode ────────────────────────────────────────────────────────────────────────────────
@@ -386,8 +405,9 @@ export async function readCapped(res, limit) {
 /**
  * Limits claude runs: at most `maxRunning` at once and `maxLaunches` per `windowMs`.
  * `acquire()` reserves a slot synchronously (so concurrent requests cannot both take the last
- * one) and returns it, or null when busy. `slot.track(dir)` names the run's folder once known and
- * `slot.release()` frees it; a slot is also freed once `isRunning(dir, ageMs, since)` is false.
+ * one) and returns it, or null when busy. `slot.track(run)` marks it launched and
+ * `slot.release()` frees it. A launched slot is also freed once `isRunning(run, msSinceLaunch)`
+ * is false; a slot that is still preparing (not tracked yet) always counts.
  */
 export function createLaunchLimiter({
   maxRunning = MAX_RUNNING,
@@ -403,15 +423,18 @@ export function createLaunchLimiter({
       const t = now()
       while (launches.length && launches[0] <= t - windowMs) launches.shift()
       for (const slot of running) {
-        if (!isRunning(slot.dir, t - slot.since, slot.since)) running.delete(slot)
+        if (slot.launchedAt !== null && !isRunning(slot.run, t - slot.launchedAt)) {
+          running.delete(slot)
+        }
       }
       if (running.size >= maxRunning || launches.length >= maxLaunches) return null
-      const slot = { dir: null, since: t }
+      const slot = { run: null, launchedAt: null }
       running.add(slot)
       launches.push(t)
       return {
-        track(dir) {
-          slot.dir = dir
+        track(run) {
+          slot.run = run
+          slot.launchedAt = now()
         },
         release() {
           running.delete(slot)
@@ -422,6 +445,45 @@ export function createLaunchLimiter({
       return running.size
     },
   }
+}
+
+/** Whether a screenshot file name would clash with a file the bridge or runner uses. */
+export function isReservedName(file) {
+  const name = String(file).toLowerCase()
+  return RESERVED_FILES.has(name) || name.startsWith('runner-')
+}
+
+/** The pid file a runner writes for one launch (unique even when batches share a folder). */
+export function runnerPidFile(batchDir, runId) {
+  return join(batchDir, `runner-${runId}.pid`)
+}
+
+/** Whether a process with this pid exists. */
+export function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    // EPERM: it exists but belongs to someone else.
+    return err?.code === 'EPERM'
+  }
+}
+
+/**
+ * Whether a launched run still holds its slot: its runner's pid is alive, or the runner has not
+ * written its pid file yet and was launched less than `graceMs` ago.
+ */
+export function runnerLive(pidFile, msSinceLaunch, graceMs = RUNNER_START_GRACE_MS) {
+  let text
+  try {
+    text = readFileSync(pidFile, 'utf8')
+  } catch {
+    return msSinceLaunch < graceMs
+  }
+  // An empty file is a runner that is mid-write.
+  if (!text.trim()) return msSinceLaunch < graceMs
+  return pidAlive(Number(text.trim()))
 }
 
 /** Writes a file only this user can read, tightening it if it already existed. */
@@ -556,7 +618,12 @@ function validateSend(payload) {
   if (typeof prompt !== 'string' || !prompt.trim()) throw bad('Missing prompt')
   if (!Array.isArray(downloads) || downloads.length > MAX_DOWNLOADS) throw bad('Invalid downloads')
   for (const d of downloads) {
-    if (typeof d?.file !== 'string' || !SAFE_NAME.test(d.file) || d.file.includes('..')) {
+    if (
+      typeof d?.file !== 'string' ||
+      !SAFE_NAME.test(d.file) ||
+      d.file.includes('..') ||
+      isReservedName(d.file)
+    ) {
       throw bad('Invalid file name')
     }
     if (typeof d.url !== 'string' || !isAllowedDownload(d.url, DOWNLOAD_HOSTS)) {
@@ -617,7 +684,11 @@ function toolLine(block) {
   return `  • ${describeTool(block.name, block.input ?? {}, process.cwd())}`
 }
 
-async function runBatch(batchDir) {
+async function runBatch(batchDir, runId) {
+  // The bridge counts this run as running while this process is alive.
+  if (RUN_ID.test(runId ?? '')) {
+    await writePrivate(runnerPidFile(batchDir, runId), String(process.pid), { flag: 'wx' })
+  }
   const { args = [] } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
   const prompt = await readFile(join(batchDir, 'prompt.md'), 'utf8')
   const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a', mode: FILE_MODE })
@@ -703,14 +774,14 @@ function closeWhenDone(windowId, batchDir) {
 }
 
 /** Runs Claude Code on the batch: in a new Terminal window on macOS, headless elsewhere. */
-async function launch(folder, batchDir) {
+async function launch(folder, batchDir, runId) {
   await writePrivate(
     join(batchDir, 'settings.json'),
     JSON.stringify(hookSettings(batchDir), null, 2) + '\n',
   )
   await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args: CLAUDE_ARGS }))
   if (MAC) {
-    const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)}; exit`
+    const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)} ${runId}; exit`
     const windowId = await osascript(
       [
         'on run argv',
@@ -728,7 +799,7 @@ async function launch(folder, batchDir) {
     return
   }
   const log = openSync(join(batchDir, 'runner.log'), 'a', FILE_MODE)
-  const child = spawn(process.execPath, [SCRIPT, '--run', batchDir], {
+  const child = spawn(process.execPath, [SCRIPT, '--run', batchDir, runId], {
     cwd: folder,
     detached: true,
     stdio: ['ignore', log, log],
@@ -737,18 +808,9 @@ async function launch(folder, batchDir) {
   console.log(`  running headless; output in ${join(batchDir, 'claude.log')}`)
 }
 
-/** Whether the runner wrote done.json for this run (ignoring one left by an earlier run). */
-function finishedSince(dir, since) {
-  try {
-    return statSync(join(dir, DONE_FILE)).mtimeMs >= since
-  } catch {
-    return false
-  }
-}
-
-/** A run holds its slot until the runner writes done.json, or MAX_RUN_MS at most. */
+/** A launched run holds its slot while its runner process is alive. */
 const limiter = createLaunchLimiter({
-  isRunning: (dir, ageMs, since) => ageMs < MAX_RUN_MS && !(dir && finishedSince(dir, since)),
+  isRunning: (run, msSinceLaunch) => runnerLive(run.pidFile, msSinceLaunch),
 })
 
 async function handleSend(payload) {
@@ -774,8 +836,9 @@ async function handleSend(payload) {
       dir: batchDir,
       startedAt: new Date().toISOString(),
     })
-    slot.track(batchDir)
-    await launch(folder, batchDir)
+    const runId = randomBytes(16).toString('hex')
+    slot.track({ pidFile: runnerPidFile(batchDir, runId) })
+    await launch(folder, batchDir, runId)
     console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
     return { ok: true, folder }
   } catch (err) {
@@ -921,7 +984,7 @@ if (isMain()) {
     process.exit(0)
   }
   if (RUNNER) {
-    await runBatch(resolve(process.argv[3] ?? '.')).catch((err) => {
+    await runBatch(resolve(process.argv[3] ?? '.'), process.argv[4]).catch((err) => {
       console.error('✗', err instanceof Error ? err.message : err)
       process.exitCode = 1
     })
