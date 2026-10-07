@@ -22,18 +22,34 @@
 -- row filter before any BEFORE trigger fires, so a non-author's update / delete
 -- simply matches 0 rows and comments_guard never runs for them.
 --
--- Realtime: comments already has replica identity full and is in the
--- supabase_realtime publication (all operations) since 0001_init.sql. With RLS,
--- DELETE payloads carry only the primary key and cannot be filtered by bug_id,
--- so clients drop deleted comments by id.
+-- Realtime: comments is in the supabase_realtime publication (all operations)
+-- since 0001_init.sql. Its replica identity goes back to DEFAULT (primary key):
+-- with FULL, the WAL and DELETE / UPDATE old-row images would keep the text of
+-- edited and deleted comments. UPDATE payloads still carry the full new row;
+-- DELETE payloads carry only the id (they cannot be filtered by bug_id anyway),
+-- and clients drop deleted comments by id.
 --
--- The 'commented' bug_events row written on insert keeps the original text in
--- its note; bug_events stays append-only.
+-- Comment text in the activity log: every 'commented' bug_events row stores the
+-- comment body in its note. bug_events.comment_id (new, nullable) links new
+-- events to their comment, and the SECURITY DEFINER comments_redact_events
+-- trigger keeps that note in step: an edit sets it to the new body, a delete
+-- sets it to NULL, so no member can read the old text from the activity log.
+-- Events written before this migration have no comment_id; they are matched by
+-- (bug_id, actor_id = author, type 'commented', note = old body). Over-matching
+-- only touches events carrying the identical text. Existing events are NOT
+-- rewritten here (their text equals a still-visible comment body); they are
+-- redacted when their comment is next edited or deleted.
 --
 -- Re-runnable like 0001_init.sql.
 -- =============================================================================
 
 alter table public.comments add column if not exists edited_at timestamptz;
+alter table public.comments replica identity default;
+
+-- No FK: the comment row goes away on delete while its (redacted) event stays.
+alter table public.bug_events add column if not exists comment_id uuid;
+create index if not exists bug_events_comment_id_idx
+  on public.bug_events (comment_id) where comment_id is not null;
 
 -- -----------------------------------------------------------------------------
 -- Guard: only `body` may change; edited_at follows body changes (null on insert).
@@ -70,6 +86,51 @@ revoke execute on function public.comments_guard() from public, anon, authentica
 create or replace trigger comments_guard
   before insert or update on public.comments
   for each row execute function public.comments_guard();
+
+-- -----------------------------------------------------------------------------
+-- Activity log: link 'commented' events to their comment; redact on edit/delete.
+-- -----------------------------------------------------------------------------
+create or replace function public.comments_events()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.bug_events (bug_id, actor_id, type, note, comment_id)
+  values (new.bug_id, coalesce(auth.uid(), new.author_id), 'commented', new.body, new.id);
+  return null;
+end;
+$$;
+
+revoke execute on function public.comments_events() from public, anon, authenticated;
+
+-- AFTER, so it only runs for rows RLS let through. Never raises.
+create or replace function public.comments_redact_events()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_note text := case when tg_op = 'UPDATE' then new.body end;
+begin
+  update public.bug_events e
+  set note = v_note
+  where e.type = 'commented'
+    and e.bug_id = old.bug_id
+    and e.note is distinct from v_note
+    and (e.comment_id = old.id
+         or (e.comment_id is null and e.actor_id = old.author_id and e.note = old.body));
+  return null;
+end;
+$$;
+
+revoke execute on function public.comments_redact_events() from public, anon, authenticated;
+
+create or replace trigger comments_redact_events
+  after update of body or delete on public.comments
+  for each row execute function public.comments_redact_events();
 
 -- -----------------------------------------------------------------------------
 -- Policies

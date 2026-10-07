@@ -255,6 +255,8 @@ export type Database = {
           type: BugEventTypeEnum
           note: string | null
           created_at: string
+          /** 'commented' events only: the comment (its note is redacted on edit/delete). */
+          comment_id: string | null
         }
         /** Inserted only by triggers; no client INSERT policy exists. */
         Insert: {

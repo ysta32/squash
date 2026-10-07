@@ -724,6 +724,68 @@ do $$ begin
     raise exception 'FAIL[78]: deleted comments still present'; end if;
 end $$;
 
+-- ===== Comment text in the activity log is redacted on edit / delete (0006) =====
+:as_b
+-- [79] a new comment's event is linked to it; editing replaces the event text
+do $$ declare cid uuid; begin
+  insert into public.comments (bug_id, author_id, body)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'secret one') returning id into cid;
+  perform set_config('t.cm_r', cid::text, true);
+  if not exists (select 1 from public.bug_events where comment_id = cid and type = 'commented' and note = 'secret one') then
+    raise exception 'FAIL[79]: commented event not linked to its comment'; end if;
+  update public.comments set body = 'public v2' where id = cid;
+end $$;
+:as_a
+do $$ begin
+  if exists (select 1 from public.bug_events where note = 'secret one') then
+    raise exception 'FAIL[79]: original text still readable after edit'; end if;
+  if not exists (select 1 from public.bug_events where comment_id = current_setting('t.cm_r')::uuid and note = 'public v2') then
+    raise exception 'FAIL[79]: event text not updated to the edited body'; end if;
+end $$;
+:as_b
+delete from public.comments where id = current_setting('t.cm_r')::uuid;
+:as_a
+-- [80] deleting the comment clears the event text (the event itself stays)
+do $$ begin
+  if exists (select 1 from public.bug_events where note in ('secret one', 'public v2')) then
+    raise exception 'FAIL[80]: deleted comment text still readable'; end if;
+  if not exists (select 1 from public.bug_events where comment_id = current_setting('t.cm_r')::uuid and note is null) then
+    raise exception 'FAIL[80]: commented event missing or not redacted'; end if;
+end $$;
+-- [81] legacy events (no comment_id) are redacted by author + identical text, on edit and on delete
+:as_b
+do $$ declare cid uuid; begin
+  insert into public.comments (bug_id, author_id, body)
+    values (current_setting('t.bug1')::uuid, '10000000-0000-0000-0000-000000000002', 'legacy secret') returning id into cid;
+  perform set_config('t.cm_l', cid::text, true);
+end $$;
+:as_pg
+update public.bug_events set comment_id = null where comment_id = current_setting('t.cm_l')::uuid;
+:as_b
+update public.comments set body = 'legacy v2' where id = current_setting('t.cm_l')::uuid;
+:as_a
+do $$ begin
+  if exists (select 1 from public.bug_events where note = 'legacy secret') then
+    raise exception 'FAIL[81]: legacy event kept the original text after edit'; end if;
+end $$;
+:as_b
+delete from public.comments where id = current_setting('t.cm_l')::uuid;
+:as_a
+do $$ begin
+  if exists (select 1 from public.bug_events where note in ('legacy secret', 'legacy v2')) then
+    raise exception 'FAIL[81]: legacy event kept the text after delete'; end if;
+end $$;
+:as_pg
+-- [82] comments replica identity is DEFAULT; redaction / event functions are not client-callable
+do $$ begin
+  if (select relreplident from pg_class where oid = 'public.comments'::regclass) <> 'd' then
+    raise exception 'FAIL[82]: comments replica identity is not default'; end if;
+  if has_function_privilege('authenticated', 'public.comments_redact_events()', 'execute')
+     or has_function_privilege('anon', 'public.comments_redact_events()', 'execute')
+     or has_function_privilege('authenticated', 'public.comments_guard()', 'execute') then
+    raise exception 'FAIL[82]: comment trigger functions callable by clients'; end if;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

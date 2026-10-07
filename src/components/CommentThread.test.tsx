@@ -121,6 +121,22 @@ describe('CommentThread edit / delete', () => {
     expect(screen.getByText('text c1')).toBeTruthy()
   })
 
+  it('Escape cancels the edit, but not while the mention popup is open', () => {
+    render(<CommentThread bugId="b1" members={members} selfId="u2" />)
+    fireEvent.click(within(item('text c1')).getByRole('button', { name: 'Edit comment' }))
+    const box = screen.getByRole('combobox', { name: 'Edit comment' }) as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: 'hi @Be', selectionStart: 6, selectionEnd: 6 } })
+    fireEvent.select(box)
+    expect(screen.getByRole('listbox', { name: 'Mention suggestions' })).toBeTruthy()
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(screen.queryByRole('listbox', { name: 'Mention suggestions' })).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Edit comment' })).toBeTruthy()
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(screen.queryByRole('combobox', { name: 'Edit comment' })).toBeNull()
+    expect(screen.getByText('text c1')).toBeTruthy()
+    expect(editComment).not.toHaveBeenCalled()
+  })
+
   it('does not call editComment when the body is unchanged', async () => {
     render(<CommentThread bugId="b1" members={members} selfId="u2" />)
     fireEvent.click(within(item('text c1')).getByRole('button', { name: 'Edit comment' }))

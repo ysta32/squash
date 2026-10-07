@@ -246,7 +246,17 @@ function CommentItem({
           )}
         </div>
         {editing ? (
-          <div className="t mt-1 rounded-lg border border-border bg-bg focus-within:border-accent/60 focus-within:ring-3 focus-within:ring-accent/15">
+          <div
+            role="group"
+            aria-label="Editing comment"
+            onKeyDown={(e) => {
+              // The mention popup handles (and prevents) its own Escape first.
+              if (e.key !== 'Escape' || e.defaultPrevented || busy) return
+              e.preventDefault()
+              setDraft(null)
+            }}
+            className="t mt-1 rounded-lg border border-border bg-bg focus-within:border-accent/60 focus-within:ring-3 focus-within:ring-accent/15"
+          >
             <MentionInput
               value={draft}
               onChange={setDraft}
