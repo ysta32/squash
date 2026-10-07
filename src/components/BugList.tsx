@@ -13,11 +13,15 @@ import { BugRow } from './BugRow'
 import { EmptyState } from './EmptyState'
 import { GettingStarted } from './GettingStarted'
 import { Skeleton } from './Skeleton'
+import { BulkBar } from './BulkBar'
+import type { BulkBarProps } from './BulkBar'
 
 export interface BugListProps {
   bugs: BugWithMeta[]
   workspaceName?: string
   loading: boolean
+  error?: string | null
+  onRetry?: () => void
   /** Status counts for the kind being shown. */
   counts: { open: number; resolved: number; all: number }
   /** Open count per kind, shown on the Bugs / Features switch. */
@@ -32,10 +36,13 @@ export interface BugListProps {
   viewersOf: (bugId: string) => PresenceUser[]
   highlightIds: Set<string>
   searchRef?: RefObject<HTMLInputElement | null>
-  /** Bugs picked for a multi-bug Claude export. */
+  /** Bugs picked for bulk actions and a multi-bug Claude export. */
   pickedIds?: Set<string>
   onTogglePick?: (id: string) => void
   onClearPicked?: () => void
+  onResolve?: BulkBarProps['onResolve']
+  onReopen?: BulkBarProps['onReopen']
+  onAssign?: BulkBarProps['onAssign']
   /** Opens Claude Code on the bugs (or the setup guide when the helper is not connected). */
   onSend?: (bugs: BugWithMeta[]) => void
   /** Copies a ready-to-paste Claude Code prompt for the bugs. */
@@ -55,6 +62,8 @@ export function BugList({
   bugs,
   workspaceName,
   loading,
+  error,
+  onRetry,
   counts,
   openByKind,
   filters,
@@ -69,6 +78,9 @@ export function BugList({
   pickedIds,
   onTogglePick,
   onClearPicked,
+  onResolve,
+  onReopen,
+  onAssign,
   onSend,
   onCopy,
   onClaudeSetup,
@@ -79,6 +91,7 @@ export function BugList({
   const { workspaceId } = useParams<{ workspaceId: string }>()
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
+  const bulkActions = onResolve && onReopen && onAssign && onClearPicked
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
   const items = filters.kind === 'feature' ? 'features' : 'bugs'
   const filtered = Boolean(
@@ -145,7 +158,7 @@ export function BugList({
               <span className={countPill}>{counts[tab]}</span>
             </button>
           ))}
-          {onSend && exportable.length > 0 && (
+          {onSend && exportable.length > 0 && !(bulkActions && picked.length > 0) && (
             <div className="ml-auto flex min-w-0 items-center gap-0.5">
               {picked.length > 0 && onClearPicked && (
                 <button
@@ -211,6 +224,20 @@ export function BugList({
             </div>
           )}
         </div>
+        {bulkActions && picked.length > 0 && (
+          <BulkBar
+            bugs={picked}
+            members={members}
+            selfId={selfId ?? ''}
+            onResolve={onResolve}
+            onReopen={onReopen}
+            onAssign={onAssign}
+            onClear={onClearPicked}
+            onSend={onSend}
+            onCopy={onCopy}
+            onClaudeSetup={claudeConnected ? onClaudeSetup : undefined}
+          />
+        )}
         <label className="relative block">
           <Search
             size={14}
@@ -245,7 +272,7 @@ export function BugList({
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={loading}>
-        {!loading && workspaceId && (
+        {!loading && !error && workspaceId && (
           <GettingStarted
             workspaceId={workspaceId}
             steps={{
@@ -258,8 +285,34 @@ export function BugList({
             onClaudeSetup={onClaudeSetup}
           />
         )}
+        {!loading && error && bugs.length > 0 && (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-muted"
+          >
+            <p>Couldn't refresh — showing saved results</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="focus-ring shrink-0 rounded-md px-2 py-1 text-accent hover:bg-bg-subtle"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {loading ? (
           <Skeleton />
+        ) : error && bugs.length === 0 ? (
+          <div role="alert" className="space-y-3 p-6 text-center">
+            <p className="text-sm text-fg">{error}</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="focus-ring rounded-md px-3 py-2 text-sm text-accent hover:bg-bg-subtle"
+            >
+              Retry
+            </button>
+          </div>
         ) : visible.length === 0 ? (
           <EmptyState
             kind={filters.kind}

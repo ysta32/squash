@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { SEVERITIES, type Severity } from '../lib/types'
-import type { BugFilters } from './useBugs'
+import type { BugFilters, BugSort } from './useBugs'
 
 export const DEFAULT_FILTERS: BugFilters = {
   kind: 'bug',
@@ -11,9 +11,12 @@ export const DEFAULT_FILTERS: BugFilters = {
   assignee: null,
   severity: null,
   query: '',
+  sort: 'newest',
 }
 
-const KEYS = ['kind', 'status', 'by', 'resolver', 'assignee', 'sev', 'q']
+const SORTS: BugSort[] = ['newest', 'oldest', 'severity', 'activity']
+
+const KEYS = ['kind', 'status', 'by', 'resolver', 'assignee', 'sev', 'q', 'sort']
 
 function orNull(v: string | null): string | null {
   return v ? v : null
@@ -22,6 +25,7 @@ function orNull(v: string | null): string | null {
 export function parseFilters(params: URLSearchParams): BugFilters {
   const status = params.get('status')
   const sev = params.get('sev')
+  const sort = params.get('sort')
   return {
     kind: params.get('kind') === 'feature' ? 'feature' : DEFAULT_FILTERS.kind,
     tab: status === 'resolved' || status === 'all' ? status : DEFAULT_FILTERS.tab,
@@ -30,6 +34,7 @@ export function parseFilters(params: URLSearchParams): BugFilters {
     assignee: orNull(params.get('assignee')),
     severity: SEVERITIES.includes(sev as Severity) ? (sev as Severity) : null,
     query: params.get('q') ?? '',
+    sort: SORTS.find((s) => s === sort) ?? DEFAULT_FILTERS.sort,
   }
 }
 
@@ -44,6 +49,7 @@ export function writeFilters(base: URLSearchParams, f: BugFilters): URLSearchPar
   if (f.assignee) out.set('assignee', f.assignee)
   if (f.severity) out.set('sev', f.severity)
   if (f.query) out.set('q', f.query)
+  if (f.sort !== DEFAULT_FILTERS.sort) out.set('sort', f.sort)
   return out
 }
 

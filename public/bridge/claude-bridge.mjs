@@ -16,7 +16,8 @@
 //
 // Env: SQUASH_BRIDGE_PORT (4317), SQUASH_ORIGINS (comma-separated allowed app origins),
 // SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
-// with e.g. "--permission-mode acceptEdits").
+// with e.g. "--permission-mode acceptEdits"), SQUASH_DOWNLOAD_HOSTS (comma-separated extra hosts
+// screenshots may be downloaded from; *.supabase.co and *.supabase.in are always allowed).
 import { execFile, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import {
@@ -25,17 +26,19 @@ import {
   existsSync,
   fstatSync,
   openSync,
+  readFileSync,
   readSync,
   realpathSync,
   statSync,
 } from 'node:fs'
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 4
+const VERSION = 5
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -65,11 +68,39 @@ const MAX_BODY = 1024 * 1024
 const MAX_IMAGE = 15 * 1024 * 1024
 const MAX_DOWNLOADS = 100
 const SAFE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
+const DOWNLOAD_HOSTS = parseHosts(process.env.SQUASH_DOWNLOAD_HOSTS)
+const MAX_REDIRECTS = 3
+// Launch limits: claude runs at once, and launches per window.
+const MAX_RUNNING = 3
+const MAX_LAUNCHES = 20
+const LAUNCH_WINDOW_MS = 10 * 60_000
+// A launched run holds its slot while its runner process is alive. A runner that has not written its
+// pid file this long after launch never started (or its window was closed first) and frees the slot.
+const RUNNER_START_GRACE_MS = 60_000
+// Files the bridge writes hold prompts, screenshots and paths: only this user may read them.
+const FILE_MODE = 0o600
+const DIR_MODE = 0o700
 // Files in each batch folder (.squash/bugs/<batch>/), next to prompt.md and events.jsonl.
 const RUN_FILE = 'run.json' // claude flags for the runner
 const RESULT_FILE = 'result.json' // written by Claude as its last step
 const DONE_FILE = 'done.json' // written by the runner when Claude exits
 const CLAIM_FILE = 'applied' // created by the Squash tab that applied the result
+// Names the bridge or runner use in a batch folder; screenshots may not take them.
+const RESERVED_FILES = new Set([
+  RUN_FILE,
+  RESULT_FILE,
+  DONE_FILE,
+  CLAIM_FILE,
+  'prompt.md',
+  'events.jsonl',
+  'settings.json',
+  'claude.log',
+  'runner.log',
+  'runner.pid',
+  'runs.json',
+  'bridge.json',
+])
+const RUN_ID = /^[0-9a-f]{32}$/
 const CLOSE_AFTER_MS = 4000
 
 // ── Hook mode ────────────────────────────────────────────────────────────────────────────────
@@ -202,7 +233,9 @@ async function runHook(dir) {
   const chunks = []
   for await (const chunk of process.stdin) chunks.push(chunk)
   const event = hookEvent(JSON.parse(Buffer.concat(chunks).toString('utf8')))
-  if (event) await appendFile(join(dir, 'events.jsonl'), JSON.stringify(event) + '\n')
+  if (event) {
+    await appendFile(join(dir, 'events.jsonl'), JSON.stringify(event) + '\n', { mode: FILE_MODE })
+  }
 }
 
 /** Hook settings that report every step of this run back to its folder. */
@@ -289,8 +322,8 @@ async function loadRuns() {
 
 async function recordRun(run) {
   const runs = [run, ...(await loadRuns()).filter((r) => r.id !== run.id)].slice(0, MAX_RUNS)
-  await mkdir(CONFIG_DIR, { recursive: true })
-  await writeFile(RUNS_FILE, JSON.stringify(runs, null, 2) + '\n')
+  await mkdirPrivate(CONFIG_DIR)
+  await writePrivate(RUNS_FILE, JSON.stringify(runs, null, 2) + '\n')
 }
 
 async function readEvents(dir) {
@@ -325,6 +358,146 @@ class HttpError extends Error {
   }
 }
 
+/** Lower-cased hostnames from a comma-separated list. */
+export function parseHosts(list) {
+  return String(list ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase().replace(/\.$/, ''))
+    .filter(Boolean)
+}
+
+/** Whether screenshots may be downloaded from this URL: https on Supabase or an allowed host. */
+export function isAllowedDownload(url, extraHosts = []) {
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return false
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '')
+  return host.endsWith('.supabase.co') || host.endsWith('.supabase.in') || extraHosts.includes(host)
+}
+
+/**
+ * Reads a fetch Response body into a Buffer, failing as soon as it would exceed `limit` bytes:
+ * up front from Content-Length, otherwise while streaming (the rest is never downloaded).
+ */
+export async function readCapped(res, limit) {
+  const declared = Number(res.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > limit) {
+    await res.body?.cancel().catch(() => {})
+    throw new Error('Screenshot too large')
+  }
+  const chunks = []
+  let size = 0
+  if (res.body) {
+    // Leaving the loop early (the throw) cancels the stream.
+    for await (const chunk of res.body) {
+      size += chunk.byteLength
+      if (size > limit) throw new Error('Screenshot too large')
+      chunks.push(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))
+    }
+  }
+  return Buffer.concat(chunks, size)
+}
+
+/**
+ * Limits claude runs: at most `maxRunning` at once and `maxLaunches` per `windowMs`.
+ * `acquire()` reserves a slot synchronously (so concurrent requests cannot both take the last
+ * one) and returns it, or null when busy. `slot.track(run)` marks it launched and
+ * `slot.release()` frees it. A launched slot is also freed once `isRunning(run, msSinceLaunch)`
+ * is false; a slot that is still preparing (not tracked yet) always counts.
+ */
+export function createLaunchLimiter({
+  maxRunning = MAX_RUNNING,
+  maxLaunches = MAX_LAUNCHES,
+  windowMs = LAUNCH_WINDOW_MS,
+  isRunning = () => true,
+  now = Date.now,
+} = {}) {
+  const running = new Set()
+  const launches = []
+  return {
+    acquire() {
+      const t = now()
+      while (launches.length && launches[0] <= t - windowMs) launches.shift()
+      for (const slot of running) {
+        if (slot.launchedAt !== null && !isRunning(slot.run, t - slot.launchedAt)) {
+          running.delete(slot)
+        }
+      }
+      if (running.size >= maxRunning || launches.length >= maxLaunches) return null
+      const slot = { run: null, launchedAt: null }
+      running.add(slot)
+      launches.push(t)
+      return {
+        track(run) {
+          slot.run = run
+          slot.launchedAt = now()
+        },
+        release() {
+          running.delete(slot)
+        },
+      }
+    },
+    get running() {
+      return running.size
+    },
+  }
+}
+
+/** Whether a screenshot file name would clash with a file the bridge or runner uses. */
+export function isReservedName(file) {
+  const name = String(file).toLowerCase()
+  return RESERVED_FILES.has(name) || name.startsWith('runner-')
+}
+
+/** The pid file a runner writes for one launch (unique even when batches share a folder). */
+export function runnerPidFile(batchDir, runId) {
+  return join(batchDir, `runner-${runId}.pid`)
+}
+
+/** Whether a process with this pid exists. */
+export function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    // EPERM: it exists but belongs to someone else.
+    return err?.code === 'EPERM'
+  }
+}
+
+/**
+ * Whether a launched run still holds its slot: its runner's pid is alive, or the runner has not
+ * written its pid file yet and was launched less than `graceMs` ago.
+ */
+export function runnerLive(pidFile, msSinceLaunch, graceMs = RUNNER_START_GRACE_MS) {
+  let text
+  try {
+    text = readFileSync(pidFile, 'utf8')
+  } catch {
+    return msSinceLaunch < graceMs
+  }
+  // An empty file is a runner that is mid-write.
+  if (!text.trim()) return msSinceLaunch < graceMs
+  return pidAlive(Number(text.trim()))
+}
+
+/** Writes a file only this user can read, tightening it if it already existed. */
+async function writePrivate(path, data, options = {}) {
+  await writeFile(path, data, { mode: FILE_MODE, ...options })
+  await chmod(path, FILE_MODE)
+}
+
+/** Creates a directory (and its parents) only this user can open, tightening the leaf if it existed. */
+async function mkdirPrivate(path) {
+  await mkdir(path, { recursive: true, mode: DIR_MODE })
+  await chmod(path, DIR_MODE)
+}
+
 /** Single-quotes a value for a POSIX shell. */
 const sh = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`
 
@@ -340,8 +513,8 @@ async function loadConfig() {
 async function saveFolder(workspaceId, name, folder) {
   const config = await loadConfig()
   config.workspaces[workspaceId] = { name, folder }
-  await mkdir(CONFIG_DIR, { recursive: true })
-  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n')
+  await mkdirPrivate(CONFIG_DIR)
+  await writePrivate(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n')
 }
 
 function isDir(path) {
@@ -445,11 +618,16 @@ function validateSend(payload) {
   if (typeof prompt !== 'string' || !prompt.trim()) throw bad('Missing prompt')
   if (!Array.isArray(downloads) || downloads.length > MAX_DOWNLOADS) throw bad('Invalid downloads')
   for (const d of downloads) {
-    if (typeof d?.file !== 'string' || !SAFE_NAME.test(d.file) || d.file.includes('..')) {
+    if (
+      typeof d?.file !== 'string' ||
+      !SAFE_NAME.test(d.file) ||
+      d.file.includes('..') ||
+      isReservedName(d.file)
+    ) {
       throw bad('Invalid file name')
     }
-    if (typeof d.url !== 'string' || new URL(d.url).protocol !== 'https:') {
-      throw bad('Screenshot URLs must be https')
+    if (typeof d.url !== 'string' || !isAllowedDownload(d.url, DOWNLOAD_HOSTS)) {
+      throw bad('Screenshot URLs must be https links to Supabase storage or SQUASH_DOWNLOAD_HOSTS')
     }
   }
   return {
@@ -462,12 +640,30 @@ function validateSend(payload) {
   }
 }
 
+/** Fetches a screenshot, following redirects only to allowed hosts. */
+export async function fetchAllowed(url, extraHosts = DOWNLOAD_HOSTS, fetchImpl = fetch) {
+  const signal = AbortSignal.timeout(30_000)
+  let current = url
+  for (let hop = 0; ; hop++) {
+    if (!isAllowedDownload(current, extraHosts)) throw bad('Screenshot URL host not allowed')
+    const res = await fetchImpl(current, { signal, redirect: 'manual' })
+    if (res.status < 300 || res.status >= 400) return res
+    await res.body?.cancel().catch(() => {})
+    const location = res.headers.get('location')
+    if (!location || hop >= MAX_REDIRECTS) {
+      throw new Error(`Screenshot download failed (${res.status})`)
+    }
+    current = new URL(location, current).href
+  }
+}
+
 async function download(url, dest) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-  if (!res.ok) throw new Error(`Screenshot download failed (${res.status})`)
-  const data = Buffer.from(await res.arrayBuffer())
-  if (data.length > MAX_IMAGE) throw new Error('Screenshot too large')
-  await writeFile(dest, data)
+  const res = await fetchAllowed(url)
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {})
+    throw new Error(`Screenshot download failed (${res.status})`)
+  }
+  await writePrivate(dest, await readCapped(res, MAX_IMAGE))
 }
 
 async function readJson(path) {
@@ -488,10 +684,14 @@ function toolLine(block) {
   return `  • ${describeTool(block.name, block.input ?? {}, process.cwd())}`
 }
 
-async function runBatch(batchDir) {
+async function runBatch(batchDir, runId) {
+  // The bridge counts this run as running while this process is alive.
+  if (RUN_ID.test(runId ?? '')) {
+    await writePrivate(runnerPidFile(batchDir, runId), String(process.pid), { flag: 'wx' })
+  }
   const { args = [] } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
   const prompt = await readFile(join(batchDir, 'prompt.md'), 'utf8')
-  const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a' })
+  const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a', mode: FILE_MODE })
   console.log(`Squash → Claude Code in ${process.cwd()}`)
   console.log('Running unattended. This window closes on its own when Claude is done.\n')
 
@@ -530,8 +730,10 @@ async function runBatch(batchDir) {
   const result = await readJson(join(batchDir, RESULT_FILE))
   const t = new Date().toISOString()
   // Close the run even if Claude exits without its SessionEnd hook.
-  await appendFile(join(batchDir, 'events.jsonl'), JSON.stringify({ t, kind: 'end' }) + '\n')
-  await writeFile(join(batchDir, DONE_FILE), JSON.stringify({ exitCode, result, finishedAt: t }))
+  await appendFile(join(batchDir, 'events.jsonl'), JSON.stringify({ t, kind: 'end' }) + '\n', {
+    mode: FILE_MODE,
+  })
+  await writePrivate(join(batchDir, DONE_FILE), JSON.stringify({ exitCode, result, finishedAt: t }))
   console.log(
     result
       ? '\n✓ Done. Squash will update the bugs. Closing this window…'
@@ -572,14 +774,14 @@ function closeWhenDone(windowId, batchDir) {
 }
 
 /** Runs Claude Code on the batch: in a new Terminal window on macOS, headless elsewhere. */
-async function launch(folder, batchDir) {
-  await writeFile(
+async function launch(folder, batchDir, runId) {
+  await writePrivate(
     join(batchDir, 'settings.json'),
     JSON.stringify(hookSettings(batchDir), null, 2) + '\n',
   )
-  await writeFile(join(batchDir, RUN_FILE), JSON.stringify({ args: CLAUDE_ARGS }))
+  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args: CLAUDE_ARGS }))
   if (MAC) {
-    const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)}; exit`
+    const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)} ${runId}; exit`
     const windowId = await osascript(
       [
         'on run argv',
@@ -596,8 +798,8 @@ async function launch(folder, batchDir) {
     if (/^\d+$/.test(windowId)) closeWhenDone(Number(windowId), batchDir)
     return
   }
-  const log = openSync(join(batchDir, 'runner.log'), 'a')
-  const child = spawn(process.execPath, [SCRIPT, '--run', batchDir], {
+  const log = openSync(join(batchDir, 'runner.log'), 'a', FILE_MODE)
+  const child = spawn(process.execPath, [SCRIPT, '--run', batchDir, runId], {
     cwd: folder,
     detached: true,
     stdio: ['ignore', log, log],
@@ -606,27 +808,44 @@ async function launch(folder, batchDir) {
   console.log(`  running headless; output in ${join(batchDir, 'claude.log')}`)
 }
 
+/** A launched run holds its slot while its runner process is alive. */
+const limiter = createLaunchLimiter({
+  isRunning: (run, msSinceLaunch) => runnerLive(run.pidFile, msSinceLaunch),
+})
+
 async function handleSend(payload) {
   const { workspaceId, name, batch, bugs, prompt, downloads } = validateSend(payload)
-  const folder = await folderFor(workspaceId, name)
-  const root = join(folder, '.squash')
-  const batchDir = join(root, 'bugs', batch)
-  await mkdir(batchDir, { recursive: true })
-  // Keep exported bugs out of git without touching the project's own .gitignore.
-  await writeFile(join(root, '.gitignore'), '*\n')
-  await Promise.all(downloads.map((d) => download(d.url, join(batchDir, d.file))))
-  await writeFile(join(batchDir, 'prompt.md'), prompt)
-  await recordRun({
-    id: batch,
-    workspaceId,
-    bugs,
-    folder,
-    dir: batchDir,
-    startedAt: new Date().toISOString(),
-  })
-  await launch(folder, batchDir)
-  console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
-  return { ok: true, folder }
+  // Reserve before any await so concurrent requests cannot overshoot the limits.
+  const slot = limiter.acquire()
+  if (!slot) throw new HttpError(429, 'busy', 'busy')
+  try {
+    const folder = await folderFor(workspaceId, name)
+    const root = join(folder, '.squash')
+    const batchDir = join(root, 'bugs', batch)
+    await mkdirPrivate(root)
+    await mkdirPrivate(batchDir)
+    // Keep exported bugs out of git without touching the project's own .gitignore.
+    await writeFile(join(root, '.gitignore'), '*\n')
+    await Promise.all(downloads.map((d) => download(d.url, join(batchDir, d.file))))
+    await writePrivate(join(batchDir, 'prompt.md'), prompt)
+    await recordRun({
+      id: batch,
+      workspaceId,
+      bugs,
+      folder,
+      dir: batchDir,
+      startedAt: new Date().toISOString(),
+    })
+    const runId = randomBytes(16).toString('hex')
+    slot.track({ pidFile: runnerPidFile(batchDir, runId) })
+    await launch(folder, batchDir, runId)
+    console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
+    return { ok: true, folder }
+  } catch (err) {
+    // Nothing is running if it failed before (or while) starting Claude.
+    slot.release()
+    throw err
+  }
 }
 
 async function handleSetFolder(workspaceId, payload) {
@@ -667,7 +886,7 @@ async function claimResult(workspaceId, batch) {
     throw new HttpError(404, 'not_found', 'No such finished run')
   }
   try {
-    await writeFile(join(run.dir, CLAIM_FILE), new Date().toISOString(), { flag: 'wx' })
+    await writePrivate(join(run.dir, CLAIM_FILE), new Date().toISOString(), { flag: 'wx' })
     return { claimed: true }
   } catch (err) {
     if (err?.code === 'EEXIST') return { claimed: false }
@@ -765,12 +984,16 @@ if (isMain()) {
     process.exit(0)
   }
   if (RUNNER) {
-    await runBatch(resolve(process.argv[3] ?? '.')).catch((err) => {
+    await runBatch(resolve(process.argv[3] ?? '.'), process.argv[4]).catch((err) => {
       console.error('✗', err instanceof Error ? err.message : err)
       process.exitCode = 1
     })
     process.exit()
   }
-  if (!existsSync(CONFIG_DIR)) await mkdir(CONFIG_DIR, { recursive: true })
+  // Tighten files left readable by older versions of the bridge.
+  await mkdirPrivate(CONFIG_DIR)
+  for (const file of [CONFIG_FILE, RUNS_FILE]) {
+    if (existsSync(file)) await chmod(file, FILE_MODE)
+  }
   serve()
 }

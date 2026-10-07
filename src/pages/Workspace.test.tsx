@@ -15,6 +15,8 @@ const NOW = new Date().toISOString()
 const mocks = vi.hoisted(() => ({
   bugs: [] as BugWithMeta[],
   notFound: false,
+  error: null as string | null,
+  reload: vi.fn(),
   onRemoteInsert: null as ((bug: Bug) => void) | null,
   setLastWorkspace: vi.fn(),
   getBugByNumber: vi.fn(),
@@ -96,12 +98,15 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
   const actual = await importOriginal<typeof UseBugsModule>()
   return {
     filterBugs: actual.filterBugs,
+    sortBugs: actual.sortBugs,
     countBugs: actual.countBugs,
     useBugs: (_ws: string, opts?: { onRemoteInsert?: (bug: Bug) => void }) => {
       mocks.onRemoteInsert = opts?.onRemoteInsert ?? null
       return {
         bugs: mocks.bugs,
         loading: false,
+        error: mocks.error,
+        reload: mocks.reload,
         counts: { open: mocks.bugs.length, resolved: 0, all: mocks.bugs.length },
         fileBug: mocks.fileBug,
         updateBug: vi.fn(),
@@ -229,6 +234,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
   mocks.bugs = [makeBug(3), makeBug(2), makeBug(1)]
   mocks.notFound = false
+  mocks.error = null
   mocks.onRemoteInsert = null
   mocks.assigner = null
   mocks.lookup = null
@@ -242,6 +248,103 @@ afterEach(() => {
 })
 
 describe('Workspace', () => {
+  it.each(['tab', 'query'])('prunes bulk picks hidden by a %s change', (change) => {
+    show('/app/ws')
+    fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
+    expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
+
+    if (change === 'tab')
+      fireEvent.click(
+        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
+          name: /^Resolved/,
+        }),
+      )
+    else
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
+        target: { value: 'number 3' },
+      })
+    expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
+
+    if (change === 'tab')
+      fireEvent.click(
+        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
+          name: /^Open/,
+        }),
+      )
+    else
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
+        target: { value: '' },
+      })
+    expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '#2 Bug number 2' })).toBeInTheDocument()
+  })
+
+  it.each(['resolve', 'delete'])(
+    'prunes bulk picks after a remote %s and preserves visible picks',
+    async (change) => {
+      const view = show('/app/ws')
+      fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
+      fireEvent.click(screen.getByRole('option', { name: '#3 Bug number 3' }), { ctrlKey: true })
+      expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('2 selected')
+
+      mocks.bugs =
+        change === 'delete'
+          ? [makeBug(3), makeBug(1)]
+          : [makeBug(3), makeBug(2, { status: 'resolved' }), makeBug(1)]
+      view.rerender(tree('/app/ws'))
+      expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
+
+      mocks.bugs = [makeBug(3), makeBug(2), makeBug(1)]
+      view.rerender(tree('/app/ws'))
+      expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
+      fireEvent.click(screen.getByRole('button', { name: 'Assignee: Unassigned' }))
+      await act(async () => {
+        fireEvent.click(screen.getByRole('option', { name: 'Assign to me' }))
+      })
+      expect(mocks.assignBug).toHaveBeenCalledExactlyOnceWith('b3', 'u1')
+      expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('places a skip link before the header and focuses the main landmark', () => {
+    const { container } = show('/app/ws')
+    const link = screen.getByRole('link', { name: 'Skip to content' })
+    expect(link).toHaveAttribute('href', '#main')
+    expect(container.querySelector('a[href], button, input, textarea, select')).toBe(link)
+    const main = screen.getByRole('main')
+    expect(main).toHaveAttribute('id', 'main')
+    expect(main).toHaveAttribute('tabindex', '-1')
+    fireEvent.click(link)
+    expect(main).toHaveFocus()
+  })
+
+  it('passes the load error and retry action to the bug list', () => {
+    mocks.bugs = []
+    mocks.error = "Couldn't load bugs"
+    show('/app/ws')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load bugs")
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(mocks.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes the load error and retry action to the status banner when bugs are present', () => {
+    mocks.bugs = [makeBug(1)]
+    mocks.error = "Couldn't load bugs"
+    show('/app/ws')
+    const banners = screen
+      .getAllByRole('status')
+      .filter((element) =>
+        element.textContent?.includes("Couldn't refresh — showing saved results"),
+      )
+    expect(banners).toHaveLength(1)
+    const [banner] = banners
+    expect(banner).toHaveTextContent("Couldn't refresh — showing saved results")
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText('Bug number 1')).toBeInTheDocument()
+    fireEvent.click(within(banner).getByRole('button', { name: 'Retry' }))
+    expect(mocks.reload).toHaveBeenCalledTimes(1)
+  })
+
   it('J/K move the selection through the filtered list', () => {
     show('/app/ws/bug/2')
     expect(screen.getByDisplayValue('Bug number 2')).toBeInTheDocument()
@@ -255,6 +358,19 @@ describe('Workspace', () => {
 
     press('k')
     press('k')
+    expect(path()).toBe('/app/ws/bug/3')
+  })
+
+  it('J/K follow the visible order of a non-default sort', () => {
+    mocks.bugs = [
+      makeBug(3, { created_at: '2026-01-03T00:00:00Z' }),
+      makeBug(2, { created_at: '2026-01-02T00:00:00Z' }),
+      makeBug(1, { created_at: '2026-01-01T00:00:00Z' }),
+    ]
+    show('/app/ws/bug/1?sort=oldest')
+    press('j')
+    expect(path()).toBe('/app/ws/bug/2')
+    press('j')
     expect(path()).toBe('/app/ws/bug/3')
   })
 

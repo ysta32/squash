@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## v1.6.0 — 2026-10-07
+
+Trust and hardening: tighter database rules, a safer Claude Code helper, keyboard and screen-reader fixes, list sorting and bulk actions.
+
+### Added
+
+- Sort the list by Newest (default), Oldest, Severity or Recently active from a new Sort chip menu. The choice is kept in the URL as `?sort=`, and <kbd>J</kbd>/<kbd>K</kbd> follow the order on screen.
+- Bulk actions. Pick several bugs and resolve, reopen or assign them at once, or send them to Claude Code, from a bar that shows how many are selected. Picks that a filter hides or a teammate deletes drop out of the selection, and a partial failure says how many items failed.
+
+### Security
+
+- Only the member who filed a bug (or feature request) and the workspace owner can delete it. The detail view hides the delete button from everyone else.
+- Every deletion is recorded (number, title, kind, who deleted it and when) in a log that workspace members can read and nobody can edit.
+- Comments are rate limited to 30 per person per minute, like filing bugs, and the server now sets each comment's time. Claude Code results that hit the limit wait and retry instead of being dropped.
+- New indexes speed up filtering the list by status and by kind.
+- The Claude Code helper (v5) only downloads screenshots from Squash's storage (Supabase, plus any hosts in `SQUASH_DOWNLOAD_HOSTS`), including across redirects, stops a download as soon as it passes 15 MiB, runs at most 3 Claude sessions at once and starts at most 20 per 10 minutes (more get a "busy" reply), frees a slot as soon as its Terminal closes, and keeps the prompts, screenshots and run records it writes readable only by you. Rerun the install command from the Claude page to update the helper.
+- CI now runs CodeQL code scanning and reviews new dependencies on every pull request.
+
+**Needs migration `0005_hardening.sql`.** Run it after `0001`–`0004` (see MAINTAINER.md → Applying migrations to production).
+
+### Accessibility
+
+- Every dialog and popover keeps keyboard focus inside while open and returns it to where you were when it closes, without pulling focus back if you clicked elsewhere. Stacked dialogs hand focus back correctly.
+- A "Skip to content" link is the first stop on every page.
+
+### Changed
+
+- If the bug list fails to load, it says so and offers Retry instead of showing an empty list. A failed background refresh keeps the list on screen with a small notice.
+- Faster list updates: rows that didn't change no longer re-render.
+- Link previews use an absolute image URL, and the build now emits `robots.txt` and `sitemap.xml` for your site URL.
+- CI enforces a bundle-size budget (`npm run size`).
+- MAINTAINER.md documents running every migration in order and the release steps; the README has a roadmap.
+
+### Tests
+
+- New tests for uploads, storage cleanup, sign-in redirects, realtime status, presence, the invite dialog, workspace settings, joining and the auth callback.
+
 ## v1.5.0 — 2026-10-07
 
 A design pass over the whole app and a new landing page.

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { isMac } from '../lib/utils'
 import { cn } from '../lib/utils'
 import { Kbd, dialogOverlayClass, dialogPanelClass } from './ui'
@@ -34,9 +35,10 @@ export interface ShortcutsSheetProps {
 }
 
 export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
-  const closeRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
   useOverlayOpen(open)
+  useFocusTrap(dialogRef, open)
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -44,8 +46,6 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
 
   useEffect(() => {
     if (!open) return
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    closeRef.current?.focus()
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape' || e.key === '?') {
         e.preventDefault()
@@ -56,7 +56,6 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
     window.addEventListener('keydown', onKey, true)
     return () => {
       window.removeEventListener('keydown', onKey, true)
-      previous?.focus()
     }
   }, [open])
 
@@ -70,6 +69,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
@@ -80,7 +80,6 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
             Keyboard shortcuts
           </h2>
           <button
-            ref={closeRef}
             type="button"
             aria-label="Close"
             onClick={onClose}

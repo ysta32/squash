@@ -18,7 +18,7 @@ import { InviteDialog } from '../components/InviteDialog'
 import { ReconnectingPill } from '../components/ReconnectingPill'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
-import { countBugs, filterBugs, useBugs } from '../hooks/useBugs'
+import { countBugs, filterBugs, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { CommandPalette, type Command } from '../components/CommandPalette'
@@ -125,6 +125,8 @@ export default function Workspace() {
   const {
     bugs,
     loading,
+    error,
+    reload,
     fileBug,
     updateBug,
     resolveBug,
@@ -365,7 +367,12 @@ export default function Workspace() {
     [bugs, deleteBug, toast, deselect],
   )
 
-  const visible = useMemo(() => filterBugs(bugs, filters), [bugs, filters])
+  const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
+  const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
+  const effectivePickedIds = new Set(
+    visible.filter((bug) => pickedIds.has(bug.id)).map((bug) => bug.id),
+  )
+  if (effectivePickedIds.size !== pickedIds.size) setPickedIds(effectivePickedIds)
   const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
   const openByKind = useMemo(
     () => ({ bug: countBugs(bugs, 'bug').open, feature: countBugs(bugs, 'feature').open }),
@@ -520,7 +527,7 @@ export default function Workspace() {
   useShortcut(
     'c',
     (e) => {
-      const picked = bugs.filter((b) => pickedIds.has(b.id))
+      const picked = visible.filter((b) => effectivePickedIds.has(b.id))
       const target = picked.length > 0 ? picked : selected ? [selected] : []
       if (target.length === 0) return
       e.preventDefault()
@@ -668,7 +675,11 @@ export default function Workspace() {
 
   if (ws.notFound) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-fg">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-fg"
+      >
         <p className="text-sm">You&apos;re not a member of this workspace</p>
         <Link to="/app" className="text-sm text-accent underline-offset-4 hover:underline">
           Go to your workspaces
@@ -744,6 +755,13 @@ export default function Workspace() {
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
+      <a
+        href="#main"
+        onClick={() => document.getElementById('main')?.focus()}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-bg focus:px-4 focus:py-2 focus:text-accent focus:outline focus:outline-2 focus:outline-accent"
+      >
+        Skip to content
+      </a>
       <Header
         workspace={workspace}
         workspaces={workspaces}
@@ -754,7 +772,7 @@ export default function Workspace() {
         onShowShortcuts={() => setShortcutsOpen(true)}
         role={ws.role}
       />
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
         <h1 className="sr-only">{workspace.name}</h1>
         <section
           aria-label="File a bug"
@@ -781,9 +799,11 @@ export default function Workspace() {
             )}
           >
             <BugList
-              bugs={bugs}
+              bugs={sorted}
               workspaceName={ws.workspace?.name}
               loading={loading}
+              error={error}
+              onRetry={reload}
               counts={counts}
               openByKind={openByKind}
               filters={filters}
@@ -809,9 +829,12 @@ export default function Workspace() {
               viewersOf={presence.viewers}
               highlightIds={highlightIds}
               searchRef={searchRef}
-              pickedIds={pickedIds}
+              pickedIds={effectivePickedIds}
               onTogglePick={togglePick}
               onClearPicked={clearPicked}
+              onResolve={resolveBug}
+              onReopen={reopenBug}
+              onAssign={assign}
               onSend={claude.sendBugs}
               onCopy={claude.copyBugs}
               onInvite={() => setInviteOpen(true)}

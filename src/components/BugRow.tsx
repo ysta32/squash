@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { Bot, CircleCheck, Image as ImageIcon, SquareCheck } from 'lucide-react'
 import type { PresenceUser } from '../hooks/usePresence'
 import type { ClaudeRunState } from '../lib/claudeExport'
@@ -21,7 +21,20 @@ export interface BugRowProps {
   claudeState?: ClaudeRunState
 }
 
-export function BugRow({
+function areEqual(previous: BugRowProps, next: BugRowProps): boolean {
+  const keys = Object.keys(previous) as (keyof BugRowProps)[]
+  return (
+    keys.length === Object.keys(next).length &&
+    keys.every(
+      (key) =>
+        Object.hasOwn(next, key) && (key === 'viewers' || Object.is(previous[key], next[key])),
+    ) &&
+    previous.viewers.length === next.viewers.length &&
+    previous.viewers.every((viewer, index) => viewer.user_id === next.viewers[index].user_id)
+  )
+}
+
+export const BugRow = memo(function BugRow({
   bug,
   selected,
   onSelect,
@@ -178,6 +191,6 @@ export function BugRow({
       </span>
     </button>
   )
-}
+}, areEqual)
 
 const MAX_VIEWERS = 3

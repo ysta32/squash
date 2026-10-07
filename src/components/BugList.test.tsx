@@ -18,6 +18,7 @@ const filters: BugFilters = {
   assignee: null,
   severity: null,
   query: '',
+  sort: 'newest',
 }
 const members: WorkspaceMember[] = ['Ada', 'Grace'].map((name) => ({
   workspace_id: 'workspace',
@@ -102,6 +103,51 @@ function pickFilter(label: string, option: string) {
 }
 
 describe('BugList', () => {
+  it('shows a load error and retries instead of showing an empty list', () => {
+    const onRetry = vi.fn()
+    render(
+      <MemoryRouter>
+        <Harness bugs={[]} error="Couldn't load bugs" onRetry={onRetry} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load bugs")
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('listbox', { name: 'Bugs' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('keeps saved rows usable after a failed refresh and offers retry in a status banner', () => {
+    const onRetry = vi.fn()
+    const onSelect = vi.fn()
+    const { rerender } = render(<Harness onRetry={onRetry} onSelect={onSelect} />)
+    rerender(<Harness error="Couldn't load bugs" onRetry={onRetry} onSelect={onSelect} />)
+
+    const banner = screen.getByRole('status')
+    expect(banner).toHaveTextContent("Couldn't refresh — showing saved results")
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const row = within(screen.getByRole('listbox', { name: 'Bugs' })).getByRole('option', {
+      name: '#1 Broken login',
+    })
+    fireEvent.click(row)
+    expect(onSelect).toHaveBeenCalledWith('open')
+    fireEvent.click(within(banner).getByRole('button', { name: 'Retry' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+
+    rerender(<Harness onRetry={onRetry} onSelect={onSelect} />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '#1 Broken login' })).toBeInTheDocument()
+  })
+
+  it('shows the refresh banner when saved bugs are excluded by the current filter', () => {
+    render(<Harness error="Couldn't load bugs" filters={{ ...filters, query: 'no match' }} />)
+    expect(
+      screen.getByText("Couldn't refresh — showing saved results").closest('[role="status"]'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
   beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,

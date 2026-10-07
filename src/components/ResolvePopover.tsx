@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { Button } from './ui'
 import { isMac } from '../lib/utils'
 
@@ -19,6 +20,7 @@ export function ResolvePopover({ mode, open, onClose, onConfirm }: ResolvePopove
 function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'open'>) {
   const [note, setNote] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(rootRef)
   const onCloseRef = useRef(onClose)
   useEffect(() => {
     onCloseRef.current = onClose
@@ -66,7 +68,7 @@ function PopoverBody({ mode, onClose, onConfirm }: Omit<ResolvePopoverProps, 'op
       className="absolute top-full right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-bg-elevated p-3 shadow-elevated"
     >
       <textarea
-        autoFocus
+        data-autofocus
         value={note}
         onChange={(e) => setNote(e.target.value)}
         onKeyDown={onKeyDown}

@@ -307,6 +307,14 @@ scripts/
   screenshots/  README image harness: mock backend, demo data, capture and compose
 ```
 
+## Roadmap
+
+- Make capturing and triaging bugs faster on mobile.
+- Improve the Claude Code handoff and visibility into fixes.
+- Expand accessibility coverage and database policy tests.
+
+See the [changelog](CHANGELOG.md) for shipped improvements.
+
 ## Contributing
 
 Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first; it covers the checks CI runs and the conventions the codebase follows.

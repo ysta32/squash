@@ -19,6 +19,8 @@ import { openChannel } from './useRealtimeStatus'
 export { useBug } from './useBug'
 export { useSignedUrl } from './useSignedUrl'
 
+export type BugSort = 'newest' | 'oldest' | 'severity' | 'activity'
+
 export interface BugFilters {
   /** Bugs or feature requests: the list only ever shows one kind. */
   kind: BugKind
@@ -29,6 +31,7 @@ export interface BugFilters {
   assignee: string | null
   severity: Severity | null
   query: string
+  sort: BugSort
 }
 
 export interface NewBugInput {
@@ -48,6 +51,8 @@ export interface BugCounts {
 export interface UseBugsResult {
   bugs: BugWithMeta[]
   loading: boolean
+  error: string | null
+  reload: () => void
   counts: BugCounts
   /** `onOptimistic` runs with the new bug's id as soon as its optimistic row is in the list. */
   fileBug(input: NewBugInput, opts?: { onOptimistic?: (id: string) => void }): Promise<void>
@@ -119,6 +124,30 @@ export function filterBugs(bugs: BugWithMeta[], f: BugFilters): BugWithMeta[] {
   })
 }
 
+const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 }
+
+function time(iso: string | null): number {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isNaN(t) ? 0 : t
+}
+
+function activityAt(b: BugWithMeta): number {
+  return Math.max(time(b.created_at), time(b.updated_at), time(b.resolved_at))
+}
+
+/** Pure, stable list sort: newest, oldest, severity (critical first, then newest) or recent activity. */
+export function sortBugs(bugs: BugWithMeta[], sort: BugSort): BugWithMeta[] {
+  const newest = (a: BugWithMeta, b: BugWithMeta) => time(b.created_at) - time(a.created_at)
+  const compare = {
+    newest,
+    oldest: (a: BugWithMeta, b: BugWithMeta) => time(a.created_at) - time(b.created_at),
+    severity: (a: BugWithMeta, b: BugWithMeta) =>
+      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || newest(a, b),
+    activity: (a: BugWithMeta, b: BugWithMeta) => activityAt(b) - activityAt(a),
+  }[sort]
+  return [...bugs].sort(compare)
+}
+
 /** Status counts, of one kind only when `kind` is given. */
 export function countBugs(bugs: BugWithMeta[], kind?: BugKind): BugCounts {
   let open = 0
@@ -140,7 +169,7 @@ function sortAttachments(list: BugAttachment[]): BugAttachment[] {
   return [...list].sort((a, b) => a.created_at.localeCompare(b.created_at))
 }
 
-function sortBugs(list: BugWithMeta[]): BugWithMeta[] {
+function sortByCreated(list: BugWithMeta[]): BugWithMeta[] {
   return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
 
@@ -163,7 +192,7 @@ function mergeAttachments(a: BugAttachment[], b: BugAttachment[]): BugAttachment
 
 function upsertRow(bugs: BugWithMeta[], row: BugRow): BugWithMeta[] {
   const idx = bugs.findIndex((b) => b.id === row.id)
-  if (idx === -1) return sortBugs([...bugs, applyServerRow(undefined, row)])
+  if (idx === -1) return sortByCreated([...bugs, applyServerRow(undefined, row)])
   const next = applyServerRow(bugs[idx], row)
   if (next === bugs[idx]) return bugs
   const copy = bugs.slice()
@@ -245,7 +274,7 @@ export function applySnapshot(
     const olderThanWindow = opts.truncated && oldest !== null && b.created_at < oldest
     if (b.optimistic || opts.isRecent(`bug:${b.id}`) || olderThanWindow) out.push(b)
   }
-  return sortBugs(out)
+  return sortByCreated(out)
 }
 
 /** Non-authoritative merge of individually fetched rows (e.g. a deep-linked bug). */
@@ -254,7 +283,7 @@ function mergeRows(current: BugWithMeta[], rows: BugWithMeta[]): BugWithMeta[] {
   for (const r of rows) {
     const existing = next.find((b) => b.id === r.id)
     if (!existing) {
-      next = sortBugs([...next, r])
+      next = sortByCreated([...next, r])
       continue
     }
     next = mapBug(next, r.id, (bug) => ({
@@ -461,9 +490,14 @@ export function useBugs(
   workspaceId: string,
   opts?: { onRemoteInsert?: (bug: Bug) => void },
 ): UseBugsResult {
+  const [loadError, setLoadError] = useState<{ workspaceId: string; message: string } | null>(null)
+  const reloadRef = useRef<(() => void) | null>(null)
   const [state, setState] = useState<ListState>({ workspaceId, bugs: [], loaded: false })
   /** Workspace whose list is live. Async results for any other workspace are dropped. */
   const liveWsRef = useRef<string | null>(null)
+  const reload = useCallback(() => {
+    if (liveWsRef.current === workspaceId) reloadRef.current?.()
+  }, [workspaceId])
   const selfIdRef = useRef<string | null>(null)
   /** Ids of bugs filed from this hook instance (never announced as remote inserts). */
   const localIdsRef = useRef(new Set<string>())
@@ -548,6 +582,7 @@ export function useBugs(
 
     const load = async () => {
       const seq = ++latest
+      setLoadError(null)
       touched.clear()
       const startSeq = beginFetch(workspaceId)
       try {
@@ -564,6 +599,7 @@ export function useBugs(
         } catch (err) {
           if (!active || seq !== latest) return
           console.error('Failed to load bugs', err)
+          setLoadError({ workspaceId, message: "Couldn't load bugs" })
           mutate(workspaceId, (b) => b, true)
           return
         }
@@ -670,6 +706,11 @@ export function useBugs(
         },
       )
 
+    reloadRef.current = () => {
+      setState((s) => (s.workspaceId === workspaceId ? { ...s, loaded: false } : s))
+      void load()
+    }
+
     // Fetch on every (re)SUBSCRIBED: the first is the initial load, later ones close the gap left
     // by a reconnect. If realtime never connects, fall back to one plain fetch so the list loads.
     let everSubscribed = false
@@ -691,7 +732,10 @@ export function useBugs(
 
     return () => {
       active = false
-      if (liveWsRef.current === workspaceId) liveWsRef.current = null
+      if (liveWsRef.current === workspaceId) {
+        liveWsRef.current = null
+        reloadRef.current = null
+      }
       const mounted = (mountedHooks.get(workspaceId) ?? 1) - 1
       if (mounted > 0) mountedHooks.set(workspaceId, mounted)
       else {
@@ -993,6 +1037,8 @@ export function useBugs(
   return {
     bugs,
     loading,
+    error: loadError?.workspaceId === workspaceId ? loadError.message : null,
+    reload,
     counts,
     fileBug,
     updateBug,

@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Bot, Check, Copy, FolderOpen, X } from 'lucide-react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import {
   BRIDGE_VERSION,
@@ -58,6 +59,8 @@ export function ClaudeSetupDialog({
   onSendPending,
 }: ClaudeSetupDialogProps) {
   useOverlayOpen(open)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef, open)
   const [copied, setCopied] = useState(false)
   const [folder, setFolder] = useState<{ ws: string; path: string | null } | null>(null)
   const [typed, setTyped] = useState('')
@@ -130,6 +133,7 @@ export function ClaudeSetupDialog({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Connect Claude Code"

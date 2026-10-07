@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor, act } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, act } from '@testing-library/react'
 import { StatsPopover } from './StatsPopover'
+import { ShortcutsSheet } from './ShortcutsSheet'
+import { Lightbox } from './Lightbox'
 
 interface Row {
   user_id: string
@@ -30,6 +32,24 @@ describe('StatsPopover', () => {
     rpc.mockReset()
   })
 
+  it('focuses the dialog, traps Tab, and restores focus on unmount', async () => {
+    rpc.mockResolvedValue({ data: [], error: null })
+    const trigger = render(<button>Stats</button>)
+    const opener = screen.getByRole('button', { name: 'Stats' })
+    opener.focus()
+    const { unmount } = render(<StatsPopover workspaceId="a" members={[]} />)
+    const dialog = screen.getByRole('dialog', { name: 'Team stats' })
+    expect(document.activeElement).toBe(dialog)
+    await screen.findByText('No activity yet.')
+    expect(fireEvent.keyDown(dialog, { key: 'Tab' })).toBe(false)
+    expect(document.activeElement).toBe(dialog)
+    expect(fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })).toBe(false)
+    expect(document.activeElement).toBe(dialog)
+    unmount()
+    expect(document.activeElement).toBe(opener)
+    trigger.unmount()
+  })
+
   it('ignores stale responses and shows skeleton on workspace change', async () => {
     const resolvers: Record<string, (r: Result) => void> = {}
     rpc.mockImplementation(
@@ -53,5 +73,57 @@ describe('StatsPopover', () => {
     })
     await waitFor(() => expect(screen.getByText(/222/)).toBeTruthy())
     expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+  })
+})
+
+describe('dialog focus lifecycle', () => {
+  afterEach(cleanup)
+
+  it('focuses ShortcutsSheet on open, traps Tab, and restores focus on close', () => {
+    render(<button>Shortcuts</button>)
+    const opener = screen.getByRole('button', { name: 'Shortcuts' })
+    opener.focus()
+    const onClose = vi.fn()
+    const { rerender } = render(<ShortcutsSheet open={false} onClose={onClose} />)
+    expect(document.activeElement).toBe(opener)
+    rerender(<ShortcutsSheet open onClose={onClose} />)
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(document.activeElement).toBe(close)
+    expect(fireEvent.keyDown(close, { key: 'Tab' })).toBe(false)
+    expect(document.activeElement).toBe(close)
+    expect(fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })).toBe(false)
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(close, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    rerender(<ShortcutsSheet open={false} onClose={onClose} />)
+    expect(document.activeElement).toBe(opener)
+  })
+
+  it('focuses Lightbox on open, wraps Tab in both directions, and restores focus on close', () => {
+    render(<button>Screenshots</button>)
+    const opener = screen.getByRole('button', { name: 'Screenshots' })
+    opener.focus()
+    const onClose = vi.fn()
+    const onIndex = vi.fn()
+    const { rerender, unmount } = render(
+      <Lightbox urls={[]} index={0} onClose={onClose} onIndex={onIndex} />,
+    )
+    expect(document.activeElement).toBe(opener)
+    rerender(
+      <Lightbox urls={['/one.png', '/two.png']} index={0} onClose={onClose} onIndex={onIndex} />,
+    )
+    const close = screen.getByRole('button', { name: 'Close' })
+    const next = screen.getByRole('button', { name: 'Next screenshot' })
+    expect(document.activeElement).toBe(close)
+    expect(fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })).toBe(false)
+    expect(document.activeElement).toBe(next)
+    expect(fireEvent.keyDown(next, { key: 'Tab' })).toBe(false)
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(close, { key: 'ArrowRight' })
+    expect(onIndex).toHaveBeenCalledWith(1)
+    fireEvent.click(close)
+    expect(onClose).toHaveBeenCalledOnce()
+    unmount()
+    expect(document.activeElement).toBe(opener)
   })
 })

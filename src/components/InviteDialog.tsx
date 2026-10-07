@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, RefreshCw, Share2, X } from 'lucide-react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import { inviteUrl, friendlyError } from '../hooks/useWorkspaces'
 import type { Workspace } from '../lib/types'
 import { cn } from '../lib/utils'
@@ -27,6 +28,8 @@ export function InviteDialog({
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef, open)
 
   useEffect(() => {
     if (!copied) return
@@ -85,6 +88,7 @@ export function InviteDialog({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Invite people"

@@ -9,6 +9,7 @@ import {
   filterBugs,
   resetPendingUploads,
   retainedUploadCount,
+  sortBugs,
   useBugs,
 } from './useBugs'
 
@@ -189,6 +190,7 @@ const BASE = {
   assignee: null,
   severity: null,
   query: '',
+  sort: 'newest',
 } as const
 
 const sample = [
@@ -207,6 +209,42 @@ const sample = [
 ]
 
 const ids = (list: BugWithMeta[]) => list.map((b) => b.id)
+
+describe('sortBugs', () => {
+  const list = [
+    bug({ id: 'a', severity: 'low', created_at: '2026-01-01T00:00:00Z' }),
+    bug({ id: 'b', severity: 'critical', created_at: '2026-01-02T00:00:00Z' }),
+    bug({
+      id: 'c',
+      severity: 'critical',
+      created_at: '2026-01-03T00:00:00Z',
+      updated_at: '2026-01-03T00:00:00Z',
+    }),
+    bug({
+      id: 'd',
+      severity: 'high',
+      created_at: '2026-01-01T12:00:00Z',
+      updated_at: '2026-01-09T00:00:00Z',
+    }),
+  ]
+  it('sorts newest and oldest by creation', () => {
+    expect(ids(sortBugs(list, 'newest'))).toEqual(['c', 'b', 'd', 'a'])
+    expect(ids(sortBugs(list, 'oldest'))).toEqual(['a', 'd', 'b', 'c'])
+  })
+  it('sorts by severity, then newest', () => {
+    expect(ids(sortBugs(list, 'severity'))).toEqual(['c', 'b', 'd', 'a'])
+  })
+  it('sorts by latest of created, updated and resolved', () => {
+    const withResolved = [...list, bug({ id: 'e', resolved_at: '2026-02-01T00:00:00Z' })]
+    expect(ids(sortBugs(withResolved, 'activity'))).toEqual(['e', 'd', 'c', 'b', 'a'])
+  })
+  it('is stable for ties and does not mutate the input', () => {
+    const ties = [bug({ id: 'x' }), bug({ id: 'y' }), bug({ id: 'z' })]
+    for (const mode of ['newest', 'oldest', 'severity', 'activity'] as const)
+      expect(ids(sortBugs(ties, mode))).toEqual(['x', 'y', 'z'])
+    expect(ids(list)).toEqual(['a', 'b', 'c', 'd'])
+  })
+})
 
 describe('filterBugs', () => {
   it('filters by tab', () => {
@@ -454,6 +492,28 @@ describe('applySnapshot', () => {
 })
 
 describe('useBugs sync', () => {
+  it('exposes a load error and reloads successfully without reconnecting realtime', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.state.selectResult = { data: null, error: { message: 'Unavailable' } }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.error).toBe("Couldn't load bugs"))
+    expect(result.current.loading).toBe(false)
+    expect(h.state.selectCalls).toBe(1)
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'recovered' }), bug_attachments: [] }],
+      error: null,
+    }
+    act(() => result.current.reload())
+    expect(result.current.error).toBeNull()
+    expect(result.current.loading).toBe(true)
+    await waitFor(() => expect(ids(result.current.bugs)).toEqual(['recovered']))
+    expect(result.current.error).toBeNull()
+    expect(result.current.loading).toBe(false)
+    expect(h.state.selectCalls).toBe(2)
+    expect(h.state.channels).toHaveLength(1)
+    log.mockRestore()
+  })
+
   beforeEach(() => {
     h.state.selectResult = { data: [], error: null }
     h.state.insertResult = { data: null, error: null }

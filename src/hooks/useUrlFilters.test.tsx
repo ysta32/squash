@@ -30,6 +30,7 @@ it('round-trips every field through the URL', () => {
     assignee: 'none',
     severity: 'high' as const,
     query: 'dark mode',
+    sort: 'severity' as const,
   }
   act(() => result.current.setFilters(full))
   const search = result.current.search
@@ -40,6 +41,7 @@ it('round-trips every field through the URL', () => {
   expect(search).toContain('assignee=none')
   expect(search).toContain('sev=high')
   expect(search).toContain('q=dark+mode')
+  expect(search).toContain('sort=severity')
   const again = setup(`/app/w${search}`)
   expect(again.result.current.filters).toEqual(full)
 })
@@ -47,6 +49,18 @@ it('round-trips every field through the URL', () => {
 it('omits defaults so a clean URL stays clean', () => {
   const { result } = setup('/app/w?kind=feature&q=x')
   act(() => result.current.setFilters(DEFAULT_FILTERS))
+  expect(result.current.search).toBe('')
+})
+
+it('parses sort and falls back to newest for junk', () => {
+  expect(setup('/app/w?sort=oldest').result.current.filters.sort).toBe('oldest')
+  expect(setup('/app/w?sort=activity').result.current.filters.sort).toBe('activity')
+  expect(setup('/app/w?sort=bogus').result.current.filters.sort).toBe('newest')
+})
+
+it('omits the default sort from the URL', () => {
+  const { result } = setup('/app/w?sort=oldest')
+  act(() => result.current.setFilters((f) => ({ ...f, sort: 'newest' })))
   expect(result.current.search).toBe('')
 })
 
