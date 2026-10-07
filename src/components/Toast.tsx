@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { CircleAlert, CircleCheck, X } from 'lucide-react'
-import { isTypingTarget } from '../hooks/useKeyboard'
+import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { isMac } from '../lib/utils'
 
 export const TOAST_DURATION_MS = 5000
@@ -113,6 +113,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
   const nextId = useRef(1)
   const currentItems = useRef<ToastItem[]>([])
+  const region = useRef<HTMLDivElement>(null)
+  // Where focus was before it entered the toast stack, restored if the focused toast goes away.
+  const returnFocus = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const target = returnFocus.current
+    if (!target) return
+    const active = document.activeElement
+    if (active && active !== document.body && region.current?.contains(active)) return
+    returnFocus.current = null
+    if ((!active || active === document.body) && target.isConnected) target.focus()
+  }, [items])
 
   const dismiss = useCallback((id: number) => {
     currentItems.current = currentItems.current.filter((t) => t.id !== id)
@@ -154,6 +166,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         return
       if (event.key.toLowerCase() !== 'z' || !(isMac ? event.metaKey : event.ctrlKey)) return
       if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return
+      // Undo acts on the page behind; never while a dialog or popover is in front of it.
+      if (isOverlayOpen()) return
       const item = [...currentItems.current]
         .reverse()
         .find((t) => t.action?.label.toLowerCase() === 'undo')
@@ -171,6 +185,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
+        ref={region}
+        onFocus={(event) => {
+          const from = event.relatedTarget
+          if (from instanceof HTMLElement && !event.currentTarget.contains(from))
+            returnFocus.current = from
+        }}
         aria-live="polite"
         role="status"
         className="pointer-events-none fixed bottom-4 left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"

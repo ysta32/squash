@@ -117,6 +117,31 @@ describe('Toast', () => {
     expect(first).toHaveBeenCalledOnce()
   })
 
+  it('Mod+Z does nothing while a dialog is open', () => {
+    const { toast } = setup()
+    const onAction = vi.fn()
+    toast('Resolved #24', { action: { label: 'Undo', onAction } })
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    document.body.append(dialog)
+    fireEvent.keyDown(document.body, undoKey)
+    expect(onAction).not.toHaveBeenCalled()
+    dialog.remove()
+    fireEvent.keyDown(document.body, undoKey)
+    expect(onAction).toHaveBeenCalledOnce()
+  })
+
+  it('returns focus to where it was when the focused toast is removed', () => {
+    const { toast } = setup()
+    toast('Resolved #24', { action: { label: 'Undo', onAction: vi.fn() } })
+    const input = screen.getByRole('textbox')
+    act(() => input.focus())
+    const button = screen.getByRole('button', { name: 'Undo' })
+    act(() => button.focus())
+    fireEvent.click(button)
+    expect(input).toHaveFocus()
+  })
+
   it('drops the oldest toast and its timer at the cap', () => {
     const { toast } = setup()
     const onAction = vi.fn()
