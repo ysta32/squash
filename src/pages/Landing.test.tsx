@@ -58,6 +58,9 @@ describe('Landing', () => {
       'How it works',
       'On your phone, too',
       'Open source and yours to run',
+      'The small things, done properly',
+      'Questions',
+      'File your first bug in under a minute',
     ]) {
       expect(screen.getByRole('heading', { level: 2, name: title })).toBeInTheDocument()
     }
@@ -109,7 +112,8 @@ describe('Landing', () => {
   it('shows sized product screenshots with alt text, lazy below the fold', () => {
     renderLanding()
     const images = screen.getAllByRole('img')
-    expect(images).toHaveLength(6)
+    // Hero, four feature shots, the command palette, and two phones cropped from mobile.webp.
+    expect(images).toHaveLength(8)
     for (const img of images) {
       expect(img.getAttribute('alt')?.length).toBeGreaterThan(20)
       expect(img).toHaveAttribute('src', expect.stringMatching(/^\/product\/[a-z-]+\.webp$/))
@@ -120,6 +124,37 @@ describe('Landing', () => {
     expect(hero).toHaveAttribute('src', '/product/workspace-light.webp')
     expect(hero).toHaveAttribute('loading', 'eager')
     for (const img of rest) expect(img).toHaveAttribute('loading', 'lazy')
+    const sources = images.map((img) => img.getAttribute('src'))
+    expect(sources).toContain('/product/palette-light.webp')
+    expect(sources).toContain('/product/stats-light.webp')
+    expect(sources.filter((src) => src === '/product/mobile.webp')).toHaveLength(2)
+  })
+
+  it('reserves the real aspect ratio for every screenshot so none render as empty boxes', () => {
+    renderLanding()
+    const intrinsic: Record<string, [number, number]> = {
+      workspace: [1600, 1000],
+      capture: [1400, 544],
+      annotate: [1400, 991],
+      claude: [1400, 784],
+      stats: [720, 338],
+      palette: [1000, 717],
+      mobile: [1400, 981],
+    }
+    for (const img of screen.getAllByRole('img')) {
+      const name = /^\/product\/([a-z]+)/.exec(img.getAttribute('src') ?? '')?.[1] ?? ''
+      expect(intrinsic[name], `unexpected image ${name}`).toBeDefined()
+      expect([Number(img.getAttribute('width')), Number(img.getAttribute('height'))]).toEqual(
+        intrinsic[name],
+      )
+    }
+  })
+
+  it('keeps the navigation sticky and lets the FAQ chevrons rotate when open', () => {
+    renderLanding()
+    expect(screen.getByRole('banner')).toHaveClass('sticky', 'top-0')
+    const summary = screen.getByText('Is Squash free?').closest('summary')
+    expect(summary?.querySelector('svg')).toHaveClass('group-open:rotate-180')
   })
 
   it('matches screenshots to the dark theme', () => {
@@ -129,6 +164,7 @@ describe('Landing', () => {
     expect(sources).toContain('/product/workspace-dark.webp')
     expect(sources).toContain('/product/capture-dark.webp')
     expect(sources).toContain('/product/claude-dark.webp')
+    expect(sources).toContain('/product/palette-dark.webp')
     expect(sources).not.toContain('/product/workspace-light.webp')
   })
 
