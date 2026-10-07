@@ -107,14 +107,13 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
             <legend className="mb-3">Avatar color</legend>
             <div className="flex flex-wrap gap-3">
               {COLORS.map((value) => (
-                <Button
+                <button
                   key={value}
-                  size="sm"
                   type="button"
                   aria-label={`Avatar color ${value}`}
                   aria-pressed={color === value}
                   style={{ backgroundColor: value }}
-                  className={`w-7 hover:scale-110 ${color === value ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''}`}
+                  className={`focus-ring h-7 w-7 rounded-full border-2 border-bg hover:scale-110 ${color === value ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''}`}
                   onClick={() => {
                     setColor(value)
                     setSaved(false)
