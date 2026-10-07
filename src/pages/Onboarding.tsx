@@ -12,7 +12,7 @@ export default function Onboarding() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ form: 'create' | 'join'; message: string } | null>(null)
   const [created, setCreated] = useState<Workspace | null>(null)
 
   const onCreate = async (e: FormEvent) => {
@@ -25,7 +25,10 @@ export default function Onboarding() {
       setLastWorkspace(ws.id)
       setCreated(ws)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError({
+        form: 'create',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+      })
     } finally {
       setBusy(false)
     }
@@ -41,7 +44,10 @@ export default function Onboarding() {
       setLastWorkspace(ws.id)
       navigate(`/app/${ws.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError({
+        form: 'join',
+        message: err instanceof Error ? err.message : 'Something went wrong.',
+      })
     } finally {
       setBusy(false)
     }
@@ -53,7 +59,11 @@ export default function Onboarding() {
       description="A workspace is a shared place for your team's bugs."
       footer={
         <form onSubmit={(e) => void onJoin(e)} className="space-y-3">
-          <Field label="Have an invite code?" hint="Enter the 8 characters a teammate shared.">
+          <Field
+            label="Have an invite code?"
+            hint="Enter the 8 characters a teammate shared."
+            error={error?.form === 'join' ? error.message : null}
+          >
             {({ id, describedBy }) => (
               <div className="flex gap-2">
                 <Input
@@ -79,7 +89,7 @@ export default function Onboarding() {
         <Field
           label="Workspace name"
           hint="Your team or product name. You can rename it later."
-          error={error}
+          error={error?.form === 'create' ? error.message : null}
         >
           {({ id, describedBy }) => (
             <Input
