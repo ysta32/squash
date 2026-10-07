@@ -67,6 +67,7 @@ const seeds: Seed[] = [
       'On iOS Safari the cookie banner sits on top of "Pay now", so you can\'t finish checkout until you dismiss it. Happens on every plan page.',
     severity: 'critical',
     filed_by: 'u-jordan',
+    assignee_id: ME,
     minutes: 6,
   },
   {
@@ -76,6 +77,7 @@ const seeds: Seed[] = [
       'X-axis labels collide once there are more than ~30 points. Probably need to thin the ticks or rotate them.',
     severity: 'high',
     filed_by: ME,
+    assignee_id: 'u-priya',
     minutes: 38,
   },
   {
@@ -87,6 +89,7 @@ const seeds: Seed[] = [
       'csv export drops any customer with an emoji in their name, three rows missing for us',
     severity: 'high',
     filed_by: 'u-priya',
+    assignee_id: 'u-jordan',
     minutes: 95,
   },
   {
@@ -104,6 +107,7 @@ const seeds: Seed[] = [
     description: 'Tooltip uses the light background but inherits the dark-mode text color.',
     severity: 'medium',
     filed_by: 'u-priya',
+    assignee_id: ME,
     minutes: 60 * 5,
   },
   {
@@ -132,6 +136,7 @@ const seeds: Seed[] = [
     description: 'Typing, then picking a filter, then typing again goes nowhere.',
     severity: 'medium',
     filed_by: 'u-priya',
+    assignee_id: 'u-jordan',
     minutes: 60 * 30,
     status: 'resolved',
     resolved_by: 'u-jordan',
@@ -171,6 +176,7 @@ const featureSeeds: Seed[] = [
     description: 'Ping #eng when severity is Critical so it gets eyes in minutes, not hours.',
     severity: 'medium',
     filed_by: 'u-priya',
+    assignee_id: 'u-jordan',
     minutes: 20,
     kind: 'feature',
   },
@@ -201,6 +207,7 @@ export const bugs: Bug[] = [...seeds, ...featureSeeds].map((s) => ({
   resolved_at: s.resolved_at ?? null,
   resolution_note: s.resolution_note ?? null,
   updated_at: s.resolved_at ?? ago(s.minutes),
+  assignee_id: s.assignee_id ?? null,
 }))
 
 /** Screenshot fixtures are rendered by capture.mjs and served under /__shots/. */
@@ -256,6 +263,18 @@ export const bug_events: BugEvent[] = [
         note: null,
         created_at: b.created_at,
       },
+      ...(b.assignee_id
+        ? [
+            {
+              id: `e-a${b.number}`,
+              bug_id: b.id,
+              actor_id: b.filed_by,
+              type: 'assigned' as const,
+              note: b.assignee_id,
+              created_at: b.created_at,
+            },
+          ]
+        : []),
       ...(b.resolved_by && b.resolved_at
         ? [
             {
@@ -276,6 +295,14 @@ export const bug_events: BugEvent[] = [
     type: 'filed',
     note: null,
     created_at: ago(6),
+  },
+  {
+    id: 'e-a24',
+    bug_id: 'bug-24',
+    actor_id: 'u-jordan',
+    type: 'assigned',
+    note: ME,
+    created_at: ago(5.5),
   },
   { id: 'e-2', bug_id: 'bug-24', actor_id: ME, type: 'edited', note: null, created_at: ago(5) },
   { id: 'e-3', bug_id: 'bug-24', actor_id: ME, type: 'commented', note: null, created_at: ago(4) },

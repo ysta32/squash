@@ -25,6 +25,8 @@ export interface BugListProps {
   selectedId: string | null
   onSelect: (id: string) => void
   members: WorkspaceMember[]
+  /** Signed-in user, listed first as "Me" in the assignee filter. */
+  selfId?: string
   viewersOf: (bugId: string) => PresenceUser[]
   highlightIds: Set<string>
   searchRef?: RefObject<HTMLInputElement | null>
@@ -54,6 +56,7 @@ export function BugList({
   selectedId,
   onSelect,
   members,
+  selfId,
   viewersOf,
   highlightIds,
   searchRef,
@@ -211,6 +214,7 @@ export function BugList({
           filters={filters}
           onFilters={onFilters}
           members={members}
+          selfId={selfId}
           bugs={visible}
           workspaceName={workspaceName}
         />

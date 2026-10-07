@@ -27,6 +27,7 @@ import type {
 import { KIND_LABEL, SEVERITIES, SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
+import { AssigneePicker } from './AssigneePicker'
 import { Avatar } from './Avatar'
 import { ClaudeProgress } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
@@ -43,6 +44,10 @@ export interface BugDetailProps {
   onUpdate: (id: string, patch: BugPatch) => void | Promise<void>
   onResolve: (id: string, note: string | null) => void | Promise<void>
   onReopen: (id: string, note: string | null) => void | Promise<void>
+  /** Sets the assignee, or clears it with null. Without it the assignee is read-only. */
+  onAssign?: (id: string, userId: string | null) => void | Promise<void>
+  /** Counter bumped by the keyboard shortcut to open the assignee picker. */
+  assignRequest?: number
   /** Permanently deletes the bug (after the user confirms). */
   onDelete?: (id: string) => Promise<void>
   onBack: () => void
@@ -130,9 +135,12 @@ interface GalleryItem {
 function BugBody({
   bug,
   members,
+  selfId,
   onUpdate,
   onResolve,
   onReopen,
+  onAssign,
+  assignRequest,
   onDelete,
   onBack,
   onToast,
@@ -419,15 +427,27 @@ function BugBody({
           className="block w-full resize-none overflow-hidden bg-transparent text-xl font-semibold tracking-tight outline-none"
         />
         <div className="mt-2 space-y-1 text-xs text-muted">
-          <p className="flex items-center gap-1.5">
-            <Avatar profile={filer} size="xs" />
-            <span>
-              Filed by <span className="text-fg">{filer?.display_name ?? 'Deleted user'}</span> ·{' '}
-              <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
-                {relativeTime(bug.created_at)}
-              </time>
-            </span>
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <p className="flex items-center gap-1.5">
+              <Avatar profile={filer} size="xs" />
+              <span>
+                Filed by <span className="text-fg">{filer?.display_name ?? 'Deleted user'}</span> ·{' '}
+                <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
+                  {relativeTime(bug.created_at)}
+                </time>
+              </span>
+            </p>
+            <AssigneePicker
+              members={members}
+              value={bug.assignee_id}
+              selfId={selfId}
+              disabled={!editable || !onAssign}
+              openRequest={assignRequest}
+              onChange={(userId) => {
+                if (onAssign) run(() => onAssign(bug.id, userId))
+              }}
+            />
+          </div>
           {bug.status === 'resolved' && (
             <>
               <p className="flex items-center gap-1.5">

@@ -36,6 +36,7 @@ function bug(overrides: Partial<BugWithMeta> = {}): BugWithMeta {
     resolved_by: null,
     resolved_at: null,
     resolution_note: null,
+    assignee_id: null,
     updated_at: '2026-10-01T10:00:00Z',
     attachments: [
       {

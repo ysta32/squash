@@ -143,10 +143,12 @@ curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://
 </table>
 
 - **Presence.** See who's online and which bug each teammate is looking at, and get a toast when someone files one.
+- **Assignees.** Give a bug an owner from the detail view, the command palette or one keypress (<kbd>I</kbd> takes it yourself). The list shows who owns what, and you can filter to what's yours or what nobody has picked up.
+- **Notifications that respect focus.** When Squash is in a background tab, a teammate filing a bug or assigning you one raises a desktop notification and an unread count in the tab title. Turn it on in Settings.
 - **Bugs and Features side by side.** File and track feature requests in their own tab, and move items between the two.
-- **Find anything.** Open, Resolved and All tabs with live counts; filter by who filed or resolved, or by severity; full-text search across titles, descriptions and voice transcripts.
+- **Find anything.** Open, Resolved and All tabs with live counts; filter by assignee, by who filed or resolved, or by severity; full-text search across titles, descriptions and voice transcripts.
 - **A full history.** Resolve or reopen with an optional note, or delete outright. Each bug has an activity timeline and comments.
-- **Markdown and mentions.** Descriptions and comments render bold, italics, code, lists, quotes and links, and highlight `@name` mentions. Rendering is React-only, so no HTML from a bug ever reaches the page.
+- **Markdown and mentions.** Descriptions and comments render bold, italics, code, lists, quotes and links, and `@name` mentions, which autocomplete from your teammates as you type (any script, IME friendly). Rendering is React-only, so no HTML from a bug ever reaches the page.
 - **Export.** Download the bugs you are looking at as CSV (safe to open in a spreadsheet) or as a Markdown report.
 - **Workspaces.** Invite links, a workspace switcher, and owner controls to rename, regenerate the invite, remove members, transfer ownership or delete. Sign in with Google or a magic link.
 
@@ -186,6 +188,8 @@ Press <kbd>⌘</kbd>+<kbd>K</kbd> (<kbd>Ctrl</kbd>+<kbd>K</kbd> elsewhere) to op
 | <kbd>/</kbd>                                         | Search                                   |
 | <kbd>J</kbd> / <kbd>K</kbd>                          | Next / previous bug                      |
 | <kbd>R</kbd> / <kbd>O</kbd>                          | Resolve / reopen the selected bug        |
+| <kbd>I</kbd>                                         | Assign the selected bug to yourself      |
+| <kbd>A</kbd>                                         | Open the assignee picker                 |
 | <kbd>X</kbd>                                         | Pick the selected bug for Claude         |
 | <kbd>C</kbd>                                         | Send picked (or selected) bugs to Claude |
 | <kbd>Esc</kbd>                                       | Close / back to list                     |
@@ -273,6 +277,7 @@ npm run typecheck     # tsc, strict
 npm run lint          # ESLint
 npm run format:check  # Prettier
 npm run test          # Vitest
+npm run test:db       # every migration (twice) plus the RLS suite, on in-process Postgres
 npm run build         # production build
 npm run screenshots   # regenerate the README images (needs Google Chrome and ffmpeg)
 ```

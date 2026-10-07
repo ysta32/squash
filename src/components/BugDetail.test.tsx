@@ -60,6 +60,7 @@ function makeBug(over: Partial<BugWithMeta> = {}): BugWithMeta {
     resolved_by: null,
     resolved_at: null,
     resolution_note: null,
+    assignee_id: null,
     updated_at: NOW,
     attachments: [],
     ...over,

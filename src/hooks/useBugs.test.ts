@@ -26,6 +26,7 @@ const h = vi.hoisted(() => {
     updateResult: { error: null } as { error: { message: string } | null },
     resolveUpdate: null as null | ((r: { error: { message: string } | null }) => void),
     deferUpdate: false,
+    updated: [] as { table: string; patch: unknown }[],
     deferSelect: false,
     resolveSelect: null as null | ((r: Result) => void),
     deleteResult: { data: [{ id: 'x' }], error: null } as Result,
@@ -87,14 +88,17 @@ vi.mock('../lib/supabase', () => {
           },
         }),
       }),
-      update: () => ({
-        eq: () =>
-          state.deferUpdate
-            ? new Promise<{ error: { message: string } | null }>((resolve) => {
-                state.resolveUpdate = resolve
-              })
-            : Promise.resolve(state.updateResult),
-      }),
+      update: (patch: unknown) => {
+        state.updated.push({ table, patch })
+        return {
+          eq: () =>
+            state.deferUpdate
+              ? new Promise<{ error: { message: string } | null }>((resolve) => {
+                  state.resolveUpdate = resolve
+                })
+              : Promise.resolve(state.updateResult),
+        }
+      },
     }
     return builder
   }
@@ -170,6 +174,7 @@ function bug(p: Partial<BugWithMeta>): BugWithMeta {
     resolved_by: null,
     resolved_at: null,
     resolution_note: null,
+    assignee_id: null,
     updated_at: '2026-01-01T00:00:00Z',
     attachments: [],
     ...p,
@@ -181,6 +186,7 @@ const BASE = {
   tab: 'all',
   filedBy: null,
   resolvedBy: null,
+  assignee: null,
   severity: null,
   query: '',
 } as const
@@ -229,6 +235,19 @@ describe('filterBugs', () => {
     expect(ids(filterBugs(sample, { ...BASE, query: '#99' }))).toEqual([])
   })
 
+  it('filters by assignee: null = anyone, none = unassigned, else that user', () => {
+    const assigned = [
+      bug({ id: 'x', assignee_id: 'u1' }),
+      bug({ id: 'y', assignee_id: null }),
+      bug({ id: 'z', assignee_id: 'u2' }),
+    ]
+    expect(ids(filterBugs(assigned, { ...BASE, assignee: null }))).toEqual(['x', 'y', 'z'])
+    expect(ids(filterBugs(assigned, { ...BASE, assignee: 'none' }))).toEqual(['y'])
+    expect(ids(filterBugs(assigned, { ...BASE, assignee: 'u2' }))).toEqual(['z'])
+    expect(ids(filterBugs(assigned, { ...BASE, assignee: 'u3' }))).toEqual([])
+    expect(ids(filterBugs(assigned, { ...BASE, assignee: 'u1', tab: 'resolved' }))).toEqual([])
+  })
+
   it('combines filters', () => {
     expect(ids(filterBugs(sample, { ...BASE, tab: 'open', filedBy: 'u1', query: 'typo' }))).toEqual(
       ['c'],
@@ -271,6 +290,7 @@ describe('useBugs', () => {
     h.state.updateResult = { error: null }
     h.state.deferUpdate = false
     h.state.resolveUpdate = null
+    h.state.updated = []
     h.state.deferSelect = false
     h.state.resolveSelect = null
     resetPendingUploads()
@@ -446,6 +466,7 @@ describe('useBugs sync', () => {
     h.state.updateResult = { error: null }
     h.state.deferUpdate = false
     h.state.resolveUpdate = null
+    h.state.updated = []
     h.state.deferSelect = false
     h.state.resolveSelect = null
     h.state.deleteResult = { data: [{ id: 'x' }], error: null }
@@ -564,6 +585,45 @@ describe('useBugs sync', () => {
     })
     expect(result.current.bugs[0].title).toBe('Edited remotely')
     expect(result.current.bugs[0].optimistic).toBe(false)
+  })
+
+  it('assignBug patches assignee_id optimistically and reverts on error', async () => {
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'a', assignee_id: 'u1' }), bug_attachments: [] }],
+      error: null,
+    }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    h.state.deferUpdate = true
+    let pending: Promise<void> = Promise.resolve()
+    act(() => {
+      pending = result.current.assignBug('a', 'u2')
+    })
+    expect(result.current.bugs[0].assignee_id).toBe('u2')
+    expect(h.state.updated).toEqual([{ table: 'bugs', patch: { assignee_id: 'u2' } }])
+    await act(async () => {
+      h.state.resolveUpdate?.({ error: null })
+      await pending
+    })
+    expect(result.current.bugs[0].assignee_id).toBe('u2')
+
+    h.state.deferUpdate = false
+    h.state.updateResult = { error: { message: 'assignee_not_member' } }
+    await act(async () => {
+      await expect(result.current.assignBug('a', 'u3')).rejects.toThrow(
+        'That person is not a member of this workspace.',
+      )
+    })
+    expect(result.current.bugs[0].assignee_id).toBe('u2')
+    expect(h.state.updated[1]).toEqual({ table: 'bugs', patch: { assignee_id: 'u3' } })
+
+    h.state.updateResult = { error: null }
+    await act(async () => {
+      await result.current.assignBug('a', null)
+    })
+    expect(result.current.bugs[0].assignee_id).toBeNull()
+    expect(h.state.updated[2]).toEqual({ table: 'bugs', patch: { assignee_id: null } })
   })
 
   it('reverts a failed update unless a newer server row arrived meanwhile', async () => {

@@ -2,7 +2,7 @@ export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type BugStatus = 'open' | 'resolved'
 export type BugKind = 'bug' | 'feature'
 export type MemberRole = 'owner' | 'member'
-export type EventType = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented'
+export type EventType = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented' | 'assigned'
 
 export interface Profile {
   id: string
@@ -44,6 +44,8 @@ export interface Bug {
   resolved_at: string | null
   resolution_note: string | null
   updated_at: string
+  /** Current workspace member the bug is assigned to, or null. No FK (see attribution note). */
+  assignee_id: string | null
 }
 
 export interface BugAttachment {

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -24,10 +25,13 @@ import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
 import { isOverlayOpen, useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
+import { useNotifications } from '../hooks/useNotifications'
+import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
 import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
+import { supabase } from '../lib/supabase'
 import { NEXT_THEME, useTheme } from '../lib/theme'
 import type { Bug, BugKind } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
@@ -37,10 +41,26 @@ const DEFAULT_FILTERS: BugFilters = {
   tab: 'open',
   filedBy: null,
   resolvedBy: null,
+  assignee: null,
   severity: null,
   query: '',
 }
 const HIGHLIGHT_MS = 3000
+
+/** Who made the latest assignment change on a bug, from its activity log. */
+async function lastAssigner(bugId: string, userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('bug_events')
+    .select('actor_id')
+    .eq('bug_id', bugId)
+    .eq('type', 'assigned')
+    .eq('note', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data?.actor_id ?? null
+}
 
 function isDesktop(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches
@@ -57,6 +77,16 @@ export default function Workspace() {
   const { toast } = useToast()
   const ws = useWorkspace(workspaceId)
   const { workspaces } = useWorkspaces()
+  const { notify } = useNotifications()
+  const [unreadCount, setUnreadCount] = useState(0)
+  useUnreadTitle(unreadCount)
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') setUnreadCount(0)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [])
 
   const [highlightIds, setHighlightIds] = useState<Set<string>>(() => new Set())
   const highlightTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
@@ -72,7 +102,15 @@ export default function Workspace() {
     if (bug.filed_by !== selfId) {
       const name =
         ws.members.find((m) => m.user_id === bug.filed_by)?.profile.display_name ?? 'Someone'
-      toast(`${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
+      const title = `${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`
+      toast(title)
+      notify({
+        title,
+        body: bug.title,
+        tag: bug.id,
+        onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}`),
+      })
+      if (document.visibilityState !== 'visible') setUnreadCount((count) => count + 1)
     }
     setHighlightIds((prev) => new Set(prev).add(bug.id))
     const timers = highlightTimers.current
@@ -98,10 +136,84 @@ export default function Workspace() {
     updateBug,
     resolveBug,
     reopenBug,
+    assignBug,
     deleteBug,
     retryUploads,
     getBugByNumber,
   } = useBugs(workspaceId, { onRemoteInsert })
+
+  // Assignment changes this tab made (in flight, or just rolled back after a failure), so their
+  // optimistic updates and rollbacks are never announced as a teammate's assignment.
+  const localAssigns = useRef(new Map<string, number>())
+  const rolledBack = useRef(new Set<string>())
+  const assign = useCallback(
+    async (id: string, userId: string | null) => {
+      const inFlight = localAssigns.current
+      inFlight.set(id, (inFlight.get(id) ?? 0) + 1)
+      try {
+        await assignBug(id, userId)
+      } catch (err) {
+        rolledBack.current.add(id)
+        throw err
+      } finally {
+        const left = (inFlight.get(id) ?? 1) - 1
+        if (left > 0) inFlight.set(id, left)
+        else inFlight.delete(id)
+      }
+    },
+    [assignBug],
+  )
+
+  // Replaced per workspace (and on unmount) so pending assigner lookups go quiet.
+  const announceLive = useRef({ current: true })
+  useEffect(() => {
+    const live = { current: true }
+    announceLive.current = live
+    return () => {
+      live.current = false
+    }
+  }, [workspaceId])
+
+  const announceAssignment = useEffectEvent((bug: Bug) => {
+    const live = announceLive.current
+    void lastAssigner(bug.id, selfId)
+      .catch((err: unknown) => {
+        console.error('Failed to load who assigned the bug', err)
+        return null
+      })
+      .then((actorId) => {
+        if (!live.current || actorId === selfId) return
+        const name =
+          ws.members.find((m) => m.user_id === actorId)?.profile.display_name ?? 'Someone'
+        const title = `${name} assigned you #${bug.number}`
+        toast(title)
+        notify({
+          title,
+          body: bug.title,
+          tag: `assigned:${bug.id}`,
+          onClick: () => navigate(`/app/${workspaceId}/bug/${bug.number}`),
+        })
+        if (document.visibilityState !== 'visible') setUnreadCount((count) => count + 1)
+      })
+  })
+
+  // Realtime updates carry no actor, so an assignment to the signed-in user is spotted by
+  // comparing each bug's assignee with the previous render's.
+  const prevAssignees = useRef<Map<string, string | null> | null>(null)
+  useEffect(() => {
+    const prev = prevAssignees.current
+    prevAssignees.current = new Map(bugs.map((b) => [b.id, b.assignee_id]))
+    const local = (id: string) => localAssigns.current.has(id) || rolledBack.current.has(id)
+    if (prev && selfId !== '') {
+      for (const bug of bugs) {
+        if (bug.assignee_id !== selfId || !prev.has(bug.id) || prev.get(bug.id) === selfId) continue
+        if (bug.optimistic || local(bug.id)) continue
+        announceAssignment(bug)
+      }
+    }
+    // A rollback is seen by at most the next update after the failure.
+    rolledBack.current.clear()
+  }, [bugs, selfId])
 
   const [filters, setFilters] = useState<BugFilters>(DEFAULT_FILTERS)
   const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set())
@@ -125,6 +237,7 @@ export default function Workspace() {
   const [lookupMissing, setLookupMissing] = useState<number | null>(null)
   const [resolveRequest, setResolveRequest] = useState(0)
   const [reopenRequest, setReopenRequest] = useState(0)
+  const [assignRequest, setAssignRequest] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -360,6 +473,42 @@ export default function Workspace() {
     opts,
   )
   useShortcut(
+    'a',
+    (e) => {
+      if (!selected || selected.optimistic) return
+      e.preventDefault()
+      setAssignRequest((n) => n + 1)
+    },
+    opts,
+  )
+  const unassign = (bug: Bug) => {
+    assign(bug.id, null).then(
+      () => toast(`Unassigned #${bug.number}`),
+      (err: unknown) =>
+        toast(err instanceof Error ? err.message : 'Could not change the assignee.'),
+    )
+  }
+  const toggleSelfAssign = (bug: Bug) => {
+    if (bug.assignee_id === selfId) {
+      unassign(bug)
+      return
+    }
+    assign(bug.id, selfId).then(
+      () => toast(`Assigned #${bug.number} to you`),
+      (err: unknown) =>
+        toast(err instanceof Error ? err.message : 'Could not change the assignee.'),
+    )
+  }
+  useShortcut(
+    'i',
+    (e) => {
+      if (!selected || selected.optimistic || selfId === '') return
+      e.preventDefault()
+      toggleSelfAssign(selected)
+    },
+    opts,
+  )
+  useShortcut(
     'x',
     (e) => {
       if (!selected || selected.optimistic) return
@@ -412,6 +561,41 @@ export default function Workspace() {
       keywords: ['find', 'filter'],
       run: () => focusInList(searchRef),
     },
+    ...(selected && !selected.optimistic && selfId !== '' && selected.assignee_id !== selfId
+      ? [
+          {
+            id: 'assign-me',
+            label: 'Assign to me',
+            group: 'Actions',
+            hint: 'I',
+            keywords: ['assignee', 'take', 'claim'],
+            run: () => toggleSelfAssign(selected),
+          },
+        ]
+      : []),
+    ...(selected && !selected.optimistic && selected.assignee_id !== null
+      ? [
+          {
+            id: 'unassign',
+            label: 'Unassign',
+            group: 'Actions',
+            hint: selected.assignee_id === selfId ? 'I' : undefined,
+            keywords: ['assignee', 'remove'],
+            run: () => unassign(selected),
+          },
+        ]
+      : []),
+    ...(selfId !== ''
+      ? [
+          {
+            id: 'filter-assigned-me',
+            label: 'Show bugs assigned to me',
+            group: 'Actions',
+            keywords: ['assignee', 'mine', 'filter'],
+            run: () => setFilters((f) => ({ ...f, assignee: selfId })),
+          },
+        ]
+      : []),
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,
       label: `Export visible bugs as ${format === 'csv' ? 'CSV' : 'Markdown'}`,
@@ -518,6 +702,8 @@ export default function Workspace() {
         onUpdate={updateBug}
         onResolve={resolveBug}
         onReopen={reopenBug}
+        onAssign={assign}
+        assignRequest={assignRequest}
         onDelete={deleteAndDeselect}
         onBack={deselect}
         resolveRequest={resolveRequest}
@@ -603,6 +789,7 @@ export default function Workspace() {
             selectedId={selected?.id ?? null}
             onSelect={select}
             members={ws.members}
+            selfId={selfId}
             viewersOf={presence.viewers}
             highlightIds={highlightIds}
             searchRef={searchRef}

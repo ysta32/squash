@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { Markdown, renderInline } from './markdown'
+import { mentionHandle } from './mention'
 
 function html(source: string) {
   const { container } = render(<Markdown source={source} />)
@@ -68,6 +69,12 @@ describe('Markdown', () => {
     expect(c.textContent).toContain('a@b.co')
   })
 
+  it('highlights unicode mentions', () => {
+    const c = html('hi @JoséGarcía and @Łukasz and @李雷')
+    const spans = Array.from(c.querySelectorAll('span')).map((s) => s.textContent)
+    expect(spans).toEqual(['@JoséGarcía', '@Łukasz', '@李雷'])
+  })
+
   it('never injects HTML', () => {
     const c = html('<img src=x onerror="alert(1)"> <script>bad()</script>')
     expect(c.querySelector('img')).toBeNull()
@@ -121,5 +128,14 @@ describe('Markdown', () => {
 describe('renderInline', () => {
   it('returns plain strings for plain text', () => {
     expect(renderInline('hello')).toEqual(['hello'])
+  })
+})
+
+describe('mentionHandle', () => {
+  it('round-trips: the inserted handle is highlighted in full', () => {
+    const handle = mentionHandle("Mary O'Connor 🎉")
+    expect(handle).toBe('MaryOConnor')
+    const c = html(`hi @${handle} there`)
+    expect(c.querySelector('span.text-accent')?.textContent).toBe(`@${handle}`)
   })
 })

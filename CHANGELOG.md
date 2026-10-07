@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## v1.3.0 — 2026-10-07
+
+Assignees, notifications, mention autocomplete, and database tests in CI.
+
+### Added
+
+- Assign a bug to a teammate. Pick an owner in the detail view or from the command palette, press <kbd>I</kbd> to take the selected bug yourself or <kbd>A</kbd> to open the picker, and filter the list by assignee, including "Unassigned" and "Me". The list shows the owner of each bug, and the activity timeline records every change. Needs migration `0004_assignees.sql`: only workspace members can be assigned, and a member who leaves is unassigned from their bugs.
+- Desktop notifications. While Squash is in a background tab, a teammate filing a bug or assigning one to you raises a notification, and the tab title shows how many arrived. Opt in under Settings → Appearance.
+- `@mention` autocomplete in comments. Type `@` to pick a teammate with the arrow keys; names in any script work, and composing with an IME never selects by accident.
+- `npm run test:db` applies every migration twice and runs the RLS suite on in-process Postgres (PGlite), with no Supabase project needed. CI runs it on every push.
+
+### Changed
+
+- The landing page loads about 60 KB less JavaScript (gzip). The app, settings, the Claude Code guide and the legal pages load when you open them, and the workspace is prefetched as soon as you are signed in.
+
+### Fixed
+
+- CSV export neutralizes formula prefixes typed with full-width characters and leading tabs, and the Markdown export escapes raw HTML and headings in titles.
+
 ## v1.2.0 — 2026-10-07
 
 A design pass across the whole app, plus a command palette, markdown, and export.

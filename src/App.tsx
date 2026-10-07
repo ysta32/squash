@@ -1,17 +1,17 @@
-import type { ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/auth'
-import AppIndex from './pages/AppIndex'
-import AuthCallback from './pages/AuthCallback'
-import ClaudeGuide from './pages/ClaudeGuide'
-import Join from './pages/Join'
 import Landing from './pages/Landing'
-import Privacy from './pages/Privacy'
-import Settings from './pages/Settings'
 import SignIn from './pages/SignIn'
-import Terms from './pages/Terms'
-import Workspace from './pages/Workspace'
+const AppIndex = lazy(() => import('./pages/AppIndex'))
+const AuthCallback = lazy(() => import('./pages/AuthCallback'))
+const ClaudeGuide = lazy(() => import('./pages/ClaudeGuide'))
+const Join = lazy(() => import('./pages/Join'))
+const Privacy = lazy(() => import('./pages/Privacy'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Terms = lazy(() => import('./pages/Terms'))
+const Workspace = lazy(() => import('./pages/Workspace'))
 
 function FullPageSkeleton() {
   return (
@@ -25,6 +25,16 @@ function FullPageSkeleton() {
       </div>
     </div>
   )
+}
+
+/** Suspense fallback that stays blank for the first 150 ms so fast loads never flash a skeleton. */
+function DelayedSkeleton() {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShow(true), 150)
+    return () => window.clearTimeout(timer)
+  }, [])
+  return show ? <FullPageSkeleton /> : null
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -51,53 +61,64 @@ function WorkspaceRoute() {
   return <Workspace key={workspaceId} />
 }
 
+function PrefetchWorkspace() {
+  const { user } = useAuth()
+  useEffect(() => {
+    if (user) void import('./pages/Workspace')
+  }, [user])
+  return null
+}
+
 export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/claude" element={<ClaudeGuide />} />
-            <Route path="/signin" element={<SignIn />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="/join/:code" element={<Join />} />
-            <Route
-              path="/app"
-              element={
-                <RequireAuth>
-                  <AppIndex />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/app/:workspaceId"
-              element={
-                <RequireAuth>
-                  <WorkspaceRoute />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/app/:workspaceId/bug/:number"
-              element={
-                <RequireAuth>
-                  <WorkspaceRoute />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/app/:workspaceId/settings"
-              element={
-                <RequireAuth>
-                  <Settings />
-                </RequireAuth>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <PrefetchWorkspace />
+          <Suspense fallback={<DelayedSkeleton />}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/claude" element={<ClaudeGuide />} />
+              <Route path="/signin" element={<SignIn />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/join/:code" element={<Join />} />
+              <Route
+                path="/app"
+                element={
+                  <RequireAuth>
+                    <AppIndex />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/app/:workspaceId"
+                element={
+                  <RequireAuth>
+                    <WorkspaceRoute />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/app/:workspaceId/bug/:number"
+                element={
+                  <RequireAuth>
+                    <WorkspaceRoute />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/app/:workspaceId/settings"
+                element={
+                  <RequireAuth>
+                    <Settings />
+                  </RequireAuth>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -16,6 +16,7 @@ const filters: BugFilters = {
   tab: 'open',
   filedBy: null,
   resolvedBy: null,
+  assignee: null,
   severity: null,
   query: '',
 }
@@ -49,6 +50,7 @@ function bug(overrides: Partial<BugWithMeta> = {}): BugWithMeta {
     resolved_by: null,
     resolved_at: null,
     resolution_note: null,
+    assignee_id: null,
     updated_at: '2026-10-01T10:00:00Z',
     attachments: [],
     ...overrides,
@@ -313,6 +315,33 @@ describe('BugList', () => {
     expect(screen.getByRole('button', { name: 'All 2' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+  })
+
+  it('filters by assignee: Me first, then Unassigned, and clears with the other filters', () => {
+    const assigned = [
+      bug({ assignee_id: 'grace' }),
+      bug({ id: 'mine', number: 2, title: 'Slow search', assignee_id: 'ada' }),
+      bug({ id: 'nobody', number: 3, title: 'Typo on pricing' }),
+    ]
+    render(<Harness bugs={assigned} selfId="ada" />)
+    const select = screen.getByRole('combobox', { name: 'Assignee' })
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Assignee', 'Unassigned', 'Me', 'Grace'])
+    const rows = () =>
+      within(screen.getByRole('listbox', { name: /bugs/i }))
+        .getAllByRole('option')
+        .map((o) => o.getAttribute('aria-label'))
+
+    fireEvent.change(select, { target: { value: 'ada' } })
+    expect(rows()).toEqual(['#2 Slow search'])
+    fireEvent.change(select, { target: { value: 'none' } })
+    expect(rows()).toEqual(['#3 Typo on pricing'])
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(select).toHaveValue('')
+    expect(rows()).toHaveLength(3)
   })
 
   it('binds the external search ref and clears and blurs on Escape', () => {

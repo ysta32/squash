@@ -16,7 +16,7 @@ export function exportFilename(
 
 function csvCell(value: string | number | null): string {
   const text = String(value ?? '')
-  const guarded = /^\s*[=+\-@]|^[\t\r]/.test(text) ? `'${text}` : text
+  const guarded = /^\s*[=+\-@|＝＋－＠]|^[\t\r]/.test(text) ? `'${text}` : text
   return /[,"\r\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded
 }
 
@@ -42,6 +42,7 @@ export function bugsToCsv(bugs: BugWithAttachments[]): string {
 
 function markdownCell(text: string): string {
   return text
+    .replace(/</g, '&lt;')
     .replace(/\\/g, '\\\\')
     .replace(/\|/g, '\\|')
     .replace(/\r\n|\r|\n/g, ' ')
@@ -63,7 +64,7 @@ export function bugsToMarkdown(bugs: BugWithAttachments[], workspaceName: string
       '',
       `## ${KIND_LABEL[bug.kind].one} #${bug.number}: ${markdownCell(bug.title)}`,
       '',
-      bug.description.replace(/^( {0,3})#/gm, '$1\\#'),
+      bug.description.replace(/</g, '&lt;').replace(/^( {0,3})#/gm, '$1\\#'),
     )
   }
   return lines.join('\n') + '\n'

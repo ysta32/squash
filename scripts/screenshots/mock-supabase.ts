@@ -109,6 +109,7 @@ class Query implements PromiseLike<{ data: unknown; error: null; count?: number 
           row.resolved_by ??= null
           row.resolved_at ??= null
           row.resolution_note ??= null
+          row.assignee_id ??= null
           row.updated_at = row.created_at
           // The database logs this with a trigger.
           db.bug_events.push({

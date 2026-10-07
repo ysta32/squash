@@ -21,6 +21,7 @@ function bug(overrides: Partial<BugWithMeta> = {}): BugWithMeta {
     resolved_by: null,
     resolved_at: null,
     resolution_note: null,
+    assignee_id: null,
     updated_at: '2026-10-01T10:00:00Z',
     attachments: [],
     ...overrides,
@@ -91,6 +92,23 @@ describe('bugsToCsv', () => {
     )
   })
 
+  describe.each(['|', '＝', '＋', '－', '＠'])('guards the %s prefix', (prefix) => {
+    it.each(['', '  ', '\t', '\r\n', '\u00a0'])('after whitespace %j', (whitespace) => {
+      const value = `${whitespace}${prefix}SUM(1,2)`
+      const guarded = `"'${value}"`
+      expect(bugsToCsv([bug({ title: value, filed_by: value, description: value })])).toContain(
+        `7,bug,${guarded},high,open,${guarded},2026-10-01T10:00:00Z,,${guarded}\r\n`,
+      )
+    })
+
+    it('preserves the character inside ordinary text', () => {
+      const value = `Text ${prefix} value`
+      expect(bugsToCsv([bug({ title: value, filed_by: value, description: value })])).toContain(
+        `7,bug,${value},high,open,${value},2026-10-01T10:00:00Z,,${value}\r\n`,
+      )
+    })
+  })
+
   it.each([
     [' =cmd', "' =cmd"],
     ['\t=1+1', "'\t=1+1"],
@@ -112,6 +130,28 @@ describe('bugsToCsv', () => {
 })
 
 describe('bugsToMarkdown', () => {
+  it('escapes HTML in titles in both the table and section heading', () => {
+    const markdown = bugsToMarkdown([bug({ title: '<script>alert(1)</script>' })], 'Acme')
+    expect(markdown).toContain('| 7 | &lt;script>alert(1)&lt;/script> | High | open | ada |')
+    expect(markdown).toContain('## Bug #7: &lt;script>alert(1)&lt;/script>\n')
+    expect(markdown).not.toContain('<')
+  })
+
+  it('escapes HTML in descriptions while preserving Markdown and line breaks', () => {
+    const markdown = bugsToMarkdown(
+      [
+        bug({
+          description: '# Steps\n<img src=x onerror=alert(1)>\r\n**Text** <script>x</script>',
+        }),
+      ],
+      'Acme',
+    )
+    expect(markdown).toContain(
+      '\\# Steps\n&lt;img src=x onerror=alert(1)>\r\n**Text** &lt;script>x&lt;/script>\n',
+    )
+    expect(markdown).not.toContain('<')
+  })
+
   it('escapes description headings while preserving bug section headings', () => {
     const markdown = bugsToMarkdown(
       [
@@ -199,6 +239,7 @@ const filterProps = {
     tab: 'open',
     filedBy: null,
     resolvedBy: null,
+    assignee: null,
     severity: null,
     query: '',
   } as const,

@@ -11,6 +11,7 @@ export interface BugFiltersProps {
   filters: Filters
   onFilters: (filters: Filters) => void
   members: WorkspaceMember[]
+  selfId?: string
   bugs?: BugWithMeta[]
   workspaceName?: string
   onExport?: (format: 'csv' | 'md') => void
@@ -22,6 +23,7 @@ export function BugFilters({
   filters,
   onFilters,
   members,
+  selfId,
   bugs = [],
   workspaceName,
   onExport,
@@ -32,7 +34,9 @@ export function BugFilters({
   const menuId = useId()
   const closeExport = useCallback(() => setExportOpen(false), [])
   useDismiss(exportRef, closeExport, exportOpen)
-  const active = filters.filedBy || filters.resolvedBy || filters.severity || filters.query
+  const active =
+    filters.filedBy || filters.resolvedBy || filters.assignee || filters.severity || filters.query
+  const self = selfId ? members.find((member) => member.user_id === selfId) : undefined
 
   function exportBugs(format: 'csv' | 'md'): void {
     closeExport()
@@ -74,6 +78,31 @@ export function BugFilters({
       ))}
       <label className="relative">
         <select
+          aria-label="Assignee"
+          title="Assignee"
+          className={selectClass}
+          value={filters.assignee ?? ''}
+          onChange={(event) => onFilters({ ...filters, assignee: event.target.value || null })}
+        >
+          <option value="">Assignee</option>
+          <option value="none">Unassigned</option>
+          {self && <option value={self.user_id}>Me</option>}
+          {members
+            .filter((member) => member !== self)
+            .map((member) => (
+              <option key={member.user_id} value={member.user_id}>
+                {member.profile.display_name}
+              </option>
+            ))}
+        </select>
+        <ChevronDown
+          aria-hidden="true"
+          size={12}
+          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted"
+        />
+      </label>
+      <label className="relative">
+        <select
           aria-label="Severity"
           className={selectClass}
           value={filters.severity ?? ''}
@@ -102,7 +131,14 @@ export function BugFilters({
           variant="ghost"
           size="sm"
           onClick={() =>
-            onFilters({ ...filters, filedBy: null, resolvedBy: null, severity: null, query: '' })
+            onFilters({
+              ...filters,
+              filedBy: null,
+              resolvedBy: null,
+              assignee: null,
+              severity: null,
+              query: '',
+            })
           }
         >
           <X size={12} aria-hidden="true" /> Clear
