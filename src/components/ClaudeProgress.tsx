@@ -16,7 +16,7 @@ const STATE_DOT: Record<ClaudeRunState, string> = {
   working: 'animate-pulse bg-accent',
   waiting: 'animate-pulse bg-warning',
   done: 'bg-success',
-  ended: 'bg-border',
+  ended: 'bg-muted/60',
 }
 
 /** Re-renders every few seconds so "updated 12s ago" stays current while Claude works. */
