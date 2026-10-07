@@ -21,7 +21,14 @@
 -- ALTER TYPE ... ADD VALUE may run inside a transaction (Postgres 12+), but the
 -- new value cannot be used until that transaction commits. It is only referenced
 -- from plpgsql bodies below, which are not validated at create time and only run
--- after this migration has committed. Re-runnable like 0001_init.sql.
+-- after this migration has committed.
+--
+-- Lock order (extends the list in 0001_init.sql): on INSERT with an assignee,
+-- bugs_assignee_guard locks the workspaces row FOR UPDATE (the same mode
+-- bugs_set_number takes next, so no lock upgrade) before the member row FOR KEY
+-- SHARE. remove_member also takes the workspaces row FOR UPDATE before deleting
+-- the member row, so the two cannot wait on each other in a cycle.
+-- Re-runnable like 0001_init.sql.
 -- =============================================================================
 
 alter type public.bug_event_type add value if not exists 'assigned';
@@ -60,6 +67,10 @@ begin
   if auth.uid() is not null and not public.is_member(new.workspace_id) then
     raise exception using message = 'assignee_not_member', errcode = 'P0001';
   end if;
+  if tg_op = 'INSERT' then
+    -- Workspace row before the member row (see Lock order in the header).
+    perform 1 from public.workspaces w where w.id = new.workspace_id for update;
+  end if;
   perform 1 from public.workspace_members m
   where m.workspace_id = new.workspace_id and m.user_id = new.assignee_id
   for key share;
@@ -92,8 +103,10 @@ begin
     insert into public.bug_events (bug_id, actor_id, type, note)
     values (new.id, coalesce(auth.uid(), new.filed_by), 'filed', null);
     if new.assignee_id is not null then
-      insert into public.bug_events (bug_id, actor_id, type, note)
-      values (new.id, coalesce(auth.uid(), new.filed_by), 'assigned', new.assignee_id::text);
+      -- clock_timestamp() so it sorts after 'filed' (now() is shared by the transaction).
+      insert into public.bug_events (bug_id, actor_id, type, note, created_at)
+      values (new.id, coalesce(auth.uid(), new.filed_by), 'assigned', new.assignee_id::text,
+              clock_timestamp());
     end if;
     return null;
   end if;
