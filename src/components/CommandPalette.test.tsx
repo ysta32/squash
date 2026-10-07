@@ -136,6 +136,24 @@ describe('CommandPalette', () => {
     for (const c of commands) expect(c.run).not.toHaveBeenCalled()
   })
 
+  it('keeps focus in the input when non-interactive content is pressed, and traps Tab', () => {
+    const { input } = openPalette()
+    const heading = screen.getByText('Bugs')
+    expect(fireEvent.mouseDown(heading)).toBe(false)
+    expect(fireEvent.mouseDown(screen.getByRole('option', { name: /Crash on save/ }))).toBe(false)
+    expect(fireEvent.mouseDown(input)).toBe(true)
+
+    fireEvent.change(input, { target: { value: 'zzzz' } })
+    expect(fireEvent.mouseDown(screen.getByText('No matching commands'))).toBe(false)
+
+    input.blur()
+    expect(document.activeElement).toBe(document.body)
+    expect(fireEvent.keyDown(document.body, { key: 'Tab' })).toBe(false)
+    expect(document.activeElement).toBe(input)
+    expect(fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })).toBe(false)
+    expect(document.activeElement).toBe(input)
+  })
+
   it('clicking outside closes', () => {
     openPalette()
     const backdrop = screen.getByRole('dialog').parentElement!

@@ -3,7 +3,7 @@ import { BarChart2, Monitor, Moon, Sun, UserPlus } from 'lucide-react'
 import type { MemberRole, Workspace, WorkspaceMember } from '../lib/types'
 import type { PresenceUser } from '../hooks/usePresence'
 import { useDismiss } from '../hooks/useDismiss'
-import { useTheme, type Theme } from '../lib/theme'
+import { NEXT_THEME, useTheme } from '../lib/theme'
 import { LogoMark } from './ui'
 import { PresenceAvatars } from './PresenceAvatars'
 import { ProfileMenu } from './ProfileMenu'
@@ -20,7 +20,6 @@ export interface HeaderProps {
   role: MemberRole | null
 }
 
-const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' }
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor }
 const ICON_BTN =
   'focus-ring flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg'

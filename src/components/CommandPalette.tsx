@@ -92,6 +92,11 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
     inputRef.current?.focus()
     function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        inputRef.current?.focus()
+        return
+      }
       if (e.key !== 'Escape') return
       e.preventDefault()
       e.stopPropagation()
@@ -126,8 +131,6 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (activeIndex >= 0) runCommand(flat[activeIndex])
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
     }
   }
 
@@ -143,6 +146,9 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        onMouseDown={(e) => {
+          if (e.target !== inputRef.current) e.preventDefault()
+        }}
         className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-bg-elevated text-fg shadow-elevated"
       >
         <div className="flex items-center gap-2 border-b border-border px-3">
@@ -201,7 +207,6 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                       id={optionId(i)}
                       role="option"
                       aria-selected={selected}
-                      onMouseDown={(e) => e.preventDefault()}
                       onMouseMove={() => {
                         if (!selected) setActive(i)
                       }}

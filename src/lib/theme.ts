@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
@@ -94,8 +94,42 @@ export function applyStoredTheme(): void {
   apply(readStored())
 }
 
+export const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' }
+
+/** Theme chosen this session when storage refused the write; storage is the source of truth otherwise. */
+let unstoredTheme: Theme | null = null
+const themeListeners = new Set<() => void>()
+
+function getThemeSnapshot(): Theme {
+  return unstoredTheme ?? readStored()
+}
+
+function subscribeTheme(listener: () => void): () => void {
+  themeListeners.add(listener)
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === THEME_KEY || e.key === null) listener()
+  }
+  window.addEventListener('storage', onStorage)
+  return () => {
+    themeListeners.delete(listener)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+
+/** Sets the theme for every useTheme consumer and applies it right away. */
+export function setStoredTheme(t: Theme): void {
+  try {
+    localStorage.setItem(THEME_KEY, t)
+    unstoredTheme = null
+  } catch {
+    unstoredTheme = t
+  }
+  apply(t)
+  for (const listener of themeListeners) listener()
+}
+
 export function useTheme(): { theme: Theme; resolved: ResolvedTheme; setTheme(t: Theme): void } {
-  const [theme, setThemeState] = useState<Theme>(readStored)
+  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeSnapshot)
   const [systemDark, setSystemDark] = useState<boolean>(systemPrefersDark)
   const resolved: ResolvedTheme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
 
@@ -111,16 +145,7 @@ export function useTheme(): { theme: Theme; resolved: ResolvedTheme; setTheme(t:
     apply(theme === 'system' ? (systemDark ? 'dark' : 'light') : theme)
   }, [theme, systemDark])
 
-  const setTheme = useCallback((t: Theme) => {
-    try {
-      localStorage.setItem(THEME_KEY, t)
-    } catch {
-      // storage unavailable: theme still applies for this session
-    }
-    setThemeState(t)
-  }, [])
-
-  return { theme, resolved, setTheme }
+  return { theme, resolved, setTheme: setStoredTheme }
 }
 
 /** The accent color scheme, applied on top of whichever light/dark mode is active. */

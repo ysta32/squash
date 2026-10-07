@@ -27,7 +27,7 @@ import { usePresence } from '../hooks/usePresence'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
 import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
-import { THEME_KEY, useTheme, type Theme } from '../lib/theme'
+import { NEXT_THEME, useTheme } from '../lib/theme'
 import type { Bug, BugKind } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 
@@ -40,7 +40,6 @@ const DEFAULT_FILTERS: BugFilters = {
   query: '',
 }
 const HIGHLIGHT_MS = 3000
-const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' }
 
 function isDesktop(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches
@@ -395,16 +394,6 @@ export default function Workspace() {
     opts,
   )
 
-  const currentTheme = (): Theme => {
-    try {
-      const stored = localStorage.getItem(THEME_KEY)
-      if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
-    } catch {
-      // storage unavailable: fall back to this page's theme state
-    }
-    return theme
-  }
-
   const commands: Command[] = [
     {
       id: 'new',
@@ -466,7 +455,7 @@ export default function Workspace() {
       label: 'Toggle theme',
       group: 'Preferences',
       keywords: ['dark', 'light', 'system', 'appearance'],
-      run: () => setTheme(NEXT_THEME[currentTheme()]),
+      run: () => setTheme(NEXT_THEME[theme]),
     },
     {
       id: 'shortcuts',
