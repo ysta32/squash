@@ -1,6 +1,9 @@
 -- Live markup layers: screenshots keep their original pixels and carry vector annotations
 -- (arrow, box, pen, numbered pin) as versioned JSON: {"v": 1, "shapes": [...]}.
 -- Re-runnable: every statement is guarded or replaces what it creates.
+-- Note: 0001 revokes all table privileges on bug_attachments and re-grants select, insert,
+-- delete. Re-running 0001 on its own therefore drops the update (annotations) grant below;
+-- re-run this file after it.
 
 alter table public.bug_attachments add column if not exists annotations jsonb;
 -- Who uploaded the attachment. Only they may edit its annotations. No FK, like assignee_id:
@@ -35,6 +38,9 @@ begin
   return new;
 end;
 $$;
+
+-- Trigger-only: never callable directly.
+revoke execute on function public.bug_attachments_set_uploader() from public, anon, authenticated;
 
 drop trigger if exists bug_attachments_set_uploader on public.bug_attachments;
 create trigger bug_attachments_set_uploader

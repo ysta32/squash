@@ -884,6 +884,12 @@ do $$ begin
   if found then raise exception 'FAIL[125]: outsider updated annotations'; end if;
 end $$;
 :as_pg
+-- [127] the uploader trigger function is not executable by clients
+do $$ begin
+  if has_function_privilege('authenticated', 'public.bug_attachments_set_uploader()', 'execute')
+     or has_function_privilege('anon', 'public.bug_attachments_set_uploader()', 'execute') then
+    raise exception 'FAIL[127]: bug_attachments_set_uploader is executable by clients'; end if;
+end $$;
 -- [126] an uploader who is not (or no longer) a member cannot update annotations
 update public.bug_attachments set uploaded_by = '10000000-0000-0000-0000-000000000003'
   where id = current_setting('t.markup_att')::uuid;

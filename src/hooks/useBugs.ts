@@ -718,6 +718,29 @@ export function useBugs(
       )
       .on<BugAttachment>(
         'postgres_changes',
+        // Only annotations are client-updatable (migration 0009): replace the row in place.
+        { event: 'UPDATE', schema: 'public', table: 'bug_attachments' },
+        (payload) => {
+          if (!active) return
+          const updated = payload.new
+          if (!updated?.id) return
+          touched.add(`att:${updated.id}`)
+          mutate(workspaceId, (b) =>
+            mapBug(b, updated.bug_id, (bug) =>
+              bug.attachments.some((a) => a.id === updated.id)
+                ? {
+                    ...bug,
+                    attachments: bug.attachments.map((a) =>
+                      a.id === updated.id ? { ...a, ...updated } : a,
+                    ),
+                  }
+                : bug,
+            ),
+          )
+        },
+      )
+      .on<BugAttachment>(
+        'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'bug_attachments' },
         (payload) => {
           if (!active) return

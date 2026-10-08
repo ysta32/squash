@@ -17,6 +17,8 @@ import {
   sanitizeNote,
   serializeAnnotations,
   toClaudeRegions,
+  pinLegendLines,
+  wrapText,
   type MarkupShape,
   type PenShape,
 } from './annotations'
@@ -336,6 +338,7 @@ describe('rendering', () => {
       fill: record('fill'),
       fillText: record('fillText'),
       drawImage: record('drawImage'),
+      fillRect: record('fillRect'),
     } as unknown as CanvasRenderingContext2D
     return { ctx, calls }
   }
@@ -383,11 +386,59 @@ describe('rendering', () => {
     expect(calls).toContainEqual(['fillText', '1', 400, 150])
   })
 
+  it('writes pin notes in a legend band below the image so a flattened copy keeps them', () => {
+    const { ctx, calls } = fakeContext()
+    const canvas = document.createElement('canvas')
+    vi.spyOn(canvas, 'getContext').mockReturnValue(ctx)
+    const image = document.createElement('img')
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1000 },
+      naturalHeight: { value: 600 },
+    })
+    flatten(canvas, image, [pin(2, 'Second'), pin(1, 'Banner overlaps Pay now'), pin(3)])
+    // 16px font, 24px lines, 12px padding: two notes -> 2 * 24 + 24.
+    expect(canvas.height).toBe(600 + 72)
+    expect(calls).toContainEqual(['fillRect', 0, 600, 1000, 72])
+    expect(calls).toContainEqual(['fillText', '1. Banner overlaps Pay now', 12, 624])
+    expect(calls).toContainEqual(['fillText', '2. Second', 12, 648])
+    expect(calls.some((c) => c[0] === 'fillText' && String(c[1]).startsWith('3.'))).toBe(false)
+  })
+
+  it('adds no legend when no pin has a note', () => {
+    const { ctx, calls } = fakeContext()
+    const canvas = document.createElement('canvas')
+    vi.spyOn(canvas, 'getContext').mockReturnValue(ctx)
+    const image = document.createElement('img')
+    Object.defineProperties(image, {
+      naturalWidth: { value: 1000 },
+      naturalHeight: { value: 600 },
+    })
+    flatten(canvas, image, [pin(1)])
+    expect(canvas.height).toBe(600)
+    expect(calls.some((c) => c[0] === 'fillRect')).toBe(false)
+  })
+
   it('throws when the canvas has no 2D context', () => {
     const canvas = document.createElement('canvas')
     vi.spyOn(canvas, 'getContext').mockReturnValue(null)
     expect(() => flatten(canvas, document.createElement('img'), [])).toThrow(
       'Could not create the marked-up image.',
     )
+  })
+})
+
+describe('pin legend', () => {
+  it('wraps at word boundaries and splits words longer than a line', () => {
+    expect(wrapText('one two three', 7)).toEqual(['one two', 'three'])
+    expect(wrapText('abcdefghij x', 4)).toEqual(['abcd', 'efgh', 'ij x'])
+    expect(wrapText('', 5)).toEqual([])
+  })
+
+  it('numbers notes by pin and indents continuation lines', () => {
+    expect(pinLegendLines([pin(2, 'Pay now is hidden'), pin(1), pin(10, 'Short')], 12)).toEqual([
+      '2. Pay now',
+      '   is hidden',
+      '10. Short',
+    ])
   })
 })

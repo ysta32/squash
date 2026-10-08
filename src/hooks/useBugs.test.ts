@@ -686,6 +686,26 @@ describe('useBugs sync', () => {
     expect(result.current.bugs[0].optimistic).toBe(false)
   })
 
+  it('applies realtime annotation updates to a listed attachment', async () => {
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'x' }), bug_attachments: [att('a1', 'x'), att('a2', 'x')] }],
+      error: null,
+    }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.bugs[0]?.attachments).toHaveLength(2))
+    const annotations = { v: 1, shapes: [{ type: 'pin', color: 'danger', n: 1, x: 0.5, y: 0.5 }] }
+    act(() => handler('bug_attachments', 'UPDATE')({ new: { ...att('a2', 'x'), annotations } }))
+    expect(result.current.bugs[0].attachments.map((a) => a.annotations ?? null)).toEqual([
+      null,
+      annotations,
+    ])
+    // Unknown attachments are ignored rather than added.
+    const before = result.current.bugs
+    act(() => handler('bug_attachments', 'UPDATE')({ new: { ...att('zz', 'x'), annotations } }))
+    expect(result.current.bugs[0].attachments).toHaveLength(2)
+    expect(result.current.bugs[0]).toBe(before[0])
+  })
+
   it('assignBug patches assignee_id optimistically and reverts on error', async () => {
     h.state.selectResult = {
       data: [{ ...bug({ id: 'a', assignee_id: 'u1' }), bug_attachments: [] }],

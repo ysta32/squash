@@ -17,6 +17,7 @@ const ctx = {
   arc: vi.fn(),
   fill: vi.fn(),
   fillText: vi.fn(),
+  fillRect: vi.fn(),
 }
 
 beforeEach(() => {
@@ -314,6 +315,12 @@ describe('AnnotateDialog live markup layers', () => {
     // The flattened render has the numbered pins baked in at natural size.
     expect(ctx.fillText).toHaveBeenCalledWith('1', 100, 250)
     expect(ctx.fillText).toHaveBeenCalledWith('2', 500, 100)
+    // ...and its notes in a legend, so a flattened fallback upload keeps them.
+    expect(ctx.fillText).toHaveBeenCalledWith(
+      '1. Banner overlaps Pay now',
+      expect.any(Number),
+      expect.any(Number),
+    )
   })
 
   it('saves drags as normalized shapes in the chosen color', async () => {

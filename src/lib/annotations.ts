@@ -392,20 +392,88 @@ export function drawAnnotations(
   }
 }
 
+/** Monospace advance width as a fraction of the font size (IBM Plex Mono is 0.6 em). */
+const MONO_ADVANCE = 0.6
+
+/** Wraps text at word boundaries to at most `max` characters per line (long words are split). */
+export function wrapText(text: string, max: number): string[] {
+  const width = Math.max(1, Math.floor(max))
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    let rest = word
+    while (rest.length > width) {
+      if (line) {
+        lines.push(line)
+        line = ''
+      }
+      lines.push(rest.slice(0, width))
+      rest = rest.slice(width)
+    }
+    if (!line) line = rest
+    else if (line.length + 1 + rest.length <= width) line = `${line} ${rest}`
+    else {
+      lines.push(line)
+      line = rest
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+/**
+ * Legend lines for pins with notes ("1. Banner overlaps Pay now"), wrapped to `maxChars`,
+ * continuation lines indented under the note. Empty when no pin has a note.
+ */
+export function pinLegendLines(shapes: readonly MarkupShape[], maxChars: number): string[] {
+  const lines: string[] = []
+  for (const item of pinChecklist({ v: ANNOTATIONS_VERSION, shapes: [...shapes] })) {
+    if (!item.note) continue
+    const prefix = `${item.n}. `
+    const wrapped = wrapText(item.note, maxChars - prefix.length)
+    wrapped.forEach((text, i) =>
+      lines.push(`${i === 0 ? prefix : ' '.repeat(prefix.length)}${text}`),
+    )
+  }
+  return lines
+}
+
 /**
  * Renders the image with its marks baked in, at the image's natural size, onto `canvas`
- * (resized to fit). Used for export and for servers without the annotations column.
+ * (resized to fit). Pin notes are written in a legend band below the image, so a flattened
+ * copy (export, or servers without the annotations column) never drops them.
  */
 export function flatten(
   canvas: HTMLCanvasElement,
   image: HTMLImageElement,
   shapes: readonly MarkupShape[],
 ): HTMLCanvasElement {
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
+  const width = image.naturalWidth
+  const height = image.naturalHeight
+  const fontSize = Math.max(12, Math.round(width * 0.016))
+  const lineHeight = Math.round(fontSize * 1.5)
+  const padding = Math.round(fontSize * 0.75)
+  const maxChars = Math.floor((width - padding * 2) / (fontSize * MONO_ADVANCE))
+  const legend = pinLegendLines(shapes, Math.max(8, maxChars))
+  const legendHeight = legend.length > 0 ? legend.length * lineHeight + padding * 2 : 0
+  canvas.width = width
+  canvas.height = height + legendHeight
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not create the marked-up image.')
   ctx.drawImage(image, 0, 0)
-  drawAnnotations(ctx, shapes, canvas.width, canvas.height)
+  drawAnnotations(ctx, shapes, width, height)
+  if (legend.length > 0) {
+    ctx.save()
+    ctx.fillStyle = resolveToken('--bg') || 'white'
+    ctx.fillRect(0, height, width, legendHeight)
+    ctx.fillStyle = resolveToken('--fg') || 'black'
+    ctx.font = `500 ${fontSize}px ${resolveToken('--font-mono') || 'monospace'}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    legend.forEach((line, i) => {
+      ctx.fillText(line, padding, height + padding + lineHeight * i + lineHeight / 2)
+    })
+    ctx.restore()
+  }
   return canvas
 }
