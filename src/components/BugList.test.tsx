@@ -298,7 +298,8 @@ describe('BugList', () => {
       const guide = screen.getByRole('list', { name: 'How to file' })
       expect(within(guide).getAllByRole('listitem')).toHaveLength(3)
       expect(Array.from(guide.querySelectorAll('kbd'), (key) => key.textContent)).toEqual([
-        isMac ? '⌘V' : 'Ctrl V',
+        isMac ? '⌘' : 'Ctrl',
+        'V',
         'N',
         '↵',
       ])

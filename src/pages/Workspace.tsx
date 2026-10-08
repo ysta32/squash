@@ -885,6 +885,7 @@ export default function Workspace() {
       group: 'Help',
       hint: '?',
       keywords: ['keys', 'help'],
+      keyboardOnly: true,
       run: () => setShortcutsOpen(true),
     },
   ]

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronRight, Copy, FolderOpen } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useOverlayOpen } from '../hooks/useKeyboard'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 import {
   BRIDGE_VERSION,
   AUTO_RESOLVE_VERSION,
@@ -12,7 +13,7 @@ import {
 } from '../lib/claudeExport'
 import type { BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
-import { Button, Input, Kbd, proseLinkClass } from './ui'
+import { Button, ENTER_KEY, Input, Kbd, Keys, proseLinkClass } from './ui'
 import { DialogHeader } from './DialogHeader'
 import { dialogClass, dialogMaxHeightClass, dialogPositionClass, scrimClass } from './dialogStyles'
 
@@ -68,6 +69,7 @@ export function ClaudeSetupDialog({
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, open, { initialFocus: 'field' })
   const installId = useId()
+  const touch = useCoarsePointer()
   const [copied, setCopied] = useState(false)
   const [showInstall, setShowInstall] = useState(false)
   const [folder, setFolder] = useState<{ ws: string; path: string | null } | null>(null)
@@ -238,10 +240,13 @@ export function ClaudeSetupDialog({
                     </Button>
                   </div>
                   <p className="mt-2 text-xs text-ink-2">
-                    {isMac ? (
+                    {touch ? (
+                      'Run this in a terminal on the computer where you use Claude Code. '
+                    ) : isMac ? (
                       <>
-                        Open Terminal with <Kbd>⌘ Space</Kbd>, type “Terminal”, then press{' '}
-                        <Kbd>↵</Kbd>. The helper starts automatically when you log in.{' '}
+                        Open Terminal with <Keys keys={['⌘', 'Space']} />, type “Terminal”, then
+                        press <Kbd>{ENTER_KEY}</Kbd>. The helper starts automatically when you log
+                        in.{' '}
                       </>
                     ) : (
                       'Keep that terminal open while you use Squash. '

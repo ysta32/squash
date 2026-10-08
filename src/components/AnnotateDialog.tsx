@@ -15,7 +15,7 @@ import {
   type MarkupShape,
   type ShapeType,
 } from '../lib/annotations'
-import { Button, Kbd } from './ui'
+import { Button, Kbd, Keys, MOD_KEY } from './ui'
 
 interface AnnotateDialogProps {
   /** The unmarked image. */
@@ -369,7 +369,7 @@ export function AnnotateDialog({
             onClick={undo}
             disabled={!shapes.length || !!draft || saving || discard}
           >
-            Undo <Kbd>⌘/Ctrl Z</Kbd>
+            Undo <Keys keys={[MOD_KEY, 'Z']} className="pointer-coarse:hidden" />
           </Button>
           <Button
             size="sm"

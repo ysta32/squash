@@ -20,14 +20,15 @@ export function AttachmentChip({
   progress,
 }: AttachmentChipProps) {
   return (
-    <div className="group relative h-14 w-19 shrink-0 overflow-hidden rounded-lg border border-line-2 bg-surface-3 shadow-elev-1">
+    // 96×72: big enough to tell screenshots apart at a glance.
+    <div className="group relative h-[72px] w-[96px] shrink-0 overflow-hidden rounded-md border border-line-2 bg-surface-3 shadow-elev-1">
       {onEdit ? (
         <button
           type="button"
           aria-label={`Mark up ${name}`}
           onClick={onEdit}
           title={`Mark up ${name}`}
-          className="focus-ring-inset block size-full rounded-lg"
+          className="focus-ring-inset block size-full rounded-md"
         >
           <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
           <span
@@ -64,9 +65,10 @@ export function AttachmentChip({
         aria-label={`Remove ${name}`}
         onClick={onRemove}
         title={`Remove ${name}`}
-        className="t absolute top-0.5 right-0.5 flex size-5 items-center justify-center rounded-sm bg-ink/80 text-surface-2 opacity-0 outline-none group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus [@media(hover:none)]:opacity-100 pointer-coarse:opacity-100"
+        // Shown on hover or focus; always on touch screens, where it grows to a 32px target.
+        className="t absolute top-1 right-1 flex size-6 items-center justify-center rounded-sm bg-ink/80 text-surface-2 opacity-0 outline-none group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus [@media(hover:none)]:opacity-100 pointer-coarse:size-[2.2857rem] pointer-coarse:opacity-100"
       >
-        <X size={12} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+        <X size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
       </button>
     </div>
   )

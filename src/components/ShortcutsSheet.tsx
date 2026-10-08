@@ -1,18 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useFocusTrap } from '../hooks/useFocusTrap'
-import { cn, isMac } from '../lib/utils'
-import { Kbd } from './ui'
+import { cn } from '../lib/utils'
+import { ALT_KEY, ENTER_KEY, Keys, MOD_KEY, SHIFT_KEY } from './ui'
 import { DialogHeader } from './DialogHeader'
 import { dialogClass, eyebrowClass, scrimClass } from './dialogStyles'
 
 /** Fades the last 1.5rem of the scroller so a cut-off list reads as "scroll for more". */
 const SCROLL_FADE =
   '[mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]'
-
-const ALT = isMac ? '⌥' : 'Alt'
-const MOD = isMac ? '⌘' : 'Ctrl'
-const ENTER = isMac ? '↵' : 'Enter'
 
 interface Shortcut {
   keys: string[]
@@ -26,18 +22,18 @@ const COLUMNS: { title: string; items: Shortcut[] }[][] = [
       title: 'Capture',
       items: [
         { keys: ['N'], label: 'New bug (focus capture bar)' },
-        { keys: [MOD, 'V'], label: 'Paste screenshot and start typing' },
-        { keys: [ENTER], label: 'File bug' },
-        { keys: ['Shift', ENTER], label: 'New line' },
-        { keys: [ALT, '1–4'], label: 'Set severity while capturing' },
+        { keys: [MOD_KEY, 'V'], label: 'Paste screenshot and start typing' },
+        { keys: [ENTER_KEY], label: 'File bug' },
+        { keys: [SHIFT_KEY, ENTER_KEY], label: 'New line' },
+        { keys: [ALT_KEY, '1–4'], label: 'Set severity while capturing' },
       ],
     },
     {
       title: 'General',
       items: [
-        { keys: [MOD, 'K'], label: 'Command palette' },
+        { keys: [MOD_KEY, 'K'], label: 'Command palette' },
         { keys: ['/'], label: 'Search' },
-        { keys: [MOD, 'Z'], label: 'Undo the last action' },
+        { keys: [MOD_KEY, 'Z'], label: 'Undo the last action' },
         { keys: ['Esc'], label: 'Close / back to list' },
         { keys: ['?'], label: 'Show keyboard shortcuts' },
       ],
@@ -137,10 +133,8 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
                         className="flex min-h-9 items-center justify-between gap-4 border-b border-line py-1.5 text-sm"
                       >
                         <dt className="text-ink-2">{label}</dt>
-                        <dd className="flex shrink-0 items-center gap-1">
-                          {keys.map((k) => (
-                            <Kbd key={k}>{k}</Kbd>
-                          ))}
+                        <dd className="shrink-0">
+                          <Keys keys={keys} />
                         </dd>
                       </div>
                     ))}

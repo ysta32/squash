@@ -7,6 +7,7 @@ import { cn } from '../lib/utils'
 import { menuRowClass, popoverClass } from './dialogStyles'
 import { Avatar } from './Avatar'
 import { Kbd } from './ui'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 
 const ITEM = menuRowClass
 const ITEM_ICON = 'size-4 shrink-0 text-ink-3'
@@ -17,6 +18,8 @@ export interface ProfileMenuProps {
 }
 
 export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) {
+  // The shortcuts sheet is keyboard-only; touch screens do not get an entry point.
+  const touch = useCoarsePointer()
   const { profile, user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,7 +82,7 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
             <Settings aria-hidden="true" className={ITEM_ICON} />
             Settings
           </Link>
-          {onShowShortcuts && (
+          {onShowShortcuts && !touch && (
             <button
               type="button"
               role="menuitem"

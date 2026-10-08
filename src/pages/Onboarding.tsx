@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { Check, Copy } from 'lucide-react'
 import { AuthLayout, AuthPanel } from '../components/AuthLayout'
 import { inviteUrl, setLastWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
-import { Button, Field, Input, Kbd, LogoMark } from '../components/ui'
+import { Button, ENTER_KEY, Field, Input, Kbd, Keys, LogoMark, MOD_KEY } from '../components/ui'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 import { INVITE_CODE, INVITE_LENGTH, parseInviteInput } from '../lib/inviteCode'
 import type { Workspace } from '../lib/types'
 import { AVATAR_PALETTE } from '../lib/avatarColor'
-import { cn, isMac } from '../lib/utils'
+import { cn } from '../lib/utils'
 
 const STEPS = ['Name it', 'Invite', 'First bug'] as const
 const ICON = { strokeWidth: 1.5, absoluteStrokeWidth: true, className: 'size-4' } as const
@@ -58,6 +59,7 @@ const delay = (ms: number) => ({ animationDelay: `${ms}ms` })
 function WorkspacePreview({ name, step = 0 }: { name: string; step?: 0 | 1 | 2 }) {
   const shown = name.trim()
   const filing = step === 2
+  const touch = useCoarsePointer()
   return (
     <AuthPanel
       label="Preview of your new workspace"
@@ -113,7 +115,7 @@ function WorkspacePreview({ name, step = 0 }: { name: string; step?: 0 | 1 | 2 }
               )}
               Paste a screenshot or describe a bug
             </span>
-            <Kbd>{isMac ? '⌘V' : 'Ctrl+V'}</Kbd>
+            {!touch && <Keys keys={[MOD_KEY, 'V']} />}
           </div>
         </div>
         <div className="mt-6 grid grid-cols-[4.5rem_minmax(0,1fr)_6rem] border-y border-line px-5 py-2 specimen-label text-ink-3">
@@ -222,6 +224,7 @@ function InviteStep({ workspace, onNext }: { workspace: Workspace; onNext: () =>
 
 function FirstBugStep({ workspace }: { workspace: Workspace }) {
   const navigate = useNavigate()
+  const touch = useCoarsePointer()
   return (
     <AuthLayout
       eyebrow={<Steps current={2} />}
@@ -232,21 +235,33 @@ function FirstBugStep({ workspace }: { workspace: Workspace }) {
       <ol className="mb-8 border-t border-line text-sm text-ink-2">
         <li className="flex items-baseline gap-4 border-b border-line py-3">
           <span className="font-mono text-xs text-ink-3 nums">A</span>
-          <span>
-            Take a screenshot, then paste it with <Kbd>{isMac ? '⌘V' : 'Ctrl+V'}</Kbd>
-          </span>
+          {touch ? (
+            <span>Take a screenshot, then tap the paperclip to attach it</span>
+          ) : (
+            <span>
+              Take a screenshot, then paste it with <Keys keys={[MOD_KEY, 'V']} />
+            </span>
+          )}
         </li>
         <li className="flex items-baseline gap-4 border-b border-line py-3">
           <span className="font-mono text-xs text-ink-3 nums">B</span>
-          <span>
-            Or press <Kbd>N</Kbd> and describe what broke
-          </span>
+          {touch ? (
+            <span>Or tap the capture bar and describe what broke</span>
+          ) : (
+            <span>
+              Or press <Kbd>N</Kbd> and describe what broke
+            </span>
+          )}
         </li>
         <li className="flex items-baseline gap-4 border-b border-line py-3">
           <span className="font-mono text-xs text-ink-3 nums">C</span>
-          <span>
-            File it with <Kbd>Enter</Kbd>
-          </span>
+          {touch ? (
+            <span>Tap File to send it</span>
+          ) : (
+            <span>
+              File it with <Kbd>{ENTER_KEY}</Kbd>
+            </span>
+          )}
         </li>
       </ol>
       <Button

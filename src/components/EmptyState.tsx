@@ -1,8 +1,9 @@
 import type { ComponentType, ReactNode } from 'react'
 import { Bug, CircleCheck, Lightbulb, Search } from 'lucide-react'
 import type { BugFilters } from '../hooks/useBugs'
-import { cn, isMac } from '../lib/utils'
-import { Button, Kbd } from './ui'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
+import { cn } from '../lib/utils'
+import { Button, ENTER_KEY, Kbd, Keys, MOD_KEY } from './ui'
 
 /**
  * Faint lab-notebook rules (DESIGN.md motif 3) under an empty state's copy: a short block of 24px
@@ -96,16 +97,10 @@ export interface EmptyStateProps {
 /** One 24px line per hint. */
 export const HINT_ROW = 'flex h-[24px] items-center gap-2 text-sm text-ink-2'
 
-/** A key cap in a fixed slot, so the hint labels beside keys of any width line up. */
-export function HintKey({ children }: { children: ReactNode }) {
-  return (
-    <span className="flex w-9 shrink-0">
-      <Kbd>{children}</Kbd>
-    </span>
-  )
-}
+/** Key caps in a fixed slot, so the hint labels beside chords of any width line up. */
+const HINT_KEYS = 'min-w-11'
 
-/** The three-key way to file: paste, describe, submit. */
+/** The three-key way to file: paste, describe, submit. On touch there are no keys: tap wording. */
 export function FileGuide({
   kind = 'bug',
   className,
@@ -113,17 +108,21 @@ export function FileGuide({
   kind?: BugFilters['kind']
   className?: string
 }) {
+  const touch = useCoarsePointer()
+  if (touch) {
+    return <p className={cn(HINT_ROW, className)}>Attach a screenshot, then tap File</p>
+  }
   return (
     <ol aria-label="How to file" className={className}>
       <li className={HINT_ROW}>
-        <HintKey>{isMac ? '⌘V' : 'Ctrl V'}</HintKey> Paste a screenshot
+        <Keys keys={[MOD_KEY, 'V']} className={HINT_KEYS} /> Paste a screenshot
       </li>
       <li className={HINT_ROW}>
-        <HintKey>N</HintKey>
+        <Keys keys={['N']} className={HINT_KEYS} />
         {kind === 'feature' ? 'Describe the feature request' : 'Describe the bug'}
       </li>
       <li className={HINT_ROW}>
-        <HintKey>↵</HintKey> Submit
+        <Keys keys={[ENTER_KEY]} className={HINT_KEYS} /> Submit
       </li>
     </ol>
   )
@@ -138,6 +137,7 @@ export function EmptyState({
   onClearFilters,
   inset,
 }: EmptyStateProps) {
+  const touch = useCoarsePointer()
   const feature = kind === 'feature'
   const items = feature ? 'feature requests' : 'bugs'
   const firstItem = !filtered && !hasItems && tab !== 'resolved'
@@ -173,7 +173,7 @@ export function EmptyState({
       hints={
         firstItem ? (
           <FileGuide kind={kind} />
-        ) : !filtered && tab !== 'resolved' ? (
+        ) : !filtered && tab !== 'resolved' && !touch ? (
           <p className={HINT_ROW}>
             <Kbd>N</Kbd> File the next one
           </p>

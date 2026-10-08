@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 import { cn } from '../lib/utils'
 import { Kbd } from './ui'
 
@@ -20,7 +21,10 @@ export interface Command {
   id: string
   label: string
   group: string
+  /** A single key shown as a cap; hidden on touch screens. */
   hint?: string
+  /** Only useful with a keyboard (e.g. the shortcuts sheet): left out on touch screens. */
+  keyboardOnly?: boolean
   keywords?: string[]
   /** Leading icon; defaults to the icon of the command's group. */
   icon?: LucideIcon
@@ -125,7 +129,12 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
     onCloseRef.current = onClose
   }, [onClose])
 
-  const groups = useMemo(() => filterCommands(commands, query), [commands, query])
+  const touch = useCoarsePointer()
+  const available = useMemo(
+    () => (touch ? commands.filter((c) => !c.keyboardOnly) : commands),
+    [commands, touch],
+  )
+  const groups = useMemo(() => filterCommands(available, query), [available, query])
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups])
   const activeIndex = flat.length === 0 ? -1 : Math.min(active, flat.length - 1)
 
@@ -220,7 +229,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
             onKeyDown={onKeyDown}
             className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
           />
-          <Kbd className="shrink-0">Esc</Kbd>
+          {!touch && <Kbd className="shrink-0">Esc</Kbd>}
         </div>
         <div
           id={listId}
@@ -288,7 +297,9 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                           <span className="min-w-0 flex-1 truncate">{command.label}</span>
                         </>
                       )}
-                      {command.hint && <Kbd className="ml-auto shrink-0">{command.hint}</Kbd>}
+                      {command.hint && !touch && (
+                        <Kbd className="ml-auto shrink-0">{command.hint}</Kbd>
+                      )}
                     </div>
                   )
                 })}
@@ -296,18 +307,20 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
             ))
           )}
         </div>
-        <div
-          aria-hidden="true"
-          className="hidden h-9 items-center gap-4 border-t border-line px-4 font-mono text-xs text-ink-3 sm:flex"
-        >
-          <span className="flex items-center gap-1.5">
-            <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> move
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Kbd>↵</Kbd> run
-          </span>
-        </div>
+        {!touch && (
+          <div
+            aria-hidden="true"
+            className="hidden h-9 items-center gap-4 border-t border-line px-4 font-mono text-xs text-ink-3 sm:flex"
+          >
+            <span className="flex items-center gap-1.5">
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd> move
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Kbd>↵</Kbd> run
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

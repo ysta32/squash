@@ -188,3 +188,36 @@ describe('CommandPalette', () => {
     }
   })
 })
+
+describe('CommandPalette on touch screens', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('hides key hints and keyboard-only commands under a coarse pointer', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q === '(pointer: coarse)',
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    const commands: Command[] = [
+      ...makeCommands(),
+      { id: 'keys', label: 'Keyboard shortcuts', group: 'Help', keyboardOnly: true, run: vi.fn() },
+    ]
+    render(<CommandPalette open onClose={() => {}} commands={commands} />)
+    expect(screen.getByRole('option', { name: /New bug/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Keyboard shortcuts/ })).toBeNull()
+    expect(screen.getByRole('dialog').querySelector('kbd')).toBeNull()
+  })
+
+  it('keeps them with a fine pointer', () => {
+    const commands: Command[] = [
+      ...makeCommands(),
+      { id: 'keys', label: 'Keyboard shortcuts', group: 'Help', keyboardOnly: true, run: vi.fn() },
+    ]
+    render(<CommandPalette open onClose={() => {}} commands={commands} />)
+    expect(screen.getByRole('option', { name: /Keyboard shortcuts/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /New bug/ }).querySelector('kbd')).toHaveTextContent(
+      'N',
+    )
+  })
+})

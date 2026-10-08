@@ -5,7 +5,7 @@ import { GettingStarted } from './GettingStarted'
 import { BugList, type BugListProps } from './BugList'
 import { isMac } from '../lib/utils'
 
-const PASTE = isMac ? '⌘V' : 'Ctrl V'
+const MOD = isMac ? '⌘' : 'Ctrl'
 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 
@@ -36,8 +36,10 @@ describe('GettingStarted', () => {
     // The first step carries the how-to: paste, describe, submit with ↵ (never "Enter").
     const guide = within(list).getByRole('list', { name: 'How to file' })
     expect(within(list).getByText('File your first bug').closest('li')).toContainElement(guide)
+    // One key per cap: the paste chord is two caps.
     expect(Array.from(guide.querySelectorAll('kbd'), (key) => key.textContent)).toEqual([
-      PASTE,
+      MOD,
+      'V',
       'N',
       '↵',
     ])
@@ -45,6 +47,24 @@ describe('GettingStarted', () => {
     const resolve = within(list).getByText('Resolve a bug').closest('li')!
     expect(resolve).toHaveTextContent(/Press R$/)
     expect(within(resolve).getByText('R').tagName).toBe('KBD')
+  })
+
+  it('uses tap wording and no key caps on touch screens', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q === '(pointer: coarse)',
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    try {
+      const { container } = render(<GettingStarted workspaceId="one" steps={undone} />)
+      expect(screen.getByText('Attach a screenshot, then tap File')).toBeInTheDocument()
+      expect(screen.getByText('Open one and tap Resolve')).toBeInTheDocument()
+      expect(screen.queryByRole('list', { name: 'How to file' })).not.toBeInTheDocument()
+      expect(container.querySelector('kbd')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('marks completed steps and updates the count as progress changes', () => {
@@ -55,7 +75,7 @@ describe('GettingStarted', () => {
     expect(screen.getAllByText('To do')).toHaveLength(2)
     expect(screen.getByText('File your first bug')).toHaveClass('line-through', 'text-muted')
     expect(screen.getByText('Connect Claude Code')).toHaveClass('line-through', 'text-muted')
-    expect(screen.queryByText(PASTE)).not.toBeInTheDocument()
+    expect(screen.queryByText('V')).not.toBeInTheDocument()
     rerender(<GettingStarted workspaceId="one" steps={done} />)
     expect(screen.queryByText('Get started')).not.toBeInTheDocument()
   })

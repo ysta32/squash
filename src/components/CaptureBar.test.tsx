@@ -75,6 +75,51 @@ describe('CaptureBar', () => {
     },
   )
 
+  it('moves a pasted URL out of the text into the chip, and files it as context', async () => {
+    const { box, onSubmit } = setup()
+    fireEvent.change(box, { target: { value: 'Broken on https://example.com/checkout today' } })
+    expect(box.value).toBe('Broken on today')
+    expect(
+      screen.getByRole('button', { name: 'Remove URL https://example.com/checkout' }),
+    ).toBeInTheDocument()
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      description: 'Broken on today',
+      context: { url: 'https://example.com/checkout' },
+    })
+    expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
+  })
+
+  it('waits for a typed URL to end before lifting it out of the text', () => {
+    const { box } = setup()
+    // One keystroke at a time; jsdom leaves the caret at the end of the new value.
+    const type = (text: string) => {
+      for (const ch of text) fireEvent.change(box, { target: { value: box.value + ch } })
+    }
+    type('see https://ex.com/a')
+    expect(box.value).toBe('see https://ex.com/a')
+    expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
+    type(' ')
+    expect(box.value).toBe('see ')
+    expect(screen.getByRole('button', { name: 'Remove URL https://ex.com/a' })).toBeInTheDocument()
+  })
+
+  it('files a URL on its own, and restores the chip when filing fails', async () => {
+    const { box, onSubmit, onToast } = setup(vi.fn().mockRejectedValue(new Error('offline')))
+    fireEvent.change(box, { target: { value: 'https://example.com/checkout' } })
+    expect(box.value).toBe('')
+    const send = screen.getByRole('button', { name: 'File bug' })
+    expect(send).not.toHaveAttribute('aria-disabled')
+    fireEvent.click(send)
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('offline'))
+    expect(onSubmit.mock.calls[0][0].description).toBe('https://example.com/checkout')
+    expect(
+      screen.getByRole('button', { name: 'Remove URL https://example.com/checkout' }),
+    ).toBeInTheDocument()
+    expect(box.value).toBe('')
+  })
+
   beforeEach(() => {
     speechState.supported = true
     speechState.listening = false

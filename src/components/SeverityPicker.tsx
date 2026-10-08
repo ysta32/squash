@@ -48,6 +48,11 @@ interface SeverityPickerProps {
   align?: 'start' | 'end'
   /** Trigger tooltip, e.g. to advertise a shortcut that the host handles. */
   title?: string
+  /**
+   * Below `sm` the bordered trigger shrinks to a 32px ticks-only square (label kept for screen
+   * readers); its hit area still reaches 44px for touch.
+   */
+  compact?: boolean
   className?: string
 }
 
@@ -63,6 +68,7 @@ export function SeverityPicker({
   disabled = false,
   align = 'end',
   title = 'Severity',
+  compact = false,
   className,
 }: SeverityPickerProps) {
   const [open, setOpen] = useState(false)
@@ -152,20 +158,22 @@ export function SeverityPicker({
           size === 'quiet'
             ? 'h-8 px-2 text-sm pointer-coarse:h-11'
             : cn(
-                'border border-line-input bg-surface-2 text-xs',
+                'border border-line-2 bg-transparent text-xs hover:border-line-input',
                 size === 'sm' ? 'h-7 px-2' : 'h-8 px-2.5',
+                compact &&
+                  "relative max-sm:size-[2.2857rem] max-sm:justify-center max-sm:px-0 max-sm:before:absolute max-sm:before:-inset-[6px] max-sm:before:content-['']",
               ),
           open && 'bg-surface-3',
         )}
       >
         <SeverityTicks severity={value} />
-        <span>{SEVERITY_LABEL[value]}</span>
+        <span className={cn(compact && 'max-sm:sr-only')}>{SEVERITY_LABEL[value]}</span>
         <ChevronDown
           size={14}
           strokeWidth={1.5}
           absoluteStrokeWidth
           aria-hidden="true"
-          className={cn('t -mr-0.5 text-ink-3', open && 'rotate-180')}
+          className={cn('t -mr-0.5 text-ink-3', open && 'rotate-180', compact && 'max-sm:hidden')}
         />
       </button>
       {open && (

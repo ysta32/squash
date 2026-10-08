@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
-import { Button } from './ui'
-import { cn, isMac } from '../lib/utils'
+import { Button, ENTER_KEY, Keys, MOD_KEY } from './ui'
+import { cn } from '../lib/utils'
 
 export interface ResolvePopoverProps {
   mode: 'resolve' | 'reopen'
@@ -119,18 +119,15 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
             size="sm"
             className={cn('pointer-coarse:h-[3.1429rem]', sheet && 'max-sm:h-[44px] max-sm:flex-1')}
             onClick={() => confirm(true)}
-            title={`${isMac ? '⌘' : 'Ctrl'}+Enter`}
+            title={`${MOD_KEY}+Enter`}
           >
             {verb}
             <span
               aria-hidden="true"
               // The shortcut means nothing on touch, or on the phone sheet.
-              className={cn(
-                '-mr-0.5 font-mono text-[11px] opacity-80 pointer-coarse:hidden',
-                sheet && 'max-sm:hidden',
-              )}
+              className={cn('-mr-1 pointer-coarse:hidden', sheet && 'max-sm:hidden')}
             >
-              {isMac ? '⌘↵' : 'Ctrl↵'}
+              <Keys keys={[MOD_KEY, ENTER_KEY]} tone="accent" />
             </span>
           </Button>
         </div>

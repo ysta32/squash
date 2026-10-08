@@ -1,4 +1,4 @@
-import { collectEnvContext, extractUrl, sanitizeContext } from '../lib/bugContext'
+import { collectEnvContext, extractUrl, findUrl, sanitizeContext } from '../lib/bugContext'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, RefObject } from 'react'
 import { Camera, CircleAlert, ImagePlus, Info, Mic, Paperclip, X } from 'lucide-react'
@@ -12,25 +12,40 @@ import type { Annotations } from '../lib/annotations'
 import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, isMac, randomId } from '../lib/utils'
+import { useCoarsePointer, useMediaQuery } from '../hooks/useCoarsePointer'
 import { AttachmentChip } from './AttachmentChip'
 import { AnnotateDialog } from './AnnotateDialog'
 import { SeverityPicker } from './SeverityPicker'
-import { Kbd } from './ui'
+import { ENTER_KEY, Kbd } from './ui'
 
 const MAX_FILES = 10
 /** Eight 24px lines; past that the textarea scrolls. */
 const MAX_TEXTAREA_PX = 8 * 24
+/** Phones from 360px up to Tailwind's `sm`: room for a one-row bar at rest. */
+const PHONE_ROW_QUERY = '(min-width: 360px) and (max-width: 639.98px)'
 
 /** 44px touch targets on phones, 36px from `sm` up (44px again on coarse pointers). */
 const ICON_BUTTON =
   't focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink sm:size-9 pointer-coarse:size-11'
 const ICON = { size: 16, absoluteStrokeWidth: true, strokeWidth: 1.5, 'aria-hidden': true } as const
 
-const ENTER_GLYPH = isMac ? '↵' : 'Enter'
 const ENTER_NAME = isMac ? 'Return' : 'Enter'
 
 const TOO_LARGE = 'Screenshot not added: the file is over 5 MB. Try a smaller crop.'
 const TOO_MANY = `Up to ${MAX_FILES} screenshots per bug. The rest weren’t added.`
+
+/** `text` without the URL at `at`, tidying the spaces around it; `cut` is where it was. */
+function withoutUrl(text: string, at: number, length: number): { text: string; cut: number } {
+  const before = text.slice(0, at).replace(/[ \t]+$/, '')
+  const rawAfter = text.slice(at + length)
+  const after = rawAfter.replace(/^[ \t]+/, '')
+  const joinWords =
+    before !== '' && !before.endsWith('\n') && after !== '' && !/^[\n.,;:!?)\]}]/.test(after)
+  // A space typed right after a trailing URL stays, so the next word does not glue on.
+  const keepTrailingSpace = before !== '' && after === '' && rawAfter !== ''
+  const joiner = joinWords || keepTrailingSpace ? ' ' : ''
+  return { text: before + joiner + after, cut: before.length + joiner.length }
+}
 
 interface CaptureBarProps {
   workspaceId: string
@@ -50,12 +65,6 @@ interface Chip {
   markup?: AttachmentMarkup
 }
 
-function isCoarsePointer(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia('(pointer: coarse)').matches
-    : false
-}
-
 export function CaptureBar({
   workspaceId,
   onSubmit,
@@ -66,10 +75,18 @@ export function CaptureBar({
   const noun = kind === 'feature' ? 'feature request' : 'bug'
   const [value, setValueState] = useState('')
   const [interim, setInterim] = useState('')
-  const [removedUrls, setRemovedUrls] = useState<string[]>([])
   const removedUrlsRef = useRef<string[]>([])
-  const detectedUrl = extractUrl(value)
-  const contextUrl = detectedUrl && !removedUrls.includes(detectedUrl) ? detectedUrl : undefined
+  // The page URL lifted out of the text into a chip (so it is not shown twice).
+  const [contextUrl, setContextUrlState] = useState<string | undefined>(undefined)
+  const contextUrlRef = useRef<string | undefined>(undefined)
+  // The URL exactly as typed, put back into the text if the chip is removed.
+  const contextRawRef = useRef<string | undefined>(undefined)
+  const setContextUrl = (u: string | undefined) => {
+    contextUrlRef.current = u
+    setContextUrlState(u)
+  }
+  // Caret to restore after the text is rewritten (React would otherwise park it at the end).
+  const pendingCaret = useRef<number | null>(null)
 
   const valueRef = useRef('')
   const transcriptRef = useRef<string | null>(null)
@@ -95,7 +112,8 @@ export function CaptureBar({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const chipsRef = useRef<Chip[]>(chips)
-  const [coarse] = useState(isCoarsePointer)
+  const coarse = useCoarsePointer()
+  const phoneRow = useMediaQuery(PHONE_ROW_QUERY)
   const [focused, setFocused] = useState(false)
   const [filing, setFiling] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
@@ -128,6 +146,11 @@ export function CaptureBar({
     el.style.height = 'auto'
     const needed = Math.max(el.scrollHeight, mirrorRef.current?.scrollHeight ?? 0)
     el.style.height = `${Math.min(needed, MAX_TEXTAREA_PX)}px`
+    const caret = pendingCaret.current
+    if (caret !== null) {
+      pendingCaret.current = null
+      if (document.activeElement === el) el.setSelectionRange(caret, caret)
+    }
   }, [value, interim])
 
   useEffect(() => {
@@ -142,10 +165,48 @@ export function CaptureBar({
     [],
   )
 
+  /** Takes a typed or pasted URL out of the text and into the URL chip once it is complete. */
+  const changeText = (next: string, caret: number | null) => {
+    const previous = valueRef.current
+    setAttachError(null)
+    const found = contextUrlRef.current ? undefined : findUrl(next)
+    if (!found || removedUrlsRef.current.includes(found.url)) {
+      setValue(next)
+      return
+    }
+    const at = found.index
+    // While typing, "https://e" already parses: wait for the URL to end (whitespace after it).
+    // Pasted or replaced text arrives whole, so it is complete at once.
+    const bulk = next.length - previous.length > 1
+    const end = at + found.length
+    const typedEnd =
+      caret !== null &&
+      caret > end &&
+      /\s/.test(next[caret - 1] ?? '') &&
+      /^[.,;:!?)\]}]*$/.test(next.slice(end, caret - 1))
+    if (!bulk && !typedEnd) {
+      setValue(next)
+      return
+    }
+    const stripped = withoutUrl(next, at, found.length)
+    contextRawRef.current = next.slice(at, end)
+    setContextUrl(found.url)
+    setValue(stripped.text)
+    if (caret !== null) {
+      pendingCaret.current =
+        caret <= at ? caret : Math.max(stripped.cut, caret - (next.length - stripped.text.length))
+    }
+  }
+
+  // × keeps the URL as plain text (it is just not attached as context) and stops re-detecting it.
   const removeUrl = () => {
-    if (!contextUrl) return
-    removedUrlsRef.current = [...removedUrlsRef.current, contextUrl]
-    setRemovedUrls(removedUrlsRef.current)
+    const url = contextUrlRef.current
+    if (!url) return
+    const raw = contextRawRef.current ?? url
+    removedUrlsRef.current = [...removedUrlsRef.current, url]
+    setContextUrl(undefined)
+    const v = valueRef.current
+    setValue(v.trim() === '' ? raw : `${v.trimEnd()} ${raw}`)
     innerRef.current?.focus()
   }
 
@@ -264,22 +325,28 @@ export function CaptureBar({
     if (speech.listening) await flushSpeech()
     // Read everything from refs only after the flush: state may have changed during the wait.
     setInterim('')
-    const description = valueRef.current.trim()
+    const chippedUrl = contextUrlRef.current
+    // A URL on its own is a valid report: it becomes the description as well as the context.
+    const description = valueRef.current.trim() || chippedUrl || ''
     if (!description) return
     const snapshot = {
       value: valueRef.current,
+      url: chippedUrl,
+      rawUrl: contextRawRef.current ?? chippedUrl,
       transcript: transcriptRef.current,
       severity: severityRef.current,
       chips: chipsRef.current,
       removedUrls: removedUrlsRef.current,
     }
-    const url = extractUrl(description)
+    // A URL still being typed when Enter is pressed stays in the text and is attached as well.
+    const typedUrl = extractUrl(description)
     const context = sanitizeContext({
       ...collectEnvContext(),
-      url: url && !snapshot.removedUrls.includes(url) ? url : undefined,
+      url:
+        chippedUrl ?? (typedUrl && !snapshot.removedUrls.includes(typedUrl) ? typedUrl : undefined),
     })
     removedUrlsRef.current = []
-    setRemovedUrls([])
+    setContextUrl(undefined)
     const files = snapshot.chips.map((c) => c.file)
     setValue('')
     setTranscript(null)
@@ -302,9 +369,17 @@ export function CaptureBar({
       snapshot.chips.forEach((c) => URL.revokeObjectURL(c.previewUrl))
     } catch (err) {
       removedUrlsRef.current = [...snapshot.removedUrls, ...removedUrlsRef.current]
-      setRemovedUrls(removedUrlsRef.current)
+      let restored = snapshot.value
+      if (snapshot.url && !contextUrlRef.current) {
+        contextRawRef.current = snapshot.rawUrl
+        setContextUrl(snapshot.url)
+      } else if (snapshot.url && snapshot.rawUrl && snapshot.url !== contextUrlRef.current) {
+        // A newer draft already has its own URL chip: keep the failed one as text.
+        restored =
+          restored.trim() === '' ? snapshot.rawUrl : `${restored.trimEnd()} ${snapshot.rawUrl}`
+      }
       const current = valueRef.current
-      setValue(current.trim() === '' ? snapshot.value : `${snapshot.value.trimEnd()}\n\n${current}`)
+      setValue(current.trim() === '' ? restored : `${restored.trimEnd()}\n\n${current}`)
       if (snapshot.transcript) {
         setTranscript(
           transcriptRef.current
@@ -368,37 +443,44 @@ export function CaptureBar({
     )
   }
 
-  const canSubmit = value.trim().length > 0
+  const canSubmit = value.trim().length > 0 || Boolean(contextUrl)
   const editingChip = chips.find((chip) => chip.id === editingId)
   const showHint = !canSubmit && !coarse && !focused && !speech.listening && chips.length === 0
   const hasExtras = chips.length > 0 || Boolean(contextUrl) || Boolean(attachError)
   const expanded = focused || value !== '' || Boolean(interim) || hasExtras
+  // On a phone at rest the bar is one row (attach · text · severity · File), not two 44px rows;
+  // it opens to the full layout with camera and dictation as soon as it is used.
+  const oneRow = phoneRow && !expanded && !speech.listening
 
   return (
-    // Below md the bar sits in the flow and grows, pushing content down. From md the outer box
-    // reserves the one-line height and the bar grows over the list below it with more elevation,
-    // so typing, staging screenshots or the URL chip never shift the list.
-    <div data-workspace={workspaceId} onKeyDown={onKeyDown} className="relative md:h-13.5">
+    // At every width the bar sits in the flow and grows, pushing the list toolbar down rather than
+    // covering it. Its growth is bounded: the text scrolls past eight lines and the attachment
+    // row scrolls inside the bar past two rows of thumbnails.
+    <div data-workspace={workspaceId} onKeyDown={onKeyDown} className="relative">
       <div
         data-dragging={dragging || undefined}
         data-expanded={expanded || undefined}
         className={cn(
-          't relative rounded-lg border bg-surface-2 p-2 md:absolute md:inset-x-0 md:top-0 md:z-20',
+          't relative rounded-lg border bg-surface-2 p-2',
           dragging
             ? 'border-dashed border-accent shadow-elev-2'
             : expanded
-              ? 'border-line-2 shadow-elev-1 md:shadow-elev-2'
+              ? 'border-line-2 shadow-elev-1'
               : 'border-line shadow-elev-1 hover:border-line-2',
           !dragging && 'has-[textarea:focus]:border-focus',
         )}
       >
         <div
           className={cn(
-            'grid grid-cols-[auto_minmax(0,1fr)] items-end gap-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]',
+            'grid items-end gap-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]',
             // Under 360px the actions get their own full-width row so nothing overflows.
-            hasExtras
-              ? "[grid-template-areas:'text_text'_'extra_extra'_'tools_actions'] max-[359px]:[grid-template-areas:'text_text'_'extra_extra'_'tools_tools'_'actions_actions'] sm:[grid-template-areas:'tools_text_actions'_'._extra_extra']"
-              : "[grid-template-areas:'text_text'_'tools_actions'] max-[359px]:[grid-template-areas:'text_text'_'tools_tools'_'actions_actions'] sm:[grid-template-areas:'tools_text_actions']",
+            oneRow
+              ? "grid-cols-[auto_minmax(0,1fr)_auto] [grid-template-areas:'tools_text_actions']"
+              : 'grid-cols-[auto_minmax(0,1fr)]',
+            !oneRow &&
+              (hasExtras
+                ? "[grid-template-areas:'text_text'_'extra_extra'_'tools_actions'] max-[359px]:[grid-template-areas:'text_text'_'extra_extra'_'tools_tools'_'actions_actions'] sm:[grid-template-areas:'tools_text_actions'_'._extra_extra']"
+                : "[grid-template-areas:'text_text'_'tools_actions'] max-[359px]:[grid-template-areas:'text_text'_'tools_tools'_'actions_actions'] sm:[grid-template-areas:'tools_text_actions']"),
           )}
         >
           <div className="relative [grid-area:text]">
@@ -422,13 +504,12 @@ export function CaptureBar({
               placeholder={
                 interim
                   ? ''
-                  : `Paste a screenshot or describe the ${kind === 'feature' ? 'feature' : 'bug'}`
+                  : oneRow
+                    ? `Describe the ${kind === 'feature' ? 'feature' : 'bug'}`
+                    : `Paste a screenshot or describe the ${kind === 'feature' ? 'feature' : 'bug'}`
               }
               aria-label={`Describe the ${noun}`}
-              onChange={(e) => {
-                setValue(e.target.value)
-                setAttachError(null)
-              }}
+              onChange={(e) => changeText(e.target.value, e.target.selectionStart)}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               className="relative block min-h-11 w-full resize-none bg-transparent px-2 py-2.5 text-base leading-6 text-ink outline-none placeholder:text-ink-3 sm:min-h-9 sm:py-1.5"
@@ -454,7 +535,7 @@ export function CaptureBar({
               data-testid="file-input"
               onChange={onPick}
             />
-            {coarse && (
+            {coarse && !oneRow && (
               <>
                 <button
                   type="button"
@@ -475,7 +556,7 @@ export function CaptureBar({
                 />
               </>
             )}
-            {speech.supported ? (
+            {oneRow ? null : speech.supported ? (
               <button
                 type="button"
                 aria-label={speech.listening ? 'Stop dictation' : 'Start dictation'}
@@ -528,7 +609,8 @@ export function CaptureBar({
               value={severity}
               onChange={setSeverity}
               title="Severity (Alt+1–4)"
-              className="max-sm:[&>button]:h-11 pointer-coarse:[&>button]:h-11"
+              compact
+              className="sm:[&>button]:h-9 sm:pointer-coarse:[&>button]:h-11"
             />
             <button
               type="button"
@@ -541,7 +623,8 @@ export function CaptureBar({
                 't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-medium whitespace-nowrap sm:h-9 sm:pr-1.5 pointer-coarse:h-11 pointer-coarse:pr-3.5',
                 canSubmit || filing
                   ? 'border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong active:translate-y-px'
-                  : 'cursor-default border-line bg-transparent text-ink-3',
+                  : // Disabled reads as the same control at half strength, border and key cap kept.
+                    'cursor-default border-line-input bg-transparent text-ink opacity-50',
               )}
             >
               {/* Both labels share one grid cell, so the button keeps its width while filing. */}
@@ -551,22 +634,15 @@ export function CaptureBar({
                   Filing…
                 </span>
               </span>
-              <kbd
-                aria-hidden="true"
-                // The Enter hint is for keyboards: hidden on phones and coarse pointers to save room.
-                className={cn(
-                  'hidden h-6 min-w-6 items-center justify-center rounded-sm border px-1 font-mono text-xs leading-none sm:inline-flex pointer-coarse:hidden',
-                  canSubmit || filing
-                    ? 'border-accent-fg/40 text-accent-fg'
-                    : 'border-line-2 text-ink-3 opacity-50',
-                )}
-              >
-                {ENTER_GLYPH}
-              </kbd>
+              {/* The Enter hint is for keyboards: hidden on phones and coarse pointers to save room. */}
+              <span aria-hidden="true" className="hidden sm:inline-flex pointer-coarse:hidden">
+                <Kbd tone={canSubmit || filing ? 'accent' : 'default'}>{ENTER_KEY}</Kbd>
+              </span>
             </button>
           </div>
           {hasExtras && (
-            <div className="flex flex-wrap items-center gap-2 px-1 pt-1 pb-1 [grid-area:extra] sm:px-2">
+            // Two rows of thumbnails at most; past that the row scrolls inside the bar.
+            <div className="flex max-h-[176px] flex-wrap items-center gap-2 overflow-y-auto overscroll-contain p-1 [grid-area:extra] sm:px-2">
               {chips.map((c) => (
                 <AttachmentChip
                   key={c.id}

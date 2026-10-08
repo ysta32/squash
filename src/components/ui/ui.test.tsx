@@ -1,6 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { Badge, Button, Field, Input, Label, Logo, Section, SpecimenLabel } from '.'
+import {
+  Badge,
+  Button,
+  ENTER_KEY,
+  Field,
+  Input,
+  Keys,
+  Label,
+  Logo,
+  Section,
+  SpecimenLabel,
+} from '.'
 
 describe('Button', () => {
   it('defaults to type="button" so it never submits a form by accident', () => {
@@ -102,5 +113,13 @@ describe('Label, Badge, Section, Logo', () => {
     const svg = container.querySelector('svg')
     expect(svg).toHaveAttribute('aria-hidden', 'true')
     expect(svg?.querySelector('circle')).toHaveAttribute('fill', 'var(--accent)')
+  })
+})
+
+describe('Keys', () => {
+  it('renders one cap per key and Enter as the return glyph', () => {
+    const { container } = render(<Keys keys={['⌘', 'V', ENTER_KEY]} />)
+    const caps = Array.from(container.querySelectorAll('kbd')).map((k) => k.textContent)
+    expect(caps).toEqual(['⌘', 'V', '↵'])
   })
 })

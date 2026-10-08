@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, X } from 'lucide-react'
 import type { BugFilters } from '../hooks/useBugs'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 import type { OnboardingSteps } from '../lib/onboarding'
 import { cn } from '../lib/utils'
 import { EmptyState, FileGuide } from './EmptyState'
@@ -40,6 +41,7 @@ function Checklist({
       return false
     }
   })
+  const touch = useCoarsePointer()
   const completed = Object.values(steps).filter(Boolean).length
 
   if (dismissed || completed === 4) return fallback
@@ -68,7 +70,9 @@ function Checklist({
     {
       id: 'resolved',
       label: 'Resolve a bug',
-      action: (
+      action: touch ? (
+        <span>Open one and tap Resolve</span>
+      ) : (
         <span className="flex items-center gap-1">
           Press <Kbd>R</Kbd>
         </span>
