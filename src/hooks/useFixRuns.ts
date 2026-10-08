@@ -77,7 +77,9 @@ export function useFixRuns(bugId: string | null): UseFixRunsResult {
     /** Resolves true while the table exists. */
     const load = async (): Promise<boolean> => {
       const seq = ++latest
-      pending ??= []
+      // Each load starts its own buffer: anything received before this load began is already in the
+      // database it reads, and replaying an older load's buffer could overwrite a newer snapshot.
+      pending = []
       try {
         const { data, error } = await supabase
           .from(TABLE)

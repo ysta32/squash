@@ -262,4 +262,22 @@ describe('useFixRuns', () => {
     await act(async () => h.state.resolveLoad?.({ data: [running('newest')], error: null }))
     expect(result.current.runs[0].branch).toBe('newest')
   })
+
+  it('does not replay an earlier overlapping reload’s buffer over a newer snapshot', async () => {
+    const running = (branch: string) => run('f1', { status: 'running', finished_at: null, branch })
+    h.state.load = { data: [running('old')], error: null }
+    const { result } = renderHook(() => useFixRuns('b1'))
+    await waitFor(() => expect(h.state.subscribed).toBe(1))
+    h.state.deferLoad = true
+    // Reload A starts and buffers an event.
+    act(() => h.state.status?.('SUBSCRIBED'))
+    await waitFor(() => expect(h.state.resolveLoad).not.toBeNull())
+    act(() => emit('UPDATE', running('during-a')))
+    // Reload B starts before A resolves and reads a newer value.
+    h.state.resolveLoad = null
+    act(() => h.state.status?.('SUBSCRIBED'))
+    await waitFor(() => expect(h.state.resolveLoad).not.toBeNull())
+    await act(async () => h.state.resolveLoad?.({ data: [running('newest')], error: null }))
+    expect(result.current.runs[0].branch).toBe('newest')
+  })
 })
