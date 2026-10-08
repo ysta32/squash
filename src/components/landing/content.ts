@@ -87,7 +87,7 @@ export const CHAPTERS: Chapter[] = [
       name: 'annotate',
       themed: true,
       width: 1400,
-      height: 991,
+      height: 1111,
       alt: 'The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button',
     },
     marker: {
@@ -110,7 +110,7 @@ export const CHAPTERS: Chapter[] = [
       name: 'claude',
       themed: true,
       width: 1400,
-      height: 1010,
+      height: 710,
       alt: 'Bug #24 with a Claude is working panel: the file being edited, a four-step plan with two steps done, and Claude’s latest explanation',
     },
     marker: {

@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:db": "node scripts/db-test/run.mjs",
     "screenshots": "node scripts/screenshots/capture.mjs",
+    "screenshots:webp": "node scripts/screenshots/webp.mjs",
     "a11y": "node scripts/a11y/run.mjs",
     "qa:shots": "node scripts/visual-qa/run.mjs"
   },

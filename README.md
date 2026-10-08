@@ -29,7 +29,7 @@ Then send it to Claude Code and watch it get fixed.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hero-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/hero-light.png" />
-  <img src="docs/screenshots/hero-light.png" width="100%" alt="The Squash workspace: a live list of bugs on the left, and on the right a bug with two screenshots, its activity, comments, and a panel showing Claude Code working on the fix" />
+  <img src="docs/screenshots/hero-light.png" width="100%" alt="The Squash workspace: the capture bar on top, a live list of bugs on the left, and on the right a bug with two screenshots, numbered pins with their notes, and a panel showing Claude Code working on the fix" />
 </picture>
 
 </div>
@@ -90,7 +90,7 @@ Paste a screenshot anywhere on the page with <kbd>⌘V</kbd> / <kbd>Ctrl+V</kbd>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/annotate-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/annotate-light.png" />
-  <img src="docs/screenshots/annotate-light.png" width="100%" alt="The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button" />
+  <img src="docs/screenshots/annotate-light.png" width="100%" alt="The mark-up editor over a checkout page: a red box around a cookie banner, an arrow pointing at the Pay now button, and pin 1 on the button with the note 'Pay now is hidden on iPhone'" />
 </picture>
 
 <br />
@@ -102,7 +102,7 @@ Press **Send to Claude** on a bug, or **Send all to Claude** above the list. Squ
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/claude-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/claude-light.png" />
-  <img src="docs/screenshots/claude-dark.png" width="100%" alt="A bug's detail view with a 'Claude is working' panel: the file Claude is editing, a checklist with two steps done, one in progress and one pending, and Claude's latest explanation" />
+  <img src="docs/screenshots/claude-dark.png" width="100%" alt="The 'Claude is working' panel on a bug: the file Claude is editing, a checklist with two steps done, one in progress and one pending, and Claude's latest explanation" />
 </picture>
 
 - **Unattended.** When Claude finishes, its Terminal window closes and Squash marks each bug it fixed as **resolved**, with Claude's summary as the resolution note. Bugs it couldn't finish stay open with the summary as a comment.
@@ -171,9 +171,9 @@ A responsive two-pane layout on desktop and a list-to-detail stack on phones. In
 
 ## Make it yours
 
-Light and dark themes that follow your system, and six color schemes: Violet, Ocean, Forest, Sunset, Rose and Graphite.
+Light and dark themes that follow your system, and five color schemes: Viridian, Cyanotype, Rust, Madder and Ink.
 
-<img src="docs/screenshots/schemes.png" width="100%" alt="The Squash workspace in six color schemes, alternating dark and light: violet, ocean, forest, sunset, rose and graphite" />
+<img src="docs/screenshots/schemes.png" width="100%" alt="The Squash workspace in five color schemes, alternating dark and light: viridian, cyanotype, rust, madder and ink" />
 
 <br />
 

@@ -2,14 +2,18 @@
 // color-scheme grid. Run by capture.mjs after shooting; reads parts from the cache.
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
+import { readTokens } from '../brand.mjs'
+import { PNG_OPTIONS } from './png-options.mjs'
 import { SCHEMES } from './shots.mjs'
 
 const docs = fileURLToPath(new URL('../../docs/screenshots/', import.meta.url))
 const parts = fileURLToPath(new URL('../../node_modules/.cache/squash-shots/', import.meta.url))
 
+// Paper and darkroom from the design tokens, fading into the accent tint.
+const tokens = readTokens()
 const BACKDROP = {
-  light: ['#f5f3ff', '#e0e7ff'],
-  dark: ['#18181b', '#2e1065'],
+  light: [tokens.light['surface-3'], tokens.light['accent-tint']],
+  dark: [tokens.dark['surface-3'], tokens.dark['accent-tint']],
 }
 
 const backdrop = (width, height, [from, to]) =>
@@ -44,7 +48,7 @@ async function rounded(input, width, radius, border = 'rgba(0,0,0,0.12)') {
 async function shadow(width, height, radius, blur, opacity) {
   const pad = blur * 3
   const svg = Buffer.from(
-    `<svg width="${width + pad * 2}" height="${height + pad * 2}"><rect x="${pad}" y="${pad}" width="${width}" height="${height}" rx="${radius}" fill="rgba(15,10,40,${opacity})"/></svg>`,
+    `<svg width="${width + pad * 2}" height="${height + pad * 2}"><rect x="${pad}" y="${pad}" width="${width}" height="${height}" rx="${radius}" fill="rgba(20,20,18,${opacity})"/></svg>`,
   )
   return { buffer: await sharp(svg).blur(blur).png().toBuffer(), pad }
 }
@@ -65,7 +69,7 @@ async function scene(out, width, height, mode, cards) {
   }
   await sharp(backdrop(width, height, BACKDROP[mode]))
     .composite(layers)
-    .png({ compressionLevel: 9 })
+    .png(PNG_OPTIONS)
     .toFile(out)
   console.log(out.replace(docs, 'docs/screenshots/'))
 }
@@ -98,24 +102,29 @@ for (const mode of ['light', 'dark']) {
   )
 }
 
-// Color schemes: a 3 × 2 grid, alternating dark and light.
+// Color schemes: rows of three (the last row centred), alternating dark and light.
 {
   const tile = 900
   const tileH = Math.round((tile * 900) / 1440)
   const gap = 60
   const width = tile * 3 + gap * 2 + 200
-  const height = tileH * 2 + gap + 200
+  const rows = Math.ceil(SCHEMES.length / 3)
+  const height = tileH * rows + gap * (rows - 1) + 200
   await scene(
     `${docs}schemes.png`,
     width,
     height,
     'dark',
-    SCHEMES.map((s, i) => ({
-      file: `${parts}scheme-${s}.png`,
-      left: 100 + (i % 3) * (tile + gap),
-      top: 100 + Math.floor(i / 3) * (tileH + gap),
-      width: tile,
-      radius: 18,
-    })),
+    SCHEMES.map((s, i) => {
+      const inRow = Math.min(3, SCHEMES.length - Math.floor(i / 3) * 3)
+      const indent = ((3 - inRow) * (tile + gap)) / 2
+      return {
+        file: `${parts}scheme-${s}.png`,
+        left: Math.round(100 + indent + (i % 3) * (tile + gap)),
+        top: 100 + Math.floor(i / 3) * (tileH + gap),
+        width: tile,
+        radius: 18,
+      }
+    }),
   )
 }

@@ -1,5 +1,6 @@
 // HTML for the screenshots attached to the demo bugs: screens of "Lumen", a fictional analytics
 // app, each showing the problem its bug describes.
+import { fontFaces, markSvg, readTokens } from '../brand.mjs'
 
 const font = `font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;`
 
@@ -211,25 +212,34 @@ export const fixtures = [
 ]
 
 /** 1280 × 640 card for GitHub's social preview, with the dark workspace screenshot. */
-export const socialCard = (screenshotBase64) => `<!doctype html><html><head><style>
+// GitHub social preview: the darkroom palette and pin mark from the design tokens (scripts/brand.mjs),
+// so the card never drifts from the app.
+export const socialCard = (screenshotBase64) => {
+  const t = readTokens().dark
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+${fontFaces()}
   * { box-sizing: border-box; margin: 0; }
-  body { ${font} width: 1280px; height: 640px; overflow: hidden; color: #ececef;
-    background: radial-gradient(1200px 600px at 85% 110%, #4c1d95 0%, transparent 60%), linear-gradient(135deg, #18181b, #1e1533); }
-  .copy { position: absolute; left: 72px; top: 92px; width: 520px; }
-  .brand { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; }
-  .brand i { width: 46px; height: 46px; border-radius: 12px; background: #a78bfa; display: grid; place-items: center; }
-  h1 { margin-top: 56px; font-size: 58px; line-height: 1.05; letter-spacing: -0.035em; font-weight: 750; }
-  p { margin-top: 24px; font-size: 22px; line-height: 1.45; color: #a1a1aa; }
-  .tags { margin-top: 34px; display: flex; gap: 10px; font-size: 15px; color: #c4b5fd; }
-  .tags span { padding: 7px 13px; border: 1px solid rgba(167,139,250,.35); border-radius: 999px; background: rgba(167,139,250,.08); }
-  img { position: absolute; left: 640px; top: 96px; width: 900px; border-radius: 16px; border: 1px solid rgba(255,255,255,.14);
+  body { width: 1280px; height: 640px; overflow: hidden; position: relative; color: ${t['text-1']};
+    font-family: 'Plex Sans'; -webkit-font-smoothing: antialiased; background-color: ${t.bg};
+    background-image: radial-gradient(110% 90% at 0% 0%, ${t['surface-2']} 0%, transparent 60%),
+      radial-gradient(70% 80% at 100% 100%, ${t['accent-tint']} 0%, transparent 70%); }
+  .copy { position: absolute; left: 72px; top: 72px; width: 520px; }
+  .logo { display: flex; align-items: center; gap: 12px; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+  .logo svg { width: 36px; height: 36px; }
+  h1 { margin-top: 64px; font-size: 56px; line-height: 60px; letter-spacing: -0.03em; font-weight: 600; text-wrap: balance; }
+  p { margin-top: 24px; font-size: 22px; line-height: 32px; color: ${t['text-2']}; text-wrap: pretty; }
+  .facts { position: absolute; left: 72px; bottom: 64px; font-family: 'Plex Mono'; font-size: 15px;
+    letter-spacing: 0.06em; text-transform: uppercase; color: ${t['text-3']}; }
+  .facts i { font-style: normal; padding: 0 0.6ch; }
+  img { position: absolute; left: 640px; top: 96px; width: 900px; border-radius: 10px; border: 1.5px solid ${t['border-2']};
     box-shadow: 0 40px 80px rgba(0,0,0,.55); }
 </style></head><body>
   <div class="copy">
-    <div class="brand"><i><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1b1b20" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3 3 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6M12 20v-9M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg></i>Squash</div>
+    <div class="logo">${markSvg({ needle: t['text-1'], head: t.accent })}squash</div>
     <h1>Bug reports your cofounder actually reads.</h1>
     <p>Paste a screenshot, press Enter, and it's on your teammate's screen. Then let Claude Code fix it.</p>
-    <div class="tags"><span>Real-time</span><span>Open source</span><span>Self-hostable</span></div>
   </div>
+  <div class="facts">Real-time<i>·</i>Open source<i>·</i>Self-hostable</div>
   <img src="data:image/png;base64,${screenshotBase64}" />
 </body></html>`
+}

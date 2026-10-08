@@ -6,7 +6,9 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import sharp from 'sharp'
 import { createServer } from 'vite'
+import { PNG_OPTIONS } from './png-options.mjs'
 import { socialCard } from './fixtures.mjs'
 import { fixturesDir, renderFixtures } from './render-fixtures.mjs'
 
@@ -70,12 +72,23 @@ for (const shot of shots) {
   const page = await context.newPage()
   await page.goto(origin + shot.path, { waitUntil: 'networkidle' })
   await page.waitForTimeout(600)
+  // Screenshot thumbnails can still be decoding after network idle.
+  await page.evaluate(() =>
+    Promise.all(
+      [...document.images].map((img) =>
+        Promise.race([img.decode().catch(() => {}), new Promise((r) => setTimeout(r, 5_000))]),
+      ),
+    ),
+  )
   if (shot.before) await shot.before(page)
   await page.waitForTimeout(400)
   // Composite parts go to the cache; compose.mjs assembles them.
   const path = `${shot.composite ? fixturesDir : outDir}${shot.name}.png`
   const clip = typeof shot.clip === 'function' ? await shot.clip(page) : shot.clip
-  await page.screenshot({ path, clip })
+  // Re-encoded losslessly: Chrome's PNGs are barely compressed, and the paper grain makes them big.
+  await sharp(await page.screenshot({ clip }))
+    .png(PNG_OPTIONS)
+    .toFile(path)
   console.log(shot.composite ? `(part) ${shot.name}` : `docs/screenshots/${shot.name}.png`)
   await context.close()
 }
@@ -154,8 +167,11 @@ if (!only || 'social'.includes(only)) {
     deviceScaleFactor: 2,
   })
   await page.setContent(socialCard(shot))
+  await page.evaluate(() => document.fonts.ready)
   await page.waitForTimeout(300)
-  await page.screenshot({ path: `${outDir}social-preview.png` })
+  await sharp(await page.screenshot())
+    .png(PNG_OPTIONS)
+    .toFile(`${outDir}social-preview.png`)
   await page.close()
   console.log('docs/screenshots/social-preview.png')
 }

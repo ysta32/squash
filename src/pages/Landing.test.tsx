@@ -150,8 +150,8 @@ describe('Landing', () => {
     const intrinsic: Record<string, [number, number]> = {
       workspace: [1600, 1000],
       capture: [1400, 544],
-      annotate: [1400, 991],
-      claude: [1400, 1010],
+      annotate: [1400, 1111],
+      claude: [1400, 710],
     }
     for (const img of images) {
       expect(img.getAttribute('alt')?.length).toBeGreaterThan(20)
