@@ -259,7 +259,13 @@ describe('CaptureBar', () => {
     fireEvent.click(screen.getByLabelText('Remove a.png'))
     expect(screen.queryByLabelText('Remove a.png')).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('keeps an empty live region mounted before any error', () => {
+    setup()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
 
   it('clears the attach error on dismiss and on the next keystroke', () => {
@@ -269,11 +275,11 @@ describe('CaptureBar', () => {
     const input = screen.getByTestId('file-input')
     fireEvent.change(input, { target: { files: [big] } })
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }))
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
     fireEvent.change(input, { target: { files: [big] } })
     expect(screen.getByRole('status')).toHaveTextContent('over 5 MB')
     fireEvent.change(box, { target: { value: 'x' } })
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
 
   it('falls back to a toast for attach errors while the bar is hidden', () => {

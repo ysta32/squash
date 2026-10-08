@@ -199,7 +199,12 @@ function makeBug(n: number, over: Partial<BugWithMeta> = {}): BugWithMeta {
 
 function LocationProbe() {
   const location = useLocation()
-  return <output data-testid="path">{location.pathname}</output>
+  return (
+    <>
+      <output data-testid="path">{location.pathname}</output>
+      <output data-testid="search">{location.search}</output>
+    </>
+  )
 }
 
 /** Stand-in for a Header menu: an open popover dismissed by Esc through useDismiss. */
@@ -575,6 +580,19 @@ describe('Workspace', () => {
     ;(document.activeElement as HTMLElement).blur()
     fireEvent.keyDown(document.body, { key: '?', shiftKey: true })
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
+  })
+
+  it('palette Navigate commands on a phone bug detail return to the filtered list', () => {
+    show('/app/ws/bug/2')
+    const mod = isMac ? { metaKey: true } : { ctrlKey: true }
+    fireEvent.keyDown(document.body, { key: 'k', ...mod })
+    const input = within(screen.getByRole('dialog', { name: 'Command palette' })).getByRole(
+      'combobox',
+    )
+    fireEvent.change(input, { target: { value: 'Show resolved' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(path()).toBe('/app/ws')
+    expect(screen.getByTestId('search').textContent).toContain('status=resolved')
   })
 
   it('Mod+K opens the command palette, even from the capture box, and commands run', () => {

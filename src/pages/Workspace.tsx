@@ -693,7 +693,20 @@ export default function Workspace() {
       label,
       group: 'Navigate',
       keywords: ['filter', 'tab', ...words],
-      run: () => applyFilters({ ...filters, ...next }),
+      run: () => {
+        const nextFilters = { ...filters, ...next }
+        if (showDetail && !isDesktop()) {
+          // On phones the open bug hides the list; go back to it, carrying the new filters.
+          if (nextFilters.kind !== filters.kind) clearPicked()
+          setPendingId(null)
+          navigate({
+            pathname: basePath,
+            search: writeFilters(new URLSearchParams(search), nextFilters).toString(),
+          })
+          return
+        }
+        applyFilters(nextFilters)
+      },
     })),
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,

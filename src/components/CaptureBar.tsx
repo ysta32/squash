@@ -374,9 +374,10 @@ export function CaptureBar({
         <div
           className={cn(
             'grid grid-cols-[auto_minmax(0,1fr)] items-end gap-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]',
+            // Under 360px the actions get their own full-width row so nothing overflows.
             hasExtras
-              ? "[grid-template-areas:'text_text'_'extra_extra'_'tools_actions'] sm:[grid-template-areas:'tools_text_actions'_'._extra_extra']"
-              : "[grid-template-areas:'text_text'_'tools_actions'] sm:[grid-template-areas:'tools_text_actions']",
+              ? "[grid-template-areas:'text_text'_'extra_extra'_'tools_actions'] max-[359px]:[grid-template-areas:'text_text'_'extra_extra'_'tools_tools'_'actions_actions'] sm:[grid-template-areas:'tools_text_actions'_'._extra_extra']"
+              : "[grid-template-areas:'text_text'_'tools_actions'] max-[359px]:[grid-template-areas:'text_text'_'tools_tools'_'actions_actions'] sm:[grid-template-areas:'tools_text_actions']",
           )}
         >
           <div className="relative [grid-area:text]">
@@ -588,7 +589,8 @@ export function CaptureBar({
                     aria-hidden="true"
                     className="shrink-0"
                   />
-                  <p role="status" aria-live="polite" className="min-w-0 flex-1">
+                  {/* Announced by the always-mounted live region below. */}
+                  <p aria-hidden="true" className="min-w-0 flex-1">
                     {attachError}
                   </p>
                   <button
@@ -604,6 +606,11 @@ export function CaptureBar({
             </div>
           )}
         </div>
+
+        {/* Mounted empty from the start so screen readers announce the first error too. */}
+        <p role="status" aria-live="polite" className="sr-only">
+          {attachError ?? ''}
+        </p>
 
         {dragging && (
           <div
