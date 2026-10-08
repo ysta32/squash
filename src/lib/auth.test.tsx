@@ -238,7 +238,8 @@ describe('AuthCallback', () => {
 
   it('shows error_description with a link back to sign in', async () => {
     renderCallback('/auth/callback?error_description=Link%20expired')
-    expect(await screen.findByText('Link expired')).toBeInTheDocument()
+    expect(await screen.findByText('Could not sign you in')).toBeInTheDocument()
+    expect(screen.getByText('Reason: Link expired')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to sign in' })).toBeInTheDocument()
   })
 
@@ -246,7 +247,7 @@ describe('AuthCallback', () => {
     renderCallback(
       '/auth/callback?next=%2Fapp#error=access_denied&error_description=Email%20link%20is%20invalid',
     )
-    expect(await screen.findByText('Email link is invalid')).toBeInTheDocument()
+    expect(await screen.findByText('Reason: Email link is invalid')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to sign in' })).toBeInTheDocument()
     expect(screen.queryByText('app home')).not.toBeInTheDocument()
   })
