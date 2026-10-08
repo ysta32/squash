@@ -61,6 +61,10 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
   if (count === 0) return null
   const url = urls[safeIndex]
   const caption = captions?.[safeIndex] ?? null
+  // The last field of a `W×H · file name` caption is the file name.
+  const cut = caption?.lastIndexOf(' · ') ?? -1
+  const detail = caption && cut >= 0 ? caption.slice(0, cut) : caption
+  const file = caption && cut >= 0 ? caption.slice(cut + 3) : null
 
   return createPortal(
     <div
@@ -120,16 +124,22 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
       />
       <p
         onClick={(e) => e.stopPropagation()}
-        className="max-w-full shrink-0 text-center font-mono text-xs tracking-[0.06em] text-balance text-white/80 uppercase [overflow-wrap:anywhere] sm:truncate"
+        className="max-w-full shrink-0 text-center font-mono text-[12px] tracking-[0.06em] text-balance text-white/72 uppercase sm:truncate"
       >
         Fig.{' '}
         <span>
           {safeIndex + 1} / {count}
         </span>
         {/* A no-break space ties each dot to the field before it, so a wrapped line never starts
-            with one. */}
-        {caption && (
-          <span className="normal-case">{`\u00a0· ${caption.replaceAll(' · ', '\u00a0· ')}`}</span>
+            with one. On phones the file name takes its own line, cut with an ellipsis. */}
+        {detail && (
+          <span className="normal-case [overflow-wrap:anywhere]">{`\u00a0· ${detail.replaceAll(' · ', '\u00a0· ')}`}</span>
+        )}
+        {file && (
+          <>
+            <span className="normal-case max-sm:hidden">{'\u00a0· '}</span>
+            <span className="normal-case max-sm:block max-sm:truncate">{file}</span>
+          </>
         )}
       </p>
     </div>,
@@ -142,8 +152,10 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
 const SIDE_NAV =
   'bottom-[max(1rem,env(safe-area-inset-bottom))] sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2'
 
+/** One control style in both themes, a true 44px: paper at 90% with a light hairline, so it
+ *  stays visible on the dark scrim. */
 const CHROME_BUTTON =
-  't focus-ring absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'
+  't focus-ring absolute z-10 inline-flex size-[44px] items-center justify-center rounded-full border border-white/12 bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'
 
 function ZoomImage({
   url,

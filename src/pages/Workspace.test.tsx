@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   resolveBug: vi.fn(),
   reopenBug: vi.fn(),
   updateBug: vi.fn(),
+  deleteBug: vi.fn(),
   assigner: null as string | null,
   /** Overrides the assigner lookup's response while set. */
   lookup: null as Promise<unknown> | null,
@@ -116,6 +117,7 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
         resolveBug: mocks.resolveBug,
         reopenBug: mocks.reopenBug,
         assignBug: mocks.assignBug,
+        deleteBug: mocks.deleteBug,
         retryUploads: vi.fn(),
         getBugByNumber: mocks.getBugByNumber,
       }
@@ -254,6 +256,9 @@ beforeEach(() => {
   mocks.reopenBug.mockResolvedValue(undefined)
   mocks.updateBug.mockResolvedValue(undefined)
   mocks.assignBug.mockResolvedValue(undefined)
+  mocks.deleteBug.mockImplementation(async (id: string) => {
+    mocks.bugs = mocks.bugs.filter((b) => b.id !== id)
+  })
   mocks.getBugByNumber.mockResolvedValue(null)
 })
 afterEach(() => {
@@ -376,6 +381,61 @@ describe('Workspace', () => {
       expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
     },
   )
+
+  it.each([
+    { from: 2, to: 1, why: 'the next bug' },
+    { from: 1, to: 2, why: 'the previous bug when the deleted one was last' },
+  ])('after deleting #$from opens $why and focuses its row', async ({ from, to }) => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.open = true
+      },
+    })
+    const matchMedia = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(min-width: 1024px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      const view = show(`/app/ws/bug/${from}`)
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bug' }))
+      await act(async () => {
+        fireEvent.click(
+          within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
+        )
+      })
+      view.rerender(tree(`/app/ws/bug/${from}`))
+      expect(mocks.deleteBug).toHaveBeenCalledExactlyOnceWith(`b${from}`)
+      expect(path()).toBe(`/app/ws/bug/${to}`)
+      expect(screen.getByText(`Deleted #${from}`)).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: `#${to} Bug number ${to}` })).toHaveFocus()
+    } finally {
+      window.matchMedia = matchMedia
+    }
+  })
+
+  it('returns to the empty state after deleting the only bug', async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.open = true
+      },
+    })
+    mocks.bugs = [makeBug(1)]
+    show('/app/ws/bug/1')
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bug' }))
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
+      )
+    })
+    expect(path()).toBe('/app/ws')
+  })
 
   it('places a skip link before the header and focuses the main landmark', () => {
     const { container } = show('/app/ws')

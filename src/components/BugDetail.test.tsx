@@ -283,6 +283,18 @@ describe('BugDetail', () => {
     expect(screen.queryByRole('dialog', { name: 'Resolve bug' })).toBeNull()
   })
 
+  it('keeps one filled Resolve on screen: the trigger reads as pressed while the popover is open', () => {
+    setup(makeBug())
+    const trigger = screen.getByRole('button', { name: 'Resolve', expanded: false })
+    expect(trigger).toHaveClass('bg-accent')
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Resolve bug' })
+    expect(screen.getByRole('button', { name: 'Resolve', expanded: true })).not.toHaveClass(
+      'bg-accent',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Resolve' })).toHaveClass('bg-accent')
+  })
+
   it('confirms with Cmd+Enter and resolves without note', async () => {
     const { onResolve } = setup(makeBug())
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))

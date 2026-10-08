@@ -212,6 +212,16 @@ const STATES = {
       await page.getByRole('menu', { name: 'More actions' }).waitFor({ timeout: SHORT })
     },
   },
+  'delete-confirm': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'More actions' }).click({ timeout: SHORT })
+      await page
+        .getByRole('menuitem', { name: 'Delete bug', exact: true })
+        .click({ timeout: SHORT })
+      await page.getByRole('dialog', { name: /^Delete bug #24/ }).waitFor({ timeout: SHORT })
+    },
+  },
   toast: {
     path: `${WS}/bug/24`,
     run: async (page) => {

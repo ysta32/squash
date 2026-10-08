@@ -418,9 +418,18 @@ export default function Workspace() {
     if (hasNumberParam) navigate(listPath)
   }, [hasNumberParam, navigate, listPath])
 
-  const deleteAndDeselect = useCallback(
+  const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
+  const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
+
+  /** A bug whose list row takes focus once it is selected (after deleting the one before it). */
+  const focusRowOf = useRef<string | null>(null)
+  // After a delete the user keeps their place: the next bug in the list opens (or the previous
+  // one when the deleted bug was last) and its row takes focus. Nothing left: the empty state.
+  const deleteAndAdvance = useCallback(
     async (id: string) => {
       const bug = bugs.find((b) => b.id === id)
+      const at = visible.findIndex((b) => b.id === id)
+      const neighbour = at === -1 ? undefined : (visible[at + 1] ?? visible[at - 1])
       await deleteBug(id)
       setPickedIds((prev) => {
         if (!prev.has(id)) return prev
@@ -429,13 +438,27 @@ export default function Workspace() {
         return next
       })
       if (bug) toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
-      deselect()
+      if (neighbour) {
+        focusRowOf.current = neighbour.id
+        select(neighbour.id, { replace: true })
+      } else {
+        deselect()
+      }
     },
-    [bugs, deleteBug, toast, deselect],
+    [bugs, visible, deleteBug, toast, select, deselect],
   )
+  useEffect(() => {
+    const id = focusRowOf.current
+    if (id === null || selected?.id !== id) return
+    focusRowOf.current = null
+    // The list is hidden behind the detail on phones; focus the page there instead.
+    const row = document.querySelector<HTMLElement>(
+      '#bug-list-pane [role="option"][aria-selected="true"]',
+    )
+    if (row && isDesktop()) row.focus()
+    else document.getElementById('main')?.focus()
+  }, [selected?.id])
 
-  const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
-  const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
   const effectivePickedIds = new Set(
     visible.filter((bug) => pickedIds.has(bug.id)).map((bug) => bug.id),
   )
@@ -852,7 +875,7 @@ export default function Workspace() {
         onReopen={reopenWithUndo}
         onAssign={assignWithUndo}
         assignRequest={assignRequest}
-        onDelete={deleteAndDeselect}
+        onDelete={deleteAndAdvance}
         onBack={deselect}
         resolveRequest={resolveRequest}
         reopenRequest={reopenRequest}

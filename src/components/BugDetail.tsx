@@ -361,6 +361,7 @@ function BugBody({
   }
 
   const otherKind = bug.kind === 'feature' ? 'bug' : 'feature'
+  const popoverOpen = popover !== null && editable
 
   function confirmPopover(note: string | null) {
     onPopover(null)
@@ -544,7 +545,7 @@ function BugBody({
                 narrow), and a bottom action bar on phones: [Resolve, wide][spark][…]. */}
             <div
               ref={barRef}
-              className="ml-auto flex items-center gap-2 @max-2xl:ml-0 @max-2xl:w-full max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-20 max-sm:border-t max-sm:border-line max-sm:bg-surface-2 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-elev-2"
+              className="relative ml-auto flex items-center gap-2 @max-2xl:ml-0 @max-2xl:w-full max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-20 max-sm:border-t max-sm:border-line max-sm:bg-surface-2 max-sm:px-4 max-sm:pt-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:shadow-elev-2"
             >
               {onSend && (
                 <button
@@ -562,18 +563,24 @@ function BugBody({
                   <span className="max-sm:sr-only">Send to Claude Code</span>
                 </button>
               )}
-              <div className="relative max-sm:order-1 max-sm:flex-1">
+              {/* The popover hangs from the cluster's end edge (desktop) or replaces the bar
+                  as a sheet (phones); while it is open its own Resolve is the filled one, so the
+                  trigger reads as pressed. */}
+              <div className="max-sm:order-1 max-sm:flex-1">
                 <button
                   type="button"
                   disabled={!editable}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => onPopover(popover ? null : isOpen ? 'resolve' : 'reopen')}
                   title={isOpen ? 'Resolve (R)' : 'Reopen'}
-                  aria-expanded={popover !== null && editable}
+                  aria-expanded={popoverOpen}
                   className={buttonClass(
-                    isOpen ? 'primary' : 'secondary',
+                    isOpen && !popoverOpen ? 'primary' : 'secondary',
                     'md',
-                    'h-8 px-3.5 max-sm:h-11 max-sm:w-full',
+                    cn(
+                      'h-8 px-3.5 max-sm:h-11 max-sm:w-full',
+                      popoverOpen && 'border-line-input! bg-surface-3!',
+                    ),
                   )}
                 >
                   {isOpen ? (
@@ -585,7 +592,7 @@ function BugBody({
                 </button>
                 <ResolvePopover
                   mode={isOpen ? 'resolve' : 'reopen'}
-                  open={popover !== null && editable}
+                  open={popoverOpen}
                   onClose={() => onPopover(null)}
                   onConfirm={confirmPopover}
                   placement="responsive"
@@ -784,6 +791,7 @@ function SpecimenLabel({ bug, filer }: { bug: BugWithMeta; filer: string }) {
   const context = sanitizeContext(bug.context)
   const environment = formatContext({ ...context, url: undefined })
   const hasContext = formatContext(context) !== ''
+  const url = context.url ? splitTail(context.url.replace(/^https?:\/\//, '')) : null
   const number = bug.optimistic ? '…' : String(bug.number).padStart(3, '0')
   const sep = (
     <span aria-hidden="true" className="text-ink-3">
@@ -817,31 +825,53 @@ function SpecimenLabel({ bug, filer }: { bug: BugWithMeta; filer: string }) {
             {labelDate(bug.created_at)}
           </time>
         </p>
-        {/* The captured context gets its own line, cut to one line: a URL never wraps the label. */}
+        {/* The captured context gets its own line and never wraps the label. Where the label is
+            narrow the URL and the environment each take a line; a long URL gives way in the
+            middle, so its end (the page and query) stays readable. */}
         {hasContext && (
-          <p
+          <div
             role="group"
             aria-label="Bug context"
             title={formatContext(context)}
-            className="-m-[4px] truncate p-[4px] normal-case"
+            className="-m-[4px] flex min-w-0 flex-col p-[4px] normal-case @xl:flex-row @xl:items-baseline"
           >
-            {context.url && (
+            {url && (
               <a
                 href={context.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="focus-ring rounded-xs text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink"
+                className="focus-ring flex max-w-full min-w-0 rounded-xs text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink"
               >
-                {context.url.replace(/^https?:\/\//, '')}
+                <span className="truncate">{url[0]}</span>
+                <span className="shrink-0 whitespace-pre">{url[1]}</span>
               </a>
             )}
-            {context.url && environment && sep}
-            {environment}
-          </p>
+            {url && environment && (
+              <span
+                aria-hidden="true"
+                className="hidden shrink-0 whitespace-pre text-ink-3 @xl:inline"
+              >
+                {' · '}
+              </span>
+            )}
+            {environment && (
+              <span className="max-w-full min-w-0 truncate @xl:shrink-0">{environment}</span>
+            )}
+          </div>
         )}
       </div>
     </div>
   )
+}
+
+/**
+ * Splits a URL into a head that may be cut with an ellipsis and a tail kept whole: the query or
+ * last path segment when it is short, otherwise the last 12 characters.
+ */
+function splitTail(text: string): [string, string] {
+  const cut = Math.max(text.lastIndexOf('/'), text.lastIndexOf('?'))
+  const at = cut > 0 && text.length - cut <= 24 ? cut : Math.max(0, text.length - 12)
+  return [text.slice(0, at), text.slice(at)]
 }
 
 interface MenuItem {
@@ -1047,8 +1077,12 @@ function DeleteDialog({
           Delete {noun} #{bug.number}?
         </h3>
         <p className="text-ink-2">
-          “{bug.title}” and its screenshots, comments and activity will be permanently removed. This
-          cannot be undone. To keep a record, resolve it instead.
+          <span className="text-ink">“{bug.title}”</span> and its screenshots, comments and activity
+          will be removed for everyone in the workspace.
+        </p>
+        <p className="text-ink-2">
+          <span className="font-medium text-danger">This cannot be undone.</span> To keep a record,
+          resolve it instead.
         </p>
         {error && (
           <p role="alert" className="text-danger">
@@ -1058,6 +1092,8 @@ function DeleteDialog({
         <div className="flex justify-end gap-2">
           <button
             type="button"
+            // The safe choice holds focus, so a stray Enter never deletes.
+            autoFocus
             disabled={busy}
             onClick={onCancel}
             className={buttonClass('secondary')}
@@ -1065,7 +1101,6 @@ function DeleteDialog({
             Cancel
           </button>
           <button
-            autoFocus
             disabled={busy}
             className={buttonClass(
               'danger',
@@ -1096,14 +1131,18 @@ function FigureCaption({
   after?: string
 }) {
   return (
-    <figcaption className="specimen-label mt-2 flex items-center justify-between gap-2 text-ink-3">
-      <span title={after ? `After ${after}` : undefined} className="min-w-0 truncate">
+    <figcaption className="specimen-label mt-2 flex items-start justify-between gap-2 text-ink-3">
+      {/* Up to two lines: a narrow thumbnail would otherwise cut an "After fix …" label. */}
+      <span
+        title={after ? `After ${after}` : undefined}
+        className="line-clamp-2 min-w-0 [overflow-wrap:anywhere]"
+      >
         Fig. {figure}
         {after && (
           <>
             {' · '}
             <span className="text-status-resolved">After</span>{' '}
-            <span className="normal-case">{after}</span>
+            <span className="normal-case whitespace-nowrap">{after}</span>
           </>
         )}
       </span>

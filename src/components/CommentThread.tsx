@@ -137,7 +137,9 @@ export function CommentThread({
       )}
       <div
         className={cn(
-          't mt-6 rounded-lg border border-line-input bg-surface-2 focus-within:border-focus',
+          // A quiet hairline at rest, so the box never reads as focused or outweighs Resolve;
+          // the accent ring arrives with focus.
+          't mt-6 rounded-lg border border-line-2 bg-surface-2 not-focus-within:hover:border-line-input focus-within:border-focus focus-within:ring-1 focus-within:ring-focus',
           !bugId && 'opacity-60',
         )}
       >
@@ -171,7 +173,8 @@ export function CommentThread({
             disabled={!canSend}
             onClick={() => void send()}
             title="Send comment (Enter)"
-            className="pointer-coarse:h-11 pointer-coarse:px-4"
+            // Empty: plain unavailable text with no outline; a secondary button once there is text.
+            className="pointer-coarse:h-11 pointer-coarse:px-4 disabled:border-transparent!"
           >
             Comment
           </Button>
