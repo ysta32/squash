@@ -44,11 +44,20 @@ export function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;')
 }
 
+/** Removes tags until none remain, so nested fragments such as `<scr<b>ipt>` cannot survive. */
+export function stripTags(html: string): string {
+  let previous: string
+  let text = html
+  do {
+    previous = text
+    text = text.replace(/<[^<>]*>/g, '')
+  } while (text !== previous)
+  return text.replace(/[<>]/g, '')
+}
+
 /** `Getting started` → `getting-started`; keeps dots so `v1.7.0` stays readable. */
 export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/<[^>]+>/g, '')
+  return stripTags(text.toLowerCase())
     .replace(/[`*_]/g, '')
     .replace(/[^a-z0-9.\s-]/g, '')
     .trim()
@@ -263,8 +272,8 @@ function rssDate(isoDay: string): string {
 
 /** Plain text of rendered inline HTML: tags dropped, the entities escapeHtml writes decoded. */
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, '')
+  // Callers escape the result again (escapeHtml / escapeXml / React text), so decoding is safe.
+  return stripTags(html)
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&quot;', '"')

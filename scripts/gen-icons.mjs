@@ -18,8 +18,8 @@ await mkdir(pub('icons'), { recursive: true })
 // favicon.svg: transparent, ink needle on light tabs and paper needle on dark ones. CSS beats
 // the presentation attributes, so the media query only has to restate the dark paints.
 const faviconSvg = markSvg(paper).replace(
-  '>',
-  `><style>@media (prefers-color-scheme: dark) { path { stroke: ${dark['text-1']} } circle { fill: ${dark.accent} } }</style>`,
+  /^(<svg\b[^>]*>)/,
+  `$1<style>@media (prefers-color-scheme: dark) { path { stroke: ${dark['text-1']} } circle { fill: ${dark.accent} } }</style>`,
 )
 await writeFile(pub('favicon.svg'), `${faviconSvg}\n`)
 

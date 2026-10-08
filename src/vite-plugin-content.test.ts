@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  stripTags,
   SHORTCUTS_MARKER,
   buildRss,
   computeContent,
@@ -200,5 +201,13 @@ describe('Docs', () => {
     expect(files['content/docs/keyboard.json']).toContain(SHORTCUTS_MARKER)
     // A new hash whenever any generated file changes.
     expect(manifest.version).toMatch(/^[0-9a-f]{10}$/)
+  })
+})
+
+describe('stripTags', () => {
+  it('removes nested and broken tags until none remain', () => {
+    expect(stripTags('<scr<b>ipt>alert(1)</script>')).toBe('alert(1)')
+    expect(stripTags('a <code>b</code> c')).toBe('a b c')
+    expect(stripTags('x < y')).toBe('x  y')
   })
 })
