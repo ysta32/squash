@@ -1,8 +1,8 @@
 import { parseAnnotations, toClaudeRegions } from './annotations'
 import { formatContext } from './bugContext'
 import { supabase } from './supabase'
-import type { BugWithMeta, Comment, WorkspaceMember } from './types'
-import { SEVERITY_LABEL } from './types'
+import type { BugKind, BugWithMeta, Comment, WorkspaceMember } from './types'
+import { KINDS, KIND_LABEL, SEVERITY_LABEL } from './types'
 
 /** Signed screenshot links in an export stay valid this long. */
 export const EXPORT_TTL_SECONDS = 3600
@@ -68,6 +68,34 @@ function indent(text: string): string {
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n')
+}
+
+/** How the prompt names and asks for each kind of item. */
+const KIND_PROMPT: Record<BugKind, { heading: string; verb: string; task: string; each: string }> =
+  {
+    bug: {
+      heading: 'Bug',
+      verb: 'Fix',
+      task: 'find the root cause in this codebase, fix it and verify the fix',
+      each: 'fix each bug at its root cause',
+    },
+    feature: {
+      heading: 'Feature request',
+      verb: 'Build',
+      task: 'implement it in this codebase and verify it works',
+      each: 'implement each feature request',
+    },
+    test: {
+      heading: 'Test',
+      verb: 'Run',
+      task: 'write or run the test it describes in this codebase and report whether it passes',
+      each: 'write or run each test',
+    },
+  }
+
+/** "a", "a or b", "a, b or c". */
+function joinOr(parts: string[]): string {
+  return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} or ${parts.at(-1)}`
 }
 
 /** Regions listed per screenshot; the rest are summarized as a count. */
@@ -156,7 +184,7 @@ export function formatClaudePrompt({
   let hasRegions = false
   const sections = bugs.map((bug) => {
     const lines = [
-      `## ${bug.kind === 'feature' ? 'Feature request' : 'Bug'} #${bug.number}: ${bug.title}`,
+      `## ${KIND_PROMPT[bug.kind].heading} #${bug.number}: ${bug.title}`,
       '',
       `- Severity: ${SEVERITY_LABEL[bug.severity]}`,
       `- Status: ${bug.status === 'open' ? 'Open' : 'Resolved'}`,
@@ -196,12 +224,13 @@ export function formatClaudePrompt({
     return lines.join('\n')
   })
 
-  const features = bugs.length > 0 && bugs.every((b) => b.kind === 'feature')
-  const mixed = !features && bugs.some((b) => b.kind === 'feature')
-  const noun = features ? 'feature request' : mixed ? 'item' : 'bug'
+  const kinds = KINDS.filter((k) => bugs.some((b) => b.kind === k))
+  const mixed = kinds.length > 1
+  const only = KIND_PROMPT[kinds[0] ?? 'bug']
+  const noun = mixed ? 'item' : KIND_LABEL[kinds[0] ?? 'bug'].noun
   const count = bugs.length === 1 ? `this ${noun}` : `these ${bugs.length} ${noun}s`
   const intro = [
-    `${features ? 'Build' : mixed ? 'Work through' : 'Fix'} ${count} from the Squash bug tracker (workspace "${workspaceName}").`,
+    `${mixed ? 'Work through' : only.verb} ${count} from the Squash bug tracker (workspace "${workspaceName}").`,
     '',
   ]
   if (downloads.length > 0 && localDir) {
@@ -229,11 +258,9 @@ export function formatClaudePrompt({
       '',
     )
   }
-  const task = features
-    ? 'implement it in this codebase and verify it works'
-    : mixed
-      ? 'fix each bug at its root cause or implement each feature request, then verify it'
-      : 'find the root cause in this codebase, fix it and verify the fix'
+  const task = mixed
+    ? `${joinOr(kinds.map((k) => KIND_PROMPT[k].each))}, then verify it`
+    : only.task
   intro.push(
     bugs.length === 1
       ? `${task[0].toUpperCase()}${task.slice(1)}. When you are done, summarize what you changed.`

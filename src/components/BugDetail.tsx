@@ -29,7 +29,7 @@ import type {
   Severity,
   WorkspaceMember,
 } from '../lib/types'
-import { KIND_LABEL, SEVERITY_LABEL } from '../lib/types'
+import { KINDS, KIND_LABEL, SEVERITY_LABEL } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { AssigneePicker } from './AssigneePicker'
@@ -361,7 +361,6 @@ function BugBody({
     if (severity !== bug.severity) run(() => onUpdate(bug.id, { severity }))
   }
 
-  const otherKind = bug.kind === 'feature' ? 'bug' : 'feature'
   const popoverOpen = popover !== null && editable
 
   function confirmPopover(note: string | null) {
@@ -416,13 +415,13 @@ function BugBody({
           },
         ]
       : []),
-    {
-      key: 'kind',
-      label: `Move to ${KIND_LABEL[otherKind].many}`,
+    ...KINDS.filter((k) => k !== bug.kind).map((kind) => ({
+      key: `kind-${kind}`,
+      label: `Move to ${KIND_LABEL[kind].many}`,
       icon: <MenuIcon icon={ArrowRightLeft} />,
-      onSelect: () => run(() => onUpdate(bug.id, { kind: otherKind })),
+      onSelect: () => run(() => onUpdate(bug.id, { kind })),
       disabled: !editable,
-    },
+    })),
     ...(onDelete && canDelete
       ? [
           {

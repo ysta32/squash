@@ -2,7 +2,7 @@ import type { Json } from './database.types'
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type BugStatus = 'open' | 'resolved'
-export type BugKind = 'bug' | 'feature'
+export type BugKind = 'bug' | 'feature' | 'test'
 export type MemberRole = 'owner' | 'member'
 export type EventType = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented' | 'assigned'
 
@@ -98,9 +98,18 @@ export type BugWithMeta = Bug & {
   optimistic?: boolean
 }
 
-export const KIND_LABEL: Record<BugKind, { one: string; many: string }> = {
-  bug: { one: 'Bug', many: 'Bugs' },
-  feature: { one: 'Feature', many: 'Features' },
+/** Every kind, in tab order. */
+export const KINDS: BugKind[] = ['bug', 'feature', 'test']
+
+/** `noun` is the kind as written in a sentence ("File your first feature request"). */
+export const KIND_LABEL: Record<BugKind, { one: string; many: string; noun: string }> = {
+  bug: { one: 'Bug', many: 'Bugs', noun: 'bug' },
+  feature: { one: 'Feature', many: 'Features', noun: 'feature request' },
+  test: { one: 'Test', many: 'Tests', noun: 'test' },
+}
+
+export function isBugKind(value: unknown): value is BugKind {
+  return KINDS.includes(value as BugKind)
 }
 
 export const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']

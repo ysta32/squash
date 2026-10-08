@@ -218,6 +218,27 @@ describe('formatClaudePrompt for feature requests', () => {
   })
 })
 
+describe('formatClaudePrompt for tests', () => {
+  it('asks Claude to write or run the test', () => {
+    const { prompt } = formatClaudePrompt({ ...base, bugs: [bug({ kind: 'test' })] })
+    expect(prompt).toContain('Run this test from the Squash bug tracker')
+    expect(prompt).toContain('## Test #')
+    expect(prompt).toContain('Write or run the test it describes in this codebase')
+    expect(prompt).not.toContain('root cause')
+  })
+
+  it('names every kind in a mixed batch', () => {
+    const { prompt } = formatClaudePrompt({
+      ...base,
+      bugs: [bug({ id: 'b1', number: 1 }), bug({ id: 'b2', number: 2, kind: 'test' })],
+    })
+    expect(prompt).toContain('Work through these 2 items')
+    expect(prompt).toContain(
+      'fix each bug at its root cause or write or run each test, then verify it',
+    )
+  })
+})
+
 describe('batchName', () => {
   it('is filesystem-safe and names the bugs', () => {
     expect(batchName([bug()], new Date('2026-10-06T15:30:12Z'))).toBe('20261006-153012-12')

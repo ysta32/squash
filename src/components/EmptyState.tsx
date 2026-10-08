@@ -1,8 +1,10 @@
 import type { ComponentType, ReactNode } from 'react'
-import { Bug, CircleCheck, Lightbulb, Search } from 'lucide-react'
+import { CircleCheck, Search } from 'lucide-react'
 import type { BugFilters } from '../hooks/useBugs'
 import { useCoarsePointer } from '../hooks/useCoarsePointer'
+import { KIND_LABEL } from '../lib/types'
 import { cn } from '../lib/utils'
+import { KIND_ICON } from './kindIcon'
 import { Button, ENTER_KEY, Kbd, Keys, MOD_KEY } from './ui'
 
 /**
@@ -122,7 +124,7 @@ export function FileGuide({
       </li>
       <li className={HINT_ROW}>
         <Keys keys={['N']} className={HINT_KEYS} />
-        {kind === 'feature' ? 'Describe the feature request' : 'Describe the bug'}
+        Describe the {KIND_LABEL[kind].noun}
       </li>
       <li className={HINT_ROW}>
         <Keys keys={[ENTER_KEY]} className={HINT_KEYS} /> Submit
@@ -141,10 +143,10 @@ export function EmptyState({
   inset,
 }: EmptyStateProps) {
   const touch = useCoarsePointer()
-  const feature = kind === 'feature'
-  const items = feature ? 'feature requests' : 'bugs'
+  const noun = KIND_LABEL[kind].noun
+  const items = `${noun}s`
   const firstItem = !filtered && !hasItems && tab !== 'resolved'
-  const Icon = filtered ? Search : firstItem ? (feature ? Lightbulb : Bug) : CircleCheck
+  const Icon = filtered ? Search : firstItem ? KIND_ICON[kind] : CircleCheck
   const scope = tab === 'all' ? '' : `${tab} `
   const searchOnly = filtered && query.trim() !== ''
   const heading = filtered
@@ -152,7 +154,7 @@ export function EmptyState({
     : tab === 'resolved'
       ? 'Nothing resolved yet'
       : firstItem
-        ? `File your first ${feature ? 'feature request' : 'bug'}`
+        ? `File your first ${noun}`
         : 'Nothing open'
   const body = filtered
     ? searchOnly
@@ -161,10 +163,12 @@ export function EmptyState({
     : tab === 'resolved'
       ? `Resolved ${items} will appear here.`
       : firstItem
-        ? feature
-          ? 'Paste a screenshot anywhere and describe your feature request. No form to fill in.'
-          : "Paste a screenshot anywhere and describe what's wrong. No form to fill in."
-        : `Every ${feature ? 'feature request' : 'bug'} here has been resolved.`
+        ? kind === 'bug'
+          ? "Paste a screenshot anywhere and describe what's wrong. No form to fill in."
+          : kind === 'test'
+            ? 'Paste a screenshot anywhere and describe what to test. No form to fill in.'
+            : 'Paste a screenshot anywhere and describe your feature request. No form to fill in.'
+        : `Every ${noun} here has been resolved.`
 
   return (
     <StatePanel

@@ -17,6 +17,7 @@ import {
   CircleCheck,
   CircleDot,
   Layers,
+  FlaskConical,
   Lightbulb,
   Lock,
   MousePointerClick,
@@ -58,6 +59,7 @@ import { AUTO_RESOLVE_VERSION, getAutoSend } from '../lib/claudeExport'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
 import { NEXT_THEME, useTheme } from '../lib/theme'
+import { KIND_LABEL } from '../lib/types'
 import type { Bug, BugKind, BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 
@@ -143,7 +145,7 @@ export default function Workspace() {
     if (bug.filed_by !== selfId) {
       const name =
         ws.members.find((m) => m.user_id === bug.filed_by)?.profile.display_name ?? 'Someone'
-      const title = `${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`
+      const title = `${name} filed ${bug.kind === 'bug' ? '' : `${bug.kind} `}#${bug.number}`
       toast(title)
       notify({
         title,
@@ -525,7 +527,7 @@ export default function Workspace() {
       // No Undo: a delete is final (the row and its screenshots are gone; the deletion log in
       // Settings only records it). The icon matches the other confirmation toasts.
       if (bug)
-        toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`, {
+        toast(`Deleted ${bug.kind === 'bug' ? '' : `${bug.kind} `}#${bug.number}`, {
           icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
         })
       if (neighbour) {
@@ -555,7 +557,11 @@ export default function Workspace() {
   if (effectivePickedIds.size !== pickedIds.size) setPickedIds(effectivePickedIds)
   const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
   const openByKind = useMemo(
-    () => ({ bug: countBugs(bugs, 'bug').open, feature: countBugs(bugs, 'feature').open }),
+    () => ({
+      bug: countBugs(bugs, 'bug').open,
+      feature: countBugs(bugs, 'feature').open,
+      test: countBugs(bugs, 'test').open,
+    }),
     [bugs],
   )
 
@@ -732,7 +738,7 @@ export default function Workspace() {
   )
 
   const applyFilters = (next: typeof filters) => {
-    // Switching between Bugs and Features starts fresh: no picks, nothing open.
+    // Switching between Bugs, Features and Tests starts fresh: no picks, nothing open.
     if (next.kind !== filters.kind) {
       clearPicked()
       setPendingId(null)
@@ -750,7 +756,7 @@ export default function Workspace() {
   const commands: Command[] = [
     {
       id: 'new',
-      label: filters.kind === 'feature' ? 'New feature request' : 'New bug',
+      label: `New ${KIND_LABEL[filters.kind].noun}`,
       group: 'Actions',
       hint: 'N',
       icon: SquarePen,
@@ -817,6 +823,13 @@ export default function Workspace() {
           icon: Lightbulb,
           next: { kind: 'feature' as const },
           words: ['kind', 'ideas'],
+        },
+        {
+          id: 'nav-tests',
+          label: 'Show tests',
+          icon: FlaskConical,
+          next: { kind: 'test' as const },
+          words: ['kind', 'qa', 'checks'],
         },
         {
           id: 'nav-open',
@@ -887,7 +900,7 @@ export default function Workspace() {
         id: `bug-${b.id}`,
         label: `#${b.number} ${b.title}`,
         accession: `#${b.number}`,
-        group: b.kind === 'feature' ? 'Features' : 'Bugs',
+        group: KIND_LABEL[b.kind].many,
         keywords: [String(b.number)],
         run: () => select(b.id),
       })),
@@ -1038,7 +1051,7 @@ export default function Workspace() {
     // Nothing to pick (a filter matched nothing, an empty tab, a load error): the list says why.
     detail = null
   } else if (!hasNumberParam) {
-    const one = filters.kind === 'feature' ? 'feature request' : 'bug'
+    const one = KIND_LABEL[filters.kind].noun
     detail = (
       <StatePanel
         className={DETAIL_COLUMN}

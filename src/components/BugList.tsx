@@ -5,7 +5,7 @@ import { AlertTriangle, Copy, FolderCog, Search, Sparkle, X } from 'lucide-react
 import { filterBugs, hasActiveFilters } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
-import { KIND_LABEL } from '../lib/types'
+import { KINDS, KIND_LABEL } from '../lib/types'
 import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
 import { ActiveFilters, BugFilters, Count, StatusMenu } from './BugFilters'
@@ -29,7 +29,7 @@ export interface BugListProps {
   onRetry?: () => void
   /** Status counts for the kind being shown. */
   counts: { open: number; resolved: number; all: number }
-  /** Open count per kind, shown on the Bugs / Features switch. */
+  /** Open count per kind, shown on the Bugs / Features / Tests switch. */
   openByKind?: Record<BugKind, number>
   filters: Filters
   onFilters: (filters: Filters) => void
@@ -67,7 +67,7 @@ export interface BugListProps {
   onboardingInDetail?: boolean
 }
 
-/** Bugs / Features as underline tabs: one 2px accent bar that slides between them. */
+/** Bugs / Features / Tests as underline tabs: one 2px accent bar that slides between them. */
 function KindTabs({
   kind,
   openByKind,
@@ -107,7 +107,7 @@ function KindTabs({
     }
   }, [bar, settled])
 
-  const kinds = ['bug', 'feature'] as const
+  const kinds = KINDS
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
     event.preventDefault()
@@ -126,7 +126,7 @@ function KindTabs({
     <div
       ref={listRef}
       role="tablist"
-      aria-label="Bugs or features"
+      aria-label="Bugs, features or tests"
       onKeyDown={onKeyDown}
       className="relative flex h-full shrink-0 items-stretch gap-5"
     >
@@ -227,7 +227,7 @@ export function BugList({
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
   const bulkActions = onResolve && onReopen && onAssign && onClearPicked
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
-  const items = filters.kind === 'feature' ? 'features' : 'bugs'
+  const items = KIND_LABEL[filters.kind].many.toLowerCase()
   const otherFilters = Boolean(
     filters.filedBy || filters.resolvedBy || filters.assignee || filters.severity,
   )
@@ -293,7 +293,7 @@ export function BugList({
             onChange={(kind) => onFilters({ ...filters, kind })}
           />
           {/* Status is a filter, so it is one compact menu at every width, never a second row
-              of tabs beside the Bugs / Features underline. */}
+              of tabs beside the Bugs / Features / Tests underline. */}
           <StatusMenu
             tab={filters.tab}
             counts={counts}
@@ -409,7 +409,7 @@ export function BugList({
         ) : firstItem ? (
           onboardingInDetail ? (
             <p role="status" className="px-4 pt-4 text-sm text-ink-3">
-              No {filters.kind === 'feature' ? 'feature requests' : 'bugs'} yet.
+              No {KIND_LABEL[filters.kind].noun}s yet.
             </p>
           ) : (
             <Onboarding

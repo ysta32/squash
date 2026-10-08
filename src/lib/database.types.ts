@@ -8,7 +8,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 type MemberRoleEnum = 'owner' | 'member'
 type BugSeverityEnum = 'low' | 'medium' | 'high' | 'critical'
 type BugStatusEnum = 'open' | 'resolved'
-type BugKindEnum = 'bug' | 'feature'
+type BugKindEnum = 'bug' | 'feature' | 'test'
 /** fix_runs.status is text with a CHECK (0008_fix_runs.sql), not a Postgres enum. */
 type FixRunStatusEnum = 'running' | 'succeeded' | 'failed' | 'cancelled'
 type BugEventTypeEnum = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented' | 'assigned'

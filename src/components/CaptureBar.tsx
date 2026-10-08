@@ -9,7 +9,7 @@ import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 import { fitUnder } from '../lib/annotate'
 import type { Annotations } from '../lib/annotations'
-import { SEVERITIES } from '../lib/types'
+import { KIND_LABEL, SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, isMac, randomId } from '../lib/utils'
 import { useCoarsePointer, useMediaQuery } from '../hooks/useCoarsePointer'
@@ -54,7 +54,7 @@ function withoutUrl(text: string, at: number, length: number): { text: string; c
 interface CaptureBarProps {
   workspaceId: string
   onSubmit: (input: NewBugInput) => Promise<void>
-  /** What Enter files: a bug or a feature request. */
+  /** What Enter files: a bug, a feature request or a test. */
   kind?: BugKind
   onToast?: (m: string) => void
   focusRef?: RefObject<HTMLTextAreaElement | null>
@@ -76,7 +76,7 @@ export function CaptureBar({
   onToast,
   focusRef,
 }: CaptureBarProps) {
-  const noun = kind === 'feature' ? 'feature request' : 'bug'
+  const noun = KIND_LABEL[kind].noun
   const [value, setValueState] = useState('')
   const [interim, setInterim] = useState('')
   const removedUrlsRef = useRef<string[]>([])
@@ -521,8 +521,8 @@ export function CaptureBar({
                 interim
                   ? ''
                   : oneRow
-                    ? `Describe the ${kind === 'feature' ? 'feature' : 'bug'}`
-                    : `Paste a screenshot or describe the ${kind === 'feature' ? 'feature' : 'bug'}`
+                    ? `Describe the ${KIND_LABEL[kind].one.toLowerCase()}`
+                    : `Paste a screenshot or describe the ${KIND_LABEL[kind].one.toLowerCase()}`
               }
               aria-label={`Describe the ${noun}`}
               onChange={(e) => changeText(e.target.value, e.target.selectionStart)}
