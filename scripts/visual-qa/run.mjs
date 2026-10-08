@@ -417,6 +417,7 @@ const server = await createServer({
   server: { port, strictPort: true },
   define: { 'import.meta.env.VITE_SITE_URL': JSON.stringify(`http://localhost:${port}`) },
 })
+const TOUCH_MAX_WIDTH = 480
 const shots = []
 try {
   await server.listen()
@@ -426,17 +427,25 @@ try {
     // Bug attachments are served from this cache; (re)build it so they never render broken.
     await renderFixtures(browser)
     for (const theme of themes) {
-      const context = await browser.newContext({
-        viewport: { width: widths[0], height },
-        colorScheme: theme,
-        reducedMotion: 'reduce',
-      })
-      await context.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
-      // Freeze Date so seeded timestamps ("5m ago") are identical between runs. Timers still run.
-      await context.clock.setFixedTime(FIXED_TIME)
+      // Phone widths get a touch context so `pointer: coarse` styles (44px targets, tap wording)
+      // show up in the shots; wider widths stay mouse-driven.
+      const makeContext = async (touch) => {
+        const ctx = await browser.newContext({
+          viewport: { width: widths[0], height },
+          colorScheme: theme,
+          reducedMotion: 'reduce',
+          ...(touch ? { hasTouch: true, isMobile: true } : {}),
+        })
+        await ctx.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
+        // Freeze Date so seeded timestamps ("5m ago") are identical between runs. Timers still run.
+        await ctx.clock.setFixedTime(FIXED_TIME)
+        return ctx
+      }
+      const context = await makeContext(false)
+      const touchContext = await makeContext(true)
       // A fresh page per shot, so mock flags (signed out, delayed fetch) never leak between shots.
       const open = async (width, { signedOut = false, delayBugs = 0 } = {}) => {
-        const page = await context.newPage()
+        const page = await (width <= TOUCH_MAX_WIDTH ? touchContext : context).newPage()
         await page.addInitScript(
           ([out, delay]) => {
             const set = (key, on, value) =>
@@ -474,7 +483,7 @@ try {
           let cleanup
           try {
             await page.goto(origin + state.path, { waitUntil: state.waitUntil ?? 'networkidle' })
-            cleanup = await state.run(page, context)
+            cleanup = await state.run(page, page.context())
             await page.waitForTimeout(300)
             const file = `state-${name}_${width}_${theme}.png`
             await page.screenshot({ path: `${outDir}/${file}` })
@@ -486,12 +495,13 @@ try {
           } finally {
             await cleanup?.()
             // Always restore the shared context, even if a state failed before returning its cleanup.
-            await context.setOffline(false)
+            await page.context().setOffline(false)
             await page.close()
           }
         }
       }
       await context.close()
+      await touchContext.close()
     }
   } finally {
     await browser.close()
