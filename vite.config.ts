@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { seoPlugin } from './vite-plugin-seo'
 import { bridgeConfigPlugin } from './vite-plugin-bridge'
 import { slimBundlePlugin } from './vite-plugin-slim'
+import { factsPlugin } from './vite-plugin-facts'
 
 /** Preloads the Latin IBM Plex Sans file so body text renders in Plex on first paint. */
 function fontPreloadPlugin(): Plugin {
@@ -46,6 +47,7 @@ export default defineConfig({
     tailwindcss(),
     seoPlugin(),
     bridgeConfigPlugin(),
+    factsPlugin(),
     fontPreloadPlugin(),
   ],
   build: {

@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/auth'
 import Landing from './pages/Landing'
+import NotFound from './pages/NotFound'
 import SignIn from './pages/SignIn'
 const AppIndex = lazy(() => import('./pages/AppIndex'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
@@ -124,7 +125,7 @@ export function App() {
                     </RequireAuth>
                   }
                 />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </RoutedBoundary>

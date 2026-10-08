@@ -388,6 +388,28 @@ for (const f of readdirSync(outDir)) {
   if (f === 'index.html' || f.endsWith('.png')) rmSync(`${outDir}/${f}`, { force: true })
 }
 
+/**
+ * A full-page shot only renders what the browser has loaded, and lazy images and in-view reveals
+ * below the fold never load without scrolling. Walk the page one viewport at a time, wait for
+ * every image to finish (bounded), then return to the top.
+ */
+async function settleFullPage(page) {
+  await page.evaluate(async () => {
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms))
+    for (let y = 0; y < document.documentElement.scrollHeight; y += window.innerHeight * 0.8) {
+      window.scrollTo(0, y)
+      await pause(60)
+    }
+    window.scrollTo(0, document.documentElement.scrollHeight)
+    await pause(60)
+    // decode() settles once the image has loaded (or failed); a broken image must not hang the run.
+    const pending = [...document.images].map((img) => img.decode().catch(() => {}))
+    await Promise.race([Promise.all(pending), pause(5000)])
+    window.scrollTo(0, 0)
+  })
+  await page.waitForTimeout(300)
+}
+
 const configFile = fileURLToPath(new URL('../screenshots/vite.config.ts', import.meta.url))
 const server = await createServer({
   configFile,
@@ -433,7 +455,7 @@ try {
         for (const width of widths) {
           const page = await open(width, { signedOut })
           await page.goto(origin + path, { waitUntil: 'networkidle' })
-          await page.waitForTimeout(300)
+          await settleFullPage(page)
           const file = `${slug(route)}_${width}_${theme}.png`
           await page.screenshot({ path: `${outDir}/${file}`, fullPage: true })
           shots.push({ group: route, width, theme, file })

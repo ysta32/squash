@@ -1,8 +1,6 @@
-import { AtSign, FileDown, History, ListFilter, SunMoon, type LucideIcon } from 'lucide-react'
-
+// Copy and data for the marketing home. Everything here describes shipped behaviour (README,
+// CHANGELOG); numbers that can drift come from `virtual:squash-facts` instead of being typed here.
 import type { ResolvedTheme } from '../../lib/theme'
-
-export const DEFAULT_GITHUB_URL = 'https://github.com/ysta32/squash'
 
 export interface Shot {
   /** File in public/product without extension; themed shots get a -light/-dark suffix. */
@@ -23,46 +21,67 @@ export const HERO_SHOT: Shot = {
   themed: true,
   width: 1600,
   height: 1000,
-  alt: 'The Squash workspace: a live bug list on the left, and an open bug on the right with its screenshots, activity, comments, and Claude Code working on the fix',
+  alt: 'The Squash workspace: a live bug list on the left, and bug #24 open on the right with Claude Code working on the fix, its description and two screenshots',
 }
 
-export interface Feature {
-  id: string
+/** The demo workspace's bug #24, as its specimen label reads in the app. */
+export const HERO_LABEL: string[][] = [
+  ['No. 024', 'Bug', 'Critical'],
+  ['Coll. J. Ellis', '/checkout', 'iOS Safari 390×844'],
+]
+
+/** A hand-drawn marker stroke over a screenshot, in the screenshot's own pixel coordinates. */
+export interface Marker {
+  d: string
   label: string
+}
+
+export interface Chapter {
+  id: string
+  number: string
+  name: string
   title: string
   body: string
-  bullets: string[]
+  facts: string[]
   shot: Shot
+  marker: Marker
 }
 
-export const FEATURES: Feature[] = [
+export const CHAPTERS: Chapter[] = [
   {
     id: 'capture',
-    label: 'Capture',
-    title: 'One input, always on screen',
-    body: 'No forms, no required fields, no ticket templates. Paste an image, type or dictate what went wrong, and press Enter.',
-    bullets: [
-      'Paste anywhere with ⌘V and the cursor jumps to the capture bar',
-      'Images are compressed to WebP in the browser before upload',
-      'Voice dictation with a live transcript in Chrome, Edge and Safari',
+    number: '01',
+    name: 'Capture',
+    title: 'Paste, type, press Enter.',
+    body: 'One input sits above the list. Press ⌘V anywhere on the page and the screenshot lands in it with the cursor ready. No forms, no required fields, no templates.',
+    facts: [
+      'Browser, OS, window size and page URL are recorded with every bug',
+      'Images shrink to WebP in the browser, about 300 KB each',
+      'Dictate instead of typing in Chrome, Edge and Safari',
+      'On macOS, ⌃⌥S files a bug from any app',
     ],
     shot: {
       name: 'capture',
       themed: true,
       width: 1400,
       height: 544,
-      alt: 'The capture bar with a typed description and an attached screenshot, above the live bug list',
+      alt: 'The capture bar holding a typed description and an attached screenshot, above the live bug list',
+    },
+    marker: {
+      d: 'M262 48 C 520 40, 900 42, 1142 50 C 1150 96, 1148 150, 1140 188 C 900 194, 520 192, 266 186 C 258 140, 256 96, 266 44',
+      label: 'The capture bar',
     },
   },
   {
     id: 'markup',
-    label: 'Mark up',
-    title: 'Point at the problem, not around it',
-    body: 'Draw on a screenshot before you file it. An arrow and a box say more than a paragraph of “the button near the bottom”.',
-    bullets: [
-      'Arrow, box and pen, with A, B and P to switch',
-      'Undo with ⌘Z, and Escape asks before throwing work away',
-      'Large captures are re-encoded to stay under the upload limit',
+    number: '02',
+    name: 'Mark up',
+    title: 'Point at the problem, not around it.',
+    body: 'Draw on the screenshot before you file it. An arrow and a box say more than a paragraph about “the button near the bottom”.',
+    facts: [
+      'Arrow, box and pen on A, B and P',
+      '⌘Z undoes; Esc asks before throwing work away',
+      'Large captures are re-encoded to stay under the 5 MB limit',
     ],
     shot: {
       name: 'annotate',
@@ -71,154 +90,131 @@ export const FEATURES: Feature[] = [
       height: 991,
       alt: 'The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button',
     },
+    marker: {
+      d: 'M58 72 C 52 40, 300 34, 308 64 C 314 98, 70 104, 56 78 C 50 62, 110 44, 190 44',
+      label: 'The arrow, box and pen tools',
+    },
   },
   {
     id: 'claude',
-    label: 'Claude Code',
-    title: 'Send it to Claude Code and watch it get fixed',
-    body: 'Send one bug or the whole list, with screenshots and comments attached. Squash shows the file Claude is editing, its plan, and its latest message while it works.',
-    bullets: [
-      'Fixed bugs resolve themselves, with Claude’s summary as the note',
-      'Bugs it could not finish stay open with the summary as a comment',
-      'Runs through a small local helper you install with one command',
+    number: '03',
+    name: 'Fix with Claude Code',
+    title: 'Send it to Claude Code. Watch the fix.',
+    body: 'Squash opens Claude Code in your project with the bug, its comments and its screenshots, then shows the file it is editing, its plan and its summary. Bugs it fixes resolve themselves.',
+    facts: [
+      'Pick bugs with X, send them all with C',
+      'Bugs it could not finish stay open, with its summary as a comment',
+      'A helper you install with one command, listening only on 127.0.0.1',
     ],
     shot: {
       name: 'claude',
       themed: true,
       width: 1400,
       height: 1010,
-      alt: 'A bug with a Claude is working panel: the file being edited, a four-step plan with two steps done, and Claude’s latest explanation',
+      alt: 'Bug #24 with a Claude is working panel: the file being edited, a four-step plan with two steps done, and Claude’s latest explanation',
     },
-  },
-  {
-    id: 'team',
-    label: 'Team',
-    title: 'Live for everyone on the team',
-    body: 'New bugs, edits, comments and resolutions reach every teammate in about a second. Invite up to ten people with a link.',
-    bullets: [
-      'See who is online and which bug each teammate has open',
-      'Assign an owner, and filter to what is yours or what nobody has picked up',
-      'Filed and resolved counts per member, for the week and all time',
-    ],
-    shot: {
-      name: 'stats',
-      themed: true,
-      width: 720,
-      height: 375,
-      alt: 'The stats popover listing bugs filed and resolved by each teammate over the last 7 days and all time',
+    marker: {
+      d: 'M40 684 C 170 676, 360 688, 520 678',
+      label: 'The file Claude Code is editing',
     },
   },
 ]
 
-export const PALETTE_SHOT: Shot = {
-  name: 'palette',
-  themed: true,
-  width: 1000,
-  height: 761,
-  alt: 'The command palette listing actions, export commands and matching bugs',
-}
+/** What a bug report looks like when it arrives in a chat channel, field by field. */
+export const MISSING_FIELDS = ['Page', 'Device', 'Steps', 'Owner', 'Status'] as const
 
-export interface Detail {
+/** The same bug once it is filed in Squash (demo workspace, bug #24). */
+export const FILED_FIELDS: { term: (typeof MISSING_FIELDS)[number]; value: string }[] = [
+  { term: 'Page', value: '/checkout' },
+  { term: 'Device', value: 'iOS Safari · 390×844' },
+  { term: 'Steps', value: 'Marked up: box on the banner, arrow to Pay now' },
+  { term: 'Owner', value: 'M. Chen' },
+  { term: 'Status', value: 'Claude Code working · 2 of 4 steps' },
+]
+
+export const LEDGER: { term: string; body: string }[] = [
+  {
+    term: 'Live for the whole team',
+    body: 'New bugs, edits, comments and resolutions reach every teammate in about a second.',
+  },
+  {
+    term: 'Presence',
+    body: 'See who is online and which bug each teammate has open.',
+  },
+  {
+    term: 'Assignees',
+    body: 'Give a bug an owner from the detail view, the palette, or with I to take it yourself.',
+  },
+  {
+    term: 'Search and filters',
+    body: 'Full-text search across titles, descriptions and transcripts. Filters live in the URL, so a view can be shared.',
+  },
+  {
+    term: 'Bugs and features',
+    body: 'Feature requests get their own tab, and items move between the two.',
+  },
+  {
+    term: 'Markdown and mentions',
+    body: 'Bold, code, lists and links, with @name mentions that autocomplete. No HTML from a bug ever reaches the page.',
+  },
+  {
+    term: 'Activity log',
+    body: 'Every filed, edited, resolved and commented action is written by database triggers, so none are skipped.',
+  },
+  {
+    term: 'Export',
+    body: 'The bugs you are looking at, as CSV that is safe to open in a spreadsheet, or as a Markdown report.',
+  },
+  {
+    term: 'Notifications',
+    body: 'In a background tab, a new bug or an assignment raises a desktop notification and an unread count.',
+  },
+  {
+    term: 'On your phone',
+    body: 'A list-to-detail layout for one hand. Install it to the home screen; the picker opens the camera.',
+  },
+]
+
+export const SECURITY: { term: string; body: string }[] = [
+  {
+    term: 'Row Level Security on every table',
+    body: 'Enforced in Postgres, not the browser. You only ever see rows from workspaces you belong to.',
+  },
+  {
+    term: 'Joining only through an RPC',
+    body: 'The invite code is checked server-side. Members cannot be added any other way.',
+  },
+  {
+    term: 'Private screenshots',
+    body: 'Stored per workspace in a private bucket and served through signed links that expire after an hour.',
+  },
+  {
+    term: 'Limits that hold under load',
+    body: '10 members per workspace, 10 images per bug, 30 bugs per user per minute, enforced by triggers with row locks.',
+  },
+]
+
+export interface SelfHostStep {
   title: string
   body: string
-  icon: LucideIcon
+  command: string
 }
 
-export const DETAILS: Detail[] = [
+export const SELF_HOST_STEPS: SelfHostStep[] = [
   {
-    icon: FileDown,
-    title: 'Export',
-    body: 'Download the bugs you are looking at as CSV, safe to open in a spreadsheet, or as a Markdown report.',
+    title: 'Create the database',
+    body: 'On a free Supabase project: schema, policies, storage bucket and Realtime in one push.',
+    command: 'npx supabase link && npx supabase db push',
   },
   {
-    icon: AtSign,
-    title: 'Markdown and mentions',
-    body: 'Bold, code, lists and links in descriptions and comments, with @name mentions that autocomplete.',
+    title: 'Configure',
+    body: 'Copy .env.example to .env. Use the anon or publishable key, never a service-role key.',
+    command:
+      'VITE_SUPABASE_URL=https://<project-ref>.supabase.co\nVITE_SUPABASE_ANON_KEY=<anon or publishable key>',
   },
   {
-    icon: ListFilter,
-    title: 'Search and filters',
-    body: 'Full-text search across titles, descriptions and transcripts. Filters live in the URL, so views are shareable.',
-  },
-  {
-    icon: SunMoon,
-    title: 'Light, dark and six schemes',
-    body: 'Follows your system theme, with Violet, Ocean, Forest, Sunset, Rose and Graphite accents.',
-  },
-  {
-    icon: History,
-    title: 'Append-only activity log',
-    body: 'Every filed, edited, resolved and commented action is recorded by database triggers, so none are skipped.',
-  },
-]
-
-export const STEPS = [
-  {
-    title: 'Create a workspace',
-    body: 'Sign in with Google or a magic link, name the workspace, and share the invite link with your team.',
-  },
-  {
-    title: 'File bugs as you find them',
-    body: 'Paste a screenshot, describe it in a sentence, and press Enter. It is on your teammate’s screen a second later.',
-  },
-  {
-    title: 'Fix them',
-    body: 'Resolve with a note, or send a batch to Claude Code and let it close the ones it fixes.',
-  },
-]
-
-export const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['N'], label: 'New bug' },
-  { keys: ['⌘', 'V'], label: 'Paste screenshot' },
-  { keys: ['Enter'], label: 'File bug' },
-  { keys: ['Alt', '1–4'], label: 'Severity' },
-  { keys: ['/'], label: 'Search' },
-  { keys: ['J', 'K'], label: 'Next, previous' },
-  { keys: ['R'], label: 'Resolve' },
-  { keys: ['I'], label: 'Assign to yourself' },
-  { keys: ['C'], label: 'Send to Claude' },
-]
-
-export const MOBILE_POINTS = [
-  'Install it to your home screen from the browser',
-  'The file picker opens the camera, straight into the capture bar',
-  'Follow Claude’s progress and resolve from wherever you are',
-]
-
-export const SELF_HOST = [
-  {
-    title: 'MIT licensed',
-    body: 'Read it, fork it, change it. The whole app is one small React and TypeScript codebase.',
-  },
-  {
-    title: 'Runs on Supabase',
-    body: 'Postgres, Auth, Realtime and Storage on a free project, with Row Level Security on every table.',
-  },
-  {
-    title: 'One command for the database',
-    body: 'Run npx supabase db push for the schema, then import the repo into Vercel and deploy.',
-  },
-]
-
-export const FAQ = [
-  {
-    q: 'Is Squash free?',
-    a: 'Yes. The hosted version is free to use, and the code is MIT licensed if you would rather run your own copy.',
-  },
-  {
-    q: 'Who is it built for?',
-    a: 'Founding teams of two to ten people who keep losing bug reports in a chat channel. A workspace holds up to ten members.',
-  },
-  {
-    q: 'What do I need for the Claude Code integration?',
-    a: 'Claude Code on your Mac and a small helper that Squash installs with one Terminal command. The helper listens only on 127.0.0.1 and accepts requests only from Squash.',
-  },
-  {
-    q: 'Where are my screenshots stored?',
-    a: 'In a private Supabase storage bucket, served through signed links that expire after an hour. Only members of your workspace can read them.',
-  },
-  {
-    q: 'How long does self-hosting take?',
-    a: 'About five minutes with Node.js 24, a free Supabase project, and optionally a Vercel account. The README walks through every step.',
+    title: 'Run it',
+    body: 'Node.js 24 or newer. Then import the repo into Vercel with the Vite preset to deploy.',
+    command: 'npm ci\nnpm run dev',
   },
 ]

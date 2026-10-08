@@ -15,16 +15,20 @@ function Line({ segments, className }: { segments: SpecimenSegment[]; className?
     <span className={cn('block', className)}>
       {segments.map((segment, i) => (
         <Fragment key={i}>
-          {i > 0 && (
-            <>
-              <span aria-hidden="true" className="px-[0.6ch] text-ink-3">
-                ·
-              </span>
-              <span className="sr-only">, </span>
-            </>
-          )}
-          {/* Fields wrap between each other, never inside one. */}
-          <span className="whitespace-nowrap">{segment}</span>
+          {/* Each field carries its trailing dot as one atomic unit: lines break between units
+              (never before a dot), and a field wider than the column wraps inside itself
+              instead of overflowing. */}
+          <span className="inline-block max-w-full [overflow-wrap:anywhere]">
+            {segment}
+            {i < segments.length - 1 && (
+              <>
+                <span aria-hidden="true" className="px-[0.6ch] text-ink-3">
+                  ·
+                </span>
+                <span className="sr-only">, </span>
+              </>
+            )}
+          </span>
         </Fragment>
       ))}
     </span>
