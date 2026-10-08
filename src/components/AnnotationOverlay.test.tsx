@@ -48,6 +48,7 @@ describe('AnnotationOverlay', () => {
     expect(pin?.querySelector('circle')).toHaveAttribute('cx', '250')
     expect(pin?.querySelector('circle')).toHaveAttribute('cy', '375')
     expect(pin?.querySelector('circle')).toHaveAttribute('stroke', 'var(--accent)')
+    expect(pin?.querySelector('circle')).toHaveAttribute('r', '18')
     const text = pin?.querySelector('text')
     expect(text).toHaveTextContent('3')
     expect(text).toHaveAttribute('font-family', 'var(--font-mono)')
@@ -60,6 +61,22 @@ describe('AnnotationOverlay', () => {
     expect(screen.getByTestId('annotation-overlay')).toHaveAttribute(
       'preserveAspectRatio',
       'xMidYMid slice',
+    )
+  })
+
+  it('matches a top-left object-position', () => {
+    render(
+      <AnnotationOverlay
+        annotations={annotations}
+        width={10}
+        height={10}
+        fit="cover"
+        align="top-left"
+      />,
+    )
+    expect(screen.getByTestId('annotation-overlay')).toHaveAttribute(
+      'preserveAspectRatio',
+      'xMinYMin slice',
     )
   })
 

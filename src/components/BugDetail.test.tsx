@@ -441,6 +441,40 @@ describe('BugDetail', () => {
     expect(viewer).toHaveTextContent('Fig. 1 / 1 · 10×10 · a1.webp')
   })
 
+  it('shows live markup layers on thumbnails, in the viewer and as a pin checklist', () => {
+    const annotations = {
+      v: 1,
+      shapes: [
+        { type: 'box', color: 'danger', x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+        { type: 'pin', color: 'danger', n: 1, x: 0.5, y: 0.5, note: 'Banner overlaps Pay now' },
+      ],
+    }
+    setup(
+      makeBug({
+        attachments: [attachment('a1'), { ...attachment('a2'), annotations }],
+      }),
+    )
+    const thumbs = screen.getAllByRole('button', { name: /^Open screenshot/ })
+    expect(within(thumbs[0]).queryByTestId('annotation-overlay')).toBeNull()
+    const overlay = within(thumbs[1]).getByTestId('annotation-overlay')
+    expect(overlay).toHaveAttribute('preserveAspectRatio', 'xMinYMin slice')
+    expect(overlay.querySelector('[data-pin="1"]')).not.toBeNull()
+
+    const checklist = screen.getByRole('list', { name: 'Pinned issues' })
+    expect(checklist).toHaveTextContent('Pin 1: Banner overlaps Pay now')
+    expect(screen.getByText('Fig. 2 · Pins')).toBeInTheDocument()
+    expect(screen.queryByText('Fig. 1 · Pins')).toBeNull()
+
+    fireEvent.click(thumbs[1])
+    const viewer = screen.getByRole('dialog', { name: 'Screenshot viewer' })
+    expect(within(viewer).getByTestId('annotation-overlay')).toHaveAttribute(
+      'preserveAspectRatio',
+      'xMidYMid meet',
+    )
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(within(viewer).queryByTestId('annotation-overlay')).toBeNull()
+  })
+
   it('keeps the description draft when the save fails', async () => {
     const onUpdate = vi.fn().mockRejectedValue(new Error('nope'))
     setup(makeBug(), { onUpdate })

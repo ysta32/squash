@@ -10,6 +10,10 @@ interface AnnotationOverlayProps {
   height: number
   /** Match the image's object-fit so marks line up with the pixels they point at. */
   fit?: 'contain' | 'cover'
+  /** Match the image's object-position: centered, or pinned to the top left. */
+  align?: 'center' | 'top-left'
+  /** Pin radius as a fraction of the image's longer side; raise it for small thumbnails. */
+  pinSize?: number
   className?: string
 }
 
@@ -23,19 +27,21 @@ export function AnnotationOverlay({
   width,
   height,
   fit = 'contain',
+  align = 'center',
+  pinSize = 0.018,
   className,
 }: AnnotationOverlayProps) {
   const doc = parseAnnotations(annotations)
   if (!doc || doc.shapes.length === 0 || !(width > 0) || !(height > 0)) return null
   const unit = Math.max(width, height)
-  const radius = unit * 0.018
+  const radius = unit * pinSize
   const stroke = { strokeWidth: 2, vectorEffect: 'non-scaling-stroke' as const }
   return (
     <svg
       data-testid="annotation-overlay"
       aria-hidden="true"
       viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio={fit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'}
+      preserveAspectRatio={`${align === 'top-left' ? 'xMinYMin' : 'xMidYMid'} ${fit === 'cover' ? 'slice' : 'meet'}`}
       className={cn('pointer-events-none absolute inset-0 h-full w-full', className)}
       fill="none"
       strokeLinecap="round"

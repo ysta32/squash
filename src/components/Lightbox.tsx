@@ -4,6 +4,14 @@ import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { cn } from '../lib/utils'
+import { AnnotationOverlay } from './AnnotationOverlay'
+
+/** Live markup layers to draw over one screenshot, with its natural size. */
+export interface LightboxMarkup {
+  annotations: unknown
+  width: number
+  height: number
+}
 
 export interface LightboxProps {
   urls: string[]
@@ -12,9 +20,11 @@ export interface LightboxProps {
   onIndex: (index: number) => void
   /** Per-image caption details (e.g. `1600×1000 · checkout.png`), aligned with `urls`. */
   captions?: (string | null)[]
+  /** Per-image markup layers, aligned with `urls`. */
+  markup?: (LightboxMarkup | null)[]
 }
 
-export function Lightbox({ urls, index, onClose, onIndex, captions }: LightboxProps) {
+export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: LightboxProps) {
   const count = urls.length
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, count > 0)
@@ -106,6 +116,7 @@ export function Lightbox({ urls, index, onClose, onIndex, captions }: LightboxPr
         key={`${safeIndex}:${url}`}
         url={url}
         alt={`Screenshot ${safeIndex + 1} of ${count}`}
+        markup={markup?.[safeIndex] ?? null}
       />
       <p
         onClick={(e) => e.stopPropagation()}
@@ -134,7 +145,15 @@ const SIDE_NAV =
 const CHROME_BUTTON =
   't focus-ring absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'
 
-function ZoomImage({ url, alt }: { url: string; alt: string }) {
+function ZoomImage({
+  url,
+  alt,
+  markup,
+}: {
+  url: string
+  alt: string
+  markup: LightboxMarkup | null
+}) {
   const [zoomed, setZoomed] = useState(false)
   const [origin, setOrigin] = useState('50% 50%')
 
@@ -162,18 +181,31 @@ function ZoomImage({ url, alt }: { url: string; alt: string }) {
     }
   }
 
+  // The wrapper shrinks to the image, so the markup overlay covers exactly its pixels and
+  // zooms with it.
   return (
-    <img
-      src={url}
-      alt={alt}
-      draggable={false}
-      onClick={onClick}
-      onWheel={onWheel}
+    <div
       style={{ transform: zoomed ? 'scale(2)' : 'scale(1)', transformOrigin: origin }}
-      className={cn(
-        'max-h-[calc(100dvh-10rem)] max-w-full animate-dialog rounded-lg object-contain shadow-elev-3 transition-transform duration-150 select-none',
-        zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
+      className="relative min-h-0 max-w-full animate-dialog transition-transform duration-150"
+    >
+      <img
+        src={url}
+        alt={alt}
+        draggable={false}
+        onClick={onClick}
+        onWheel={onWheel}
+        className={cn(
+          'block max-h-[calc(100dvh-10rem)] max-w-full rounded-lg object-contain shadow-elev-3 select-none',
+          zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
+        )}
+      />
+      {markup && (
+        <AnnotationOverlay
+          annotations={markup.annotations}
+          width={markup.width}
+          height={markup.height}
+        />
       )}
-    />
+    </div>
   )
 }

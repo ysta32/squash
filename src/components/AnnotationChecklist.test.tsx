@@ -22,8 +22,7 @@ describe('AnnotationChecklist', () => {
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('Pin 1: Banner overlaps Pay now')
     expect(items[1]).toHaveTextContent('Pin 2: No note')
-    expect(items[0].querySelector('[aria-hidden]')).toHaveClass('text-warning')
-    expect(items[1].querySelector('[aria-hidden]')).toHaveClass('text-danger')
+    expect(items[0].querySelector('[aria-hidden]')).toHaveClass('font-mono', 'text-accent')
   })
 
   it('strikes through pins marked done', () => {

@@ -224,6 +224,7 @@ const attachment = (
   i: number,
   width: number,
   height: number,
+  annotations?: BugAttachment['annotations'],
 ): BugAttachment => ({
   id: `att-${bug}-${i}`,
   bug_id: `bug-${bug}`,
@@ -232,10 +233,36 @@ const attachment = (
   height,
   size_bytes: 180_000,
   created_at: ago(5),
+  ...(annotations ? { annotations, uploaded_by: 'u-jordan' } : {}),
 })
 
+/** Live markup layers on the desktop checkout shot: a box and two numbered pins. */
+const checkoutMarkup = {
+  v: 1,
+  shapes: [
+    { type: 'box', color: 'danger', x: 0.59, y: 0.515, w: 0.335, h: 0.12 },
+    {
+      type: 'pin',
+      color: 'danger',
+      n: 1,
+      x: 0.59,
+      y: 0.515,
+      note: 'Cookie banner covers "Pay now" on iPhone',
+    },
+    { type: 'arrow', color: 'danger', x1: 0.5, y1: 0.8, x2: 0.62, y2: 0.66 },
+    {
+      type: 'pin',
+      color: 'danger',
+      n: 2,
+      x: 0.4,
+      y: 0.93,
+      note: 'Banner has no close button, only "Accept all"',
+    },
+  ],
+}
+
 export const bug_attachments: BugAttachment[] = [
-  attachment(24, 'checkout-desktop.png', 0, 1600, 1000),
+  attachment(24, 'checkout-desktop.png', 0, 1600, 1000, checkoutMarkup),
   attachment(24, 'checkout-mobile.png', 1, 780, 1400),
   attachment(23, 'chart-labels.png', 0, 2400, 1120),
   attachment(20, 'tooltip-dark.png', 0, 1600, 1000),

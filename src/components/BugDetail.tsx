@@ -34,7 +34,10 @@ import { AssigneePicker } from './AssigneePicker'
 import { SeverityPicker } from './SeverityPicker'
 import { ClaudeProgress, SparkMark, StatusGlyph } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
-import { Lightbox } from './Lightbox'
+import { Lightbox, type LightboxMarkup } from './Lightbox'
+import { AnnotationChecklist } from './AnnotationChecklist'
+import { AnnotationOverlay } from './AnnotationOverlay'
+import { pinChecklist, parseAnnotations } from '../lib/annotations'
 import { ResolvePopover } from './ResolvePopover'
 import { Kbd, buttonClass, menuItemClass } from './ui'
 
@@ -151,6 +154,8 @@ interface GalleryItem {
   url: string | null
   /** Lightbox caption detail: `W×H · file name`. */
   caption: string | null
+  /** Live markup layers over an uploaded screenshot (pending ones are already flattened). */
+  markup: LightboxMarkup | null
 }
 
 function attachmentCaption(a: BugAttachment): string {
@@ -364,13 +369,21 @@ function BugBody({
       key: a.id,
       url: signed[a.storage_path] ?? null,
       caption: attachmentCaption(a),
+      markup: a.annotations
+        ? { annotations: a.annotations, width: a.width, height: a.height }
+        : null,
     })),
     ...pending.map((p) => ({
       key: p.localId,
       url: p.previewUrl,
       caption: p.error ? 'Upload failed' : 'Uploading',
+      markup: null,
     })),
   ]
+  // Screenshots with numbered pins, by figure number: each gets a checklist under the gallery.
+  const pinned = bug.attachments
+    .map((a, i) => ({ attachment: a, figure: i + 1 }))
+    .filter(({ attachment }) => pinChecklist(parseAnnotations(attachment.annotations)).length > 0)
   const viewable = gallery.filter((g): g is GalleryItem & { url: string } => g.url !== null)
   const lightboxIndex = lightboxKey ? viewable.findIndex((g) => g.key === lightboxKey) : -1
 
@@ -681,6 +694,18 @@ function BugBody({
                   />
                 ))}
               </ul>
+              {pinned.length > 0 && (
+                <div className="mt-5 flex flex-col gap-4">
+                  {pinned.map(({ attachment, figure }) => (
+                    <figure key={attachment.id} className="min-w-0">
+                      <figcaption className="specimen-label mb-2 text-ink-3">
+                        Fig. {figure} · Pins
+                      </figcaption>
+                      <AnnotationChecklist annotations={attachment.annotations} />
+                    </figure>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -698,6 +723,7 @@ function BugBody({
           <Lightbox
             urls={viewable.map((g) => g.url)}
             captions={viewable.map((g) => g.caption)}
+            markup={viewable.map((g) => g.markup)}
             index={lightboxIndex}
             onClose={() => setLightboxKey(null)}
             onIndex={(i) => setLightboxKey(viewable[i]?.key ?? null)}
@@ -1084,7 +1110,17 @@ function AttachmentThumb({
           )}
         >
           {url ? (
-            <img src={url} alt="" className="h-full w-full object-cover object-left-top" />
+            <>
+              <img src={url} alt="" className="h-full w-full object-cover object-left-top" />
+              <AnnotationOverlay
+                annotations={attachment.annotations}
+                width={attachment.width}
+                height={attachment.height}
+                fit="cover"
+                align="top-left"
+                pinSize={0.04}
+              />
+            </>
           ) : (
             <span className="absolute inset-0 animate-skeleton bg-surface-3" />
           )}
