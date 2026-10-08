@@ -259,6 +259,19 @@ const STATES = {
       await page.getByRole('dialog', { name: 'Connect Claude Code' }).waitFor({ timeout: SHORT })
     },
   },
+  // Connected: the install step folds to one line; this opens it to show the command scroller.
+  'claude-setup-command': {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.keyboard.type('Set up Claude Code')
+      await page.keyboard.press('Enter')
+      const dialog = page.getByRole('dialog', { name: 'Connect Claude Code' })
+      await dialog.getByRole('button', { name: /Show command/ }).click({ timeout: SHORT })
+      await dialog.getByRole('group', { name: 'Install command' }).waitFor({ timeout: SHORT })
+    },
+  },
   'invite-regenerate': {
     path: WS,
     run: async (page) => {

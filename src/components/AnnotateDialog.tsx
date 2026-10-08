@@ -321,7 +321,7 @@ export function AnnotateDialog({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex animate-fade items-center justify-center bg-scrim p-3">
+    <div className="fixed inset-0 z-50 flex animate-fade items-center justify-center dialog-scrim p-3">
       <div
         ref={dialogRef}
         role="dialog"
@@ -471,7 +471,7 @@ export function AnnotateDialog({
         {discard ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <p className="mr-auto text-sm">Discard changes?</p>
-            <Button variant="danger" onClick={onClose}>
+            <Button variant="destructive" onClick={onClose}>
               Discard
             </Button>
             <Button data-keep-editing onClick={() => setDiscard(false)}>

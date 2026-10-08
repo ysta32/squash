@@ -178,7 +178,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
   let index = -1
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim p-3 pt-[12vh] transition-opacity duration-(--dur-standard) ease-out starting:opacity-0 sm:p-4 sm:pt-[20vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center dialog-scrim p-3 pt-[12vh] transition-opacity duration-(--dur-standard) ease-out starting:opacity-0 sm:p-4 sm:pt-[20vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -190,7 +190,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
         onMouseDown={(e) => {
           if (e.target !== inputRef.current) e.preventDefault()
         }}
-        className="w-full max-w-160 overflow-hidden rounded-xl border border-line bg-surface-2/92 text-ink shadow-elev-3 backdrop-blur-lg backdrop-saturate-150 transition-[opacity,transform] duration-(--dur-emphasis) ease-out starting:translate-y-1 starting:opacity-0"
+        className="w-full max-w-160 overflow-hidden rounded-xl border border-line bg-surface-2/80 text-ink shadow-elev-3 backdrop-blur-xl backdrop-saturate-150 transition-[opacity,transform] duration-(--dur-emphasis) ease-out starting:translate-y-1 starting:opacity-0"
       >
         <div className="flex h-12 items-center gap-3 border-b border-line px-4">
           <Search

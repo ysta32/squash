@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Copy, RefreshCw, Share2, X } from 'lucide-react'
+import { Check, Copy, RefreshCw, Share2 } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { inviteUrl, friendlyError } from '../hooks/useWorkspaces'
 import type { Workspace } from '../lib/types'
 import { cn } from '../lib/utils'
 import { Button, Field, Input } from './ui'
+import { DialogHeader } from './DialogHeader'
 import {
-  closeButtonClass,
+  dialogActionsClass,
   dialogClass,
-  dialogTitleClass,
+  dialogMaxHeightClass,
+  dialogPositionClass,
   eyebrowClass,
   scrimClass,
 } from './dialogStyles'
 
 /** Full-width 44px buttons on phones; regular height from 480px unless the pointer is coarse. */
 const TOUCH = 'max-[479px]:h-11 max-[479px]:w-full pointer-coarse:h-11'
+/** Footer actions stack (primary on top) below 480px. */
+const STACK = 'max-[479px]:flex-col-reverse max-[479px]:items-stretch'
 
 interface InviteDialogProps {
   workspace: Workspace
@@ -39,7 +43,7 @@ export function InviteDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, open)
+  useFocusTrap(dialogRef, open, { initialFocus: 'field' })
 
   useEffect(() => {
     if (!copied) return
@@ -93,28 +97,22 @@ export function InviteDialog({
   }
 
   return (
-    <div
-      className={cn(scrimClass, 'flex items-center justify-center p-3 sm:p-6')}
-      onClick={onClose}
-    >
+    <div className={cn(scrimClass, dialogPositionClass)} onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Invite people"
-        className={cn(dialogClass, 'max-w-120 p-6')}
+        className={cn(dialogClass, dialogMaxHeightClass, 'max-w-120 overflow-y-auto p-6')}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className={eyebrowClass}>Workspace · invite</p>
-            <h2 className={cn(dialogTitleClass, 'mt-1 truncate')}>Invite to {workspace.name}</h2>
-            <p className="mt-1 text-sm text-ink-2">Anyone with this link can join.</p>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} className={closeButtonClass}>
-            <X size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        </div>
+        <DialogHeader
+          eyebrow="Workspace · invite"
+          title={<span className="block truncate">Invite to {workspace.name}</span>}
+          onClose={onClose}
+        >
+          <p className="mt-1 text-sm text-ink-2">Anyone with this link can join.</p>
+        </DialogHeader>
 
         <Field label="Invite link" className="mt-6">
           {({ id, describedBy }) => (
@@ -151,13 +149,13 @@ export function InviteDialog({
             <p className="text-sm text-ink-2">
               This invalidates the current link and code. Continue?
             </p>
-            <div className="mt-3 flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end">
+            <div className={cn('mt-3 flex flex-wrap items-center justify-end gap-2', STACK)}>
               {/* Focus lands on the safe choice; the Regenerate button that had it is gone. */}
               <Button autoFocus onClick={() => setConfirming(false)} className={TOUCH}>
                 Cancel
               </Button>
               <Button
-                variant="danger"
+                variant="destructive"
                 disabled={busy}
                 onClick={() => void regenerate()}
                 className={TOUCH}
@@ -167,18 +165,17 @@ export function InviteDialog({
             </div>
           </div>
         ) : (
-          // Phones stack Copy link, Share, then Regenerate; wider screens put Regenerate on the left
-          // and the actions on the right (secondary before primary).
-          <div className="mt-6 flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:items-center">
+          // Same weights as the settings invite row: Copy link and Regenerate are both secondary.
+          // Phones stack Copy link, Share, then Regenerate; wider screens put Regenerate on the left.
+          <div className={cn(dialogActionsClass, STACK)}>
             {canRegenerate && onRegenerate && (
-              <button
-                type="button"
+              <Button
                 onClick={() => setConfirming(true)}
-                className="t focus-ring inline-flex h-11 items-center justify-center gap-1.5 rounded-md text-sm text-ink-3 underline-offset-2 hover:text-ink hover:underline min-[480px]:mr-auto min-[480px]:h-9 min-[480px]:justify-start pointer-coarse:h-11"
+                className={cn(TOUCH, 'min-[480px]:mr-auto')}
               >
-                <RefreshCw size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                <RefreshCw size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
                 Regenerate
-              </button>
+              </Button>
             )}
             {canShare && (
               <Button onClick={() => void share()} className={TOUCH}>
@@ -186,12 +183,7 @@ export function InviteDialog({
                 Share
               </Button>
             )}
-            <Button
-              data-autofocus
-              variant="primary"
-              onClick={() => void copy()}
-              className={cn(TOUCH, 'min-[480px]:min-w-31')}
-            >
+            <Button onClick={() => void copy()} className={cn(TOUCH, 'min-[480px]:min-w-31')}>
               {copied ? (
                 <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
               ) : (

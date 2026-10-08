@@ -12,12 +12,18 @@ import {
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  Bug as BugIcon,
+  CircleCheck,
+  CircleDot,
+  Layers,
+  Lightbulb,
   Lock,
   MousePointerClick,
   Search,
   SearchX,
   SquarePen,
   UserRound,
+  type LucideIcon,
 } from 'lucide-react'
 import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
 import { BugList } from '../components/BugList'
@@ -714,25 +720,52 @@ export default function Workspace() {
       : []),
     ...(
       [
-        { id: 'nav-bugs', label: 'Show bugs', next: { kind: 'bug' as const }, words: ['kind'] },
+        {
+          id: 'nav-bugs',
+          label: 'Show bugs',
+          icon: BugIcon,
+          next: { kind: 'bug' as const },
+          words: ['kind'],
+        },
         {
           id: 'nav-features',
           label: 'Show feature requests',
+          icon: Lightbulb,
           next: { kind: 'feature' as const },
           words: ['kind', 'ideas'],
         },
-        { id: 'nav-open', label: 'Show open', next: { tab: 'open' as const }, words: ['status'] },
+        {
+          id: 'nav-open',
+          label: 'Show open',
+          icon: CircleDot,
+          next: { tab: 'open' as const },
+          words: ['status'],
+        },
         {
           id: 'nav-resolved',
           label: 'Show resolved',
+          icon: CircleCheck,
           next: { tab: 'resolved' as const },
           words: ['status', 'closed', 'done'],
         },
-        { id: 'nav-all', label: 'Show all', next: { tab: 'all' as const }, words: ['status'] },
-      ] satisfies { id: string; label: string; next: Partial<typeof filters>; words: string[] }[]
-    ).map(({ id, label, next, words }): Command => ({
+        {
+          id: 'nav-all',
+          label: 'Show all',
+          icon: Layers,
+          next: { tab: 'all' as const },
+          words: ['status'],
+        },
+      ] satisfies {
+        id: string
+        label: string
+        icon: LucideIcon
+        next: Partial<typeof filters>
+        words: string[]
+      }[]
+    ).map(({ id, label, icon, next, words }): Command => ({
       id,
       label,
+      icon,
       group: 'Navigate',
       keywords: ['filter', 'tab', ...words],
       run: () => {

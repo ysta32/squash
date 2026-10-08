@@ -59,7 +59,8 @@
   /* motif */
   --highlight: #f9e27d;
   --markup: #e0321c;
-  --scrim: rgb(28 27 24 / 0.32);
+  /* warm umber wash: a grey scrim reads as dirty over the paper ground */
+  --scrim: rgb(66 52 32 / 0.2);
   /* paper grain: ink-colored fractal noise, about 3.5% average opacity */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.11 0 0 0 0 0.106 0 0 0 0 0.094 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
   /* elevation */
@@ -418,7 +419,14 @@
   backdrop-filter: saturate(1.4) blur(14px);
 }
 
-/* Blurred scrim behind the lightbox and dialogs. */
+/* Scrim behind modal dialogs and the palette: the tinted wash plus a light 4px blur. */
+@utility dialog-scrim {
+  background-color: var(--scrim);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* Heavier blurred scrim behind the lightbox. */
 @utility glass-scrim {
   background-color: var(--scrim);
   -webkit-backdrop-filter: blur(12px);

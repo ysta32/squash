@@ -3,14 +3,31 @@ import { useEffect, type RefObject } from 'react'
 const FOCUSABLE =
   'a[href],button:not(:disabled),input:not(:disabled),select,textarea,[tabindex]:not([tabindex="-1"])'
 
+/** Text-entry controls a dialog can open on; read-only inputs (links, commands) don't count. */
+export const FIELD_SELECTOR =
+  'input:not(:disabled):not([readonly]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]),textarea:not(:disabled):not([readonly]),select:not(:disabled)'
+
 const stack: HTMLElement[] = []
 
+export interface FocusTrapOptions {
+  /**
+   * Where focus lands on activation. `first` (default): the `data-autofocus` element, else the
+   * first focusable. `field`: the `data-autofocus` element, else the first editable field, else
+   * the container itself, so modal dialogs never open with a ring on a button.
+   */
+  initialFocus?: 'first' | 'field'
+}
+
 /**
- * Traps keyboard focus inside `ref` while `active`. Focuses the first focusable
- * element on activation, wraps Tab / Shift+Tab, and restores the previously
- * focused element on deactivation or unmount. Does not handle Escape.
+ * Traps keyboard focus inside `ref` while `active`. Moves focus in on activation (see
+ * `initialFocus`), wraps Tab / Shift+Tab, and restores the previously focused element on
+ * deactivation or unmount. Does not handle Escape.
  */
-export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true): void {
+export function useFocusTrap(
+  ref: RefObject<HTMLElement | null>,
+  active = true,
+  { initialFocus = 'first' }: FocusTrapOptions = {},
+): void {
   useEffect(() => {
     const root = ref.current
     if (!active || !root) return
@@ -22,7 +39,13 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
         (el) => !el.closest('[hidden],[inert]'),
       )
 
-    const first = focusables().find((el) => el.hasAttribute('data-autofocus')) ?? focusables()[0]
+    const visible = (el: HTMLElement) => !el.closest('[hidden],[inert]')
+    const preferred = focusables().find((el) => el.hasAttribute('data-autofocus'))
+    const first =
+      preferred ??
+      (initialFocus === 'field'
+        ? Array.from(root.querySelectorAll<HTMLElement>(FIELD_SELECTOR)).find(visible)
+        : focusables()[0])
     if (first) first.focus()
     else {
       root.tabIndex = -1
@@ -65,5 +88,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
         previous.focus()
       }
     }
-  }, [ref, active])
+  }, [ref, active, initialFocus])
 }

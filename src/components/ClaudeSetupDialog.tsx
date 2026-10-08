@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, Copy, FolderOpen, X } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { Check, ChevronRight, Copy, FolderOpen } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import {
@@ -13,13 +13,16 @@ import {
 import type { BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 import { Button, Input, Kbd, proseLinkClass } from './ui'
-import {
-  closeButtonClass,
-  dialogClass,
-  dialogTitleClass,
-  eyebrowClass,
-  scrimClass,
-} from './dialogStyles'
+import { DialogHeader } from './DialogHeader'
+import { dialogClass, dialogMaxHeightClass, dialogPositionClass, scrimClass } from './dialogStyles'
+
+/**
+ * Horizontal fades on the command scroller: the ends soften instead of slicing a glyph in half.
+ * The scroller's own padding (pl-3, pr-6) sits under the fades, so at either scroll end the
+ * first and last characters are fully opaque.
+ */
+const EDGE_FADE =
+  '[mask-image:linear-gradient(to_right,transparent,black_0.75rem,black_calc(100%-1.5rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_0.75rem,black_calc(100%-1.5rem),transparent)]'
 
 export interface ClaudeSetupDialogProps {
   open: boolean
@@ -63,8 +66,10 @@ export function ClaudeSetupDialog({
 }: ClaudeSetupDialogProps) {
   useOverlayOpen(open)
   const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, open)
+  useFocusTrap(dialogRef, open, { initialFocus: 'field' })
+  const installId = useId()
   const [copied, setCopied] = useState(false)
+  const [showInstall, setShowInstall] = useState(false)
   const [folder, setFolder] = useState<{ ws: string; path: string | null } | null>(null)
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
@@ -74,6 +79,9 @@ export function ClaudeSetupDialog({
   const nativePicker = status?.platform === 'darwin'
   const command = installCommand(window.location.origin)
   const current = folder?.ws === workspaceId ? folder.path : null
+  // Once a current helper is connected the install step is done: fold it to one line.
+  const installDone = connected && status.version >= AUTO_RESOLVE_VERSION
+  const installOpen = !installDone || showInstall
 
   useEffect(() => {
     if (!open) return
@@ -131,118 +139,135 @@ export function ClaudeSetupDialog({
   const count = pending.length === 1 ? `#${pending[0].number}` : `${pending.length} bugs`
 
   return (
-    <div
-      className={cn(scrimClass, 'flex items-center justify-center p-3 sm:p-6')}
-      onClick={onClose}
-    >
+    <div className={cn(scrimClass, dialogPositionClass)} onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Connect Claude Code"
-        className={cn(dialogClass, 'max-h-[calc(100dvh-1.5rem)] max-w-140 overflow-y-auto')}
+        className={cn(dialogClass, dialogMaxHeightClass, 'max-w-140 overflow-y-auto')}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className={eyebrowClass}>Claude Code · setup</p>
-              <h2 className={cn(dialogTitleClass, 'mt-1')}>Send bugs to Claude Code</h2>
-              <p className="mt-2 text-sm text-ink-2">
-                One press runs Claude Code in your project on the bug and its screenshots. When it
-                is done, the terminal closes and the bug is resolved with Claude’s summary.
-              </p>
-            </div>
-            <button type="button" aria-label="Close" onClick={onClose} className={closeButtonClass}>
-              <X size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </div>
+          <DialogHeader
+            eyebrow="Claude Code · setup"
+            title="Send bugs to Claude Code"
+            onClose={onClose}
+          >
+            <p className="mt-2 text-sm text-ink-2">
+              One press runs Claude Code in your project on the bug and its screenshots. When it is
+              done, the terminal closes and the bug is resolved with Claude’s summary.
+            </p>
+          </DialogHeader>
 
-          <p role="status" className="mt-5 flex items-start gap-3 text-sm text-ink-2">
-            <span
-              className={cn(
-                eyebrowClass,
-                'flex h-5 shrink-0 items-center gap-1.5',
-                connected ? 'text-success' : outdated ? 'text-warning' : 'text-ink-2',
-              )}
-            >
+          <p role="status" className="mt-5 flex items-start gap-2.5 text-sm text-ink">
+            <span aria-hidden="true" className="flex h-5 shrink-0 items-center">
               <span
-                aria-hidden="true"
                 className={cn(
-                  'size-1.5 rounded-full',
+                  'size-2 rounded-full',
                   connected ? 'bg-success' : outdated ? 'bg-warning' : 'bg-ink-3',
                 )}
               />
-              {connected ? 'Connected' : outdated ? 'Update needed' : 'Waiting'}
             </span>
             <span>
               {connected
-                ? status.version >= AUTO_RESOLVE_VERSION
-                  ? 'Connected to this computer'
+                ? installDone
+                  ? 'Connected to this computer.'
                   : 'Connected. Run the command below again so Claude can follow along and resolve bugs on its own.'
                 : outdated
                   ? 'An older helper is running. Run the command below to update it.'
-                  : 'Waiting for the helper… this updates by itself'}
+                  : 'Waiting for the helper… this updates by itself.'}
             </span>
           </p>
 
           <ol className="mt-5 space-y-4">
             <Step n={1} done={connected}>
-              <p className="font-medium text-ink">
-                {outdated ? 'Update the helper' : 'Paste this into Terminal and press Enter'}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <Input
-                  readOnly
-                  value={command}
-                  aria-label="Install command"
-                  onFocus={(e) => e.currentTarget.select()}
-                  className="min-w-0 flex-1 font-mono text-xs"
-                />
-                <Button
-                  data-autofocus
+              {installDone && (
+                <button
                   type="button"
-                  onClick={() => void copy()}
-                  variant={pending.length > 0 ? 'secondary' : 'primary'}
-                  className="min-w-24"
+                  aria-expanded={showInstall}
+                  aria-controls={installId}
+                  onClick={() => setShowInstall((v) => !v)}
+                  className="t focus-ring -mx-1 -my-0.5 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left font-medium text-ink hover:text-accent pointer-coarse:min-h-11"
                 >
-                  {copied ? (
-                    <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-                  ) : (
-                    <Copy size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-                  )}
-                  <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
-                </Button>
-              </div>
-              <p className="mt-2 text-xs text-ink-2">
-                {isMac ? (
-                  <>
-                    Open Terminal with <Kbd>⌘ Space</Kbd>, type “Terminal”, then press <Kbd>↵</Kbd>.
-                    The helper starts automatically when you log in.{' '}
-                  </>
-                ) : (
-                  'Keep that terminal open while you use Squash. '
-                )}
-                Needs{' '}
-                <a
-                  href="https://nodejs.org"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={proseLinkClass}
-                >
-                  Node.js
-                </a>{' '}
-                and{' '}
-                <a
-                  href="https://claude.com/claude-code"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={proseLinkClass}
-                >
-                  Claude Code
-                </a>
-                .
-              </p>
+                  Helper installed
+                  <span className="font-normal text-ink-2">
+                    {showInstall ? 'Hide command' : 'Show command'}
+                  </span>
+                  <ChevronRight
+                    size={14}
+                    absoluteStrokeWidth
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                    className={cn('t shrink-0 text-ink-3', showInstall && 'rotate-90')}
+                  />
+                </button>
+              )}
+              {installOpen && (
+                <div id={installId} className={cn(installDone && 'mt-3')}>
+                  <p className="font-medium text-ink">
+                    {outdated ? 'Update the helper' : 'Paste this into Terminal and press Enter'}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <div className="flex min-w-0 flex-1 items-center rounded-md border border-line-input bg-surface-1 pointer-coarse:min-h-[3.1429rem]">
+                      {/* Scrolls sideways (focusable for keyboard scrolling); one click selects it all. */}
+                      <div
+                        role="group"
+                        tabIndex={0}
+                        aria-label="Install command"
+                        className={cn(
+                          'focus-ring-inset min-w-0 flex-1 overflow-x-auto rounded-md py-2 pr-6 pl-3 font-mono text-xs whitespace-nowrap text-ink [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                          EDGE_FADE,
+                        )}
+                      >
+                        <code className="select-all">{command}</code>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => void copy()}
+                      variant={pending.length > 0 ? 'secondary' : 'primary'}
+                      className="min-w-24"
+                    >
+                      {copied ? (
+                        <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                      ) : (
+                        <Copy size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                      )}
+                      <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-xs text-ink-2">
+                    {isMac ? (
+                      <>
+                        Open Terminal with <Kbd>⌘ Space</Kbd>, type “Terminal”, then press{' '}
+                        <Kbd>↵</Kbd>. The helper starts automatically when you log in.{' '}
+                      </>
+                    ) : (
+                      'Keep that terminal open while you use Squash. '
+                    )}
+                    Needs{' '}
+                    <a
+                      href="https://nodejs.org"
+                      target="_blank"
+                      rel="noreferrer"
+                      className={proseLinkClass}
+                    >
+                      Node.js
+                    </a>{' '}
+                    and{' '}
+                    <a
+                      href="https://claude.com/claude-code"
+                      target="_blank"
+                      rel="noreferrer"
+                      className={proseLinkClass}
+                    >
+                      Claude Code
+                    </a>
+                    .
+                  </p>
+                </div>
+              )}
             </Step>
 
             <Step n={2} done={connected && current !== null}>

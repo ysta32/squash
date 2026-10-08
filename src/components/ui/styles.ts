@@ -1,6 +1,6 @@
 import { cn } from '../../lib/utils'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'destructive'
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'touch'
 
 // Specimen buttons (DESIGN.md sections 3 and 5). Primary is the accent fill and the only filled
@@ -17,6 +17,8 @@ const VARIANT: Record<ButtonVariant, string> = {
     'border border-transparent text-ink-2 hover:bg-surface-3 hover:text-ink disabled:bg-transparent disabled:text-ink-3',
   danger:
     'border border-danger/45 bg-transparent text-danger hover:border-danger hover:bg-danger/8 disabled:border-line disabled:text-ink-3',
+  destructive:
+    'border border-transparent bg-danger text-bg hover:opacity-90 disabled:bg-surface-3 disabled:text-ink-3',
 }
 
 // Heights: sm 28px, md 31.5px, lg 40px (Tailwind's 0.25rem step is 3.5px at the 14px root).

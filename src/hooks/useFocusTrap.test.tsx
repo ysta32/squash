@@ -184,4 +184,51 @@ describe('useFocusTrap', () => {
     fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
     expect(document.activeElement).toBe(screen.getByText('l1'))
   })
+  describe("initialFocus: 'field'", () => {
+    function FieldTrap({ children }: { children: ReactNode }) {
+      const ref = useRef<HTMLDivElement>(null)
+      useFocusTrap(ref, true, { initialFocus: 'field' })
+      return (
+        <div ref={ref} data-testid="field-trap">
+          {children}
+        </div>
+      )
+    }
+
+    it('skips buttons and read-only inputs for the first editable field', () => {
+      render(
+        <FieldTrap>
+          <button>close</button>
+          <input readOnly aria-label="link" defaultValue="x" />
+          <input disabled aria-label="off" />
+          <input aria-label="name" />
+        </FieldTrap>,
+      )
+      expect(document.activeElement).toBe(screen.getByLabelText('name'))
+    })
+
+    it('falls back to the container when there is no field', () => {
+      render(
+        <FieldTrap>
+          <button>close</button>
+          <input readOnly aria-label="link" defaultValue="x" />
+        </FieldTrap>,
+      )
+      const trap = screen.getByTestId('field-trap')
+      expect(document.activeElement).toBe(trap)
+      expect(trap.tabIndex).toBe(-1)
+      expect(fireEvent.keyDown(trap, { key: 'Tab' })).toBe(false)
+      expect(document.activeElement).toBe(screen.getByText('close'))
+    })
+
+    it('still honours [data-autofocus]', () => {
+      render(
+        <FieldTrap>
+          <input aria-label="name" />
+          <button data-autofocus>go</button>
+        </FieldTrap>,
+      )
+      expect(document.activeElement).toBe(screen.getByText('go'))
+    })
+  })
 })

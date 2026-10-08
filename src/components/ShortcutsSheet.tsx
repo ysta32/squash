@@ -1,16 +1,14 @@
 import { useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { cn, isMac } from '../lib/utils'
 import { Kbd } from './ui'
-import {
-  closeButtonClass,
-  dialogClass,
-  dialogTitleClass,
-  eyebrowClass,
-  scrimClass,
-} from './dialogStyles'
+import { DialogHeader } from './DialogHeader'
+import { dialogClass, eyebrowClass, scrimClass } from './dialogStyles'
+
+/** Fades the last 1.5rem of the scroller so a cut-off list reads as "scroll for more". */
+const SCROLL_FADE =
+  '[mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]'
 
 const ALT = isMac ? '⌥' : 'Alt'
 const MOD = isMac ? '⌘' : 'Ctrl'
@@ -76,7 +74,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
   useOverlayOpen(open)
-  useFocusTrap(dialogRef, open)
+  useFocusTrap(dialogRef, open, { initialFocus: 'field' })
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -101,7 +99,8 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
 
   return (
     <div
-      className={cn(scrimClass, 'flex items-end justify-center p-3 sm:items-center sm:p-6')}
+      // Phones: a full-height sheet inset 12px, so all four edges stay visible. Wider: centred.
+      className={cn(scrimClass, 'flex items-stretch justify-center p-3 sm:items-center sm:p-6')}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -111,20 +110,21 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
-        className={cn(dialogClass, 'flex max-h-[85dvh] max-w-200 flex-col')}
+        className={cn(dialogClass, 'flex max-w-200 flex-col overflow-hidden sm:max-h-[85dvh]')}
       >
-        <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6 pb-4">
-          <div>
-            <p className={eyebrowClass}>Reference · keys</p>
-            <h2 id="shortcuts-title" className={cn(dialogTitleClass, 'mt-1')}>
-              Keyboard shortcuts
-            </h2>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} className={closeButtonClass}>
-            <X size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        </div>
-        <div className="grid min-h-0 gap-x-10 gap-y-6 overflow-y-auto px-6 pb-6 sm:grid-cols-2">
+        <DialogHeader
+          eyebrow="Reference · keys"
+          title="Keyboard shortcuts"
+          titleId="shortcuts-title"
+          onClose={onClose}
+          className="shrink-0 border-b border-line px-6 pt-6 pb-4"
+        />
+        <div
+          className={cn(
+            'grid min-h-0 flex-1 gap-x-10 gap-y-6 overflow-y-auto overscroll-contain px-6 pt-4 pb-6 sm:grid-cols-2',
+            SCROLL_FADE,
+          )}
+        >
           {COLUMNS.map((groups, c) => (
             <div key={c}>
               {groups.map((group) => (

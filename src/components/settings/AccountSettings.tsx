@@ -1,3 +1,6 @@
+import { DialogHeader } from '../DialogHeader'
+import { nativeDialogClass } from '../dialogStyles'
+import { showModal } from '../showModal'
 import { Button, Field, Input, inputClass } from '../ui'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -7,7 +10,7 @@ import { removeScreenshots } from '../../lib/storageCleanup'
 import { useWorkspace, useWorkspaces } from '../../hooks/useWorkspaces'
 import type { Workspace } from '../../lib/types'
 import { cn } from '../../lib/utils'
-import { LedgerRow, TOUCH, confirmDialogClass, dangerFillClass } from './Ledger'
+import { LedgerRow, TOUCH, dangerFillClass } from './Ledger'
 
 /** Ends the session and returns to the home page. Errors show next to the button. */
 export function SignOutButton() {
@@ -215,23 +218,26 @@ export function DeleteAccount() {
       )}
       {open && (
         <dialog
-          ref={(node) => {
-            if (node && !node.open) node.showModal()
-          }}
+          ref={showModal}
           onCancel={(event) => {
             event.preventDefault()
             if (!busy) setOpen(false)
           }}
           aria-labelledby="delete-account-title"
-          className={cn(confirmDialogClass, 'space-y-4')}
+          className={cn(nativeDialogClass, 'space-y-4')}
         >
-          <h3 id="delete-account-title" className="text-lg font-semibold">
-            Delete your account?
-          </h3>
-          <p className="text-sm text-ink-2">
-            This deletes your account and workspaces where you are the only member. This cannot be
-            undone. Shared workspaces must have ownership transferred first.
-          </p>
+          <DialogHeader
+            eyebrow="Danger zone · account"
+            title="Delete your account?"
+            titleId="delete-account-title"
+            closeDisabled={busy}
+            onClose={() => setOpen(false)}
+          >
+            <p className="mt-2 text-sm text-ink-2">
+              This deletes your account and workspaces where you are the only member. This cannot be
+              undone. Shared workspaces must have ownership transferred first.
+            </p>
+          </DialogHeader>
           {!deleted && (
             <Field label={`Type “${DELETE_ACCOUNT_PHRASE}” to confirm`}>
               {({ id, describedBy }) => (

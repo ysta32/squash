@@ -1,3 +1,6 @@
+import { DialogHeader } from '../DialogHeader'
+import { nativeDialogClass } from '../dialogStyles'
+import { showModal } from '../showModal'
 import { Button, Field, Input } from '../ui'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -14,7 +17,6 @@ import {
   SaveIndicator,
   SettingsPanel,
   TOUCH,
-  confirmDialogClass,
   dangerFillClass,
 } from './Ledger'
 import { useAutosave } from './useAutosave'
@@ -163,15 +165,13 @@ export function WorkspaceSettings({
         {feedback && <div className="pt-3 text-sm">{feedback}</div>}
         {confirmDelete && (
           <dialog
-            ref={(node) => {
-              if (node && !node.open) node.showModal()
-            }}
+            ref={showModal}
             onCancel={(event) => {
               event.preventDefault()
               if (!busy) setConfirmDelete(false)
             }}
             aria-labelledby="delete-workspace-title"
-            className={confirmDialogClass}
+            className={nativeDialogClass}
           >
             <form
               onSubmit={(event) => {
@@ -180,15 +180,18 @@ export function WorkspaceSettings({
               }}
               className="space-y-5"
             >
-              <div className="space-y-2">
-                <h3 id="delete-workspace-title" className="text-lg font-semibold">
-                  Delete {workspace.name}?
-                </h3>
-                <p className="text-sm text-ink-2">
+              <DialogHeader
+                eyebrow="Danger zone · workspace"
+                title={`Delete ${workspace.name}?`}
+                titleId="delete-workspace-title"
+                closeDisabled={busy}
+                onClose={() => setConfirmDelete(false)}
+              >
+                <p className="mt-2 text-sm text-ink-2">
                   Every bug, comment and screenshot in this workspace is removed for all members.
                   This cannot be undone.
                 </p>
-              </div>
+              </DialogHeader>
               <Field label={`Type ${workspace.name} to confirm`}>
                 {({ id, describedBy }) => (
                   <Input
