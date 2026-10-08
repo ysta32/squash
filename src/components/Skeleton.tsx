@@ -9,7 +9,7 @@ export const ROW_BOX =
 const BLOCK = 'rounded-xs bg-surface-3'
 
 /**
- * Loading rows that match BugRow exactly (DESIGN.md "States: Loading"): severity ticks, number,
+ * Loading rows that match BugRow exactly (DESIGN.md "States: Loading"): check-off circle, severity ticks, number,
  * a title bar at 40–70% width, time and avatar. Static blocks with a slow opacity pulse; no
  * shimmer and no spinner.
  */
@@ -24,6 +24,7 @@ export function Skeleton({ rows = TITLE_WIDTHS.length }: { rows?: number }) {
           className={cn(ROW_BOX, 'animate-skeleton')}
           style={{ animationDelay: `${index * 90}ms` }}
         >
+          <span className="size-[16px] shrink-0 rounded-full border border-line-input" />
           <span className="flex size-[16px] shrink-0 items-center justify-center gap-[2px]">
             {[0, 1, 2, 3].map((tick) => (
               <span key={tick} className={cn('h-[8px] w-[2px]', BLOCK)} />

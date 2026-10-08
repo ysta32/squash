@@ -48,6 +48,8 @@ export interface BugListProps {
   onResolve?: BulkBarProps['onResolve']
   onReopen?: BulkBarProps['onReopen']
   onAssign?: BulkBarProps['onAssign']
+  /** Checks a bug off (or reopens it) from the circle at the start of its row. */
+  onToggleStatus?: (bug: BugWithMeta) => void
   /** Opens Claude Code on the bugs (or the setup guide when the helper is not connected). */
   onSend?: (bugs: BugWithMeta[]) => void
   /** Copies a ready-to-paste Claude Code prompt for the bugs. */
@@ -187,6 +189,7 @@ export function BugList({
   onResolve,
   onReopen,
   onAssign,
+  onToggleStatus,
   onSend,
   onCopy,
   onClaudeSetup,
@@ -450,6 +453,7 @@ export function BugList({
                 picked={pickedIds?.has(bug.id) ?? false}
                 onTogglePick={onTogglePick}
                 claudeState={bug.optimistic ? undefined : claudeRuns?.get(bug.number)?.state}
+                onToggleStatus={onToggleStatus}
               />
             ))}
           </div>

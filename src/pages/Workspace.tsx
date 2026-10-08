@@ -58,7 +58,7 @@ import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
 import { NEXT_THEME, useTheme } from '../lib/theme'
-import type { Bug, BugKind } from '../lib/types'
+import type { Bug, BugKind, BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 
 const HIGHLIGHT_MS = 3000
@@ -234,6 +234,26 @@ export default function Workspace() {
     if (before && before.status === 'resolved')
       toastUndo(`Reopened #${before.number}`, () => resolveBug(id, before.resolution_note))
   }
+
+  // The check-off circle on a list row: resolve (no note) or reopen in one click, with Undo.
+  // Stable across renders so memoised rows do not redraw; it reads the latest handlers.
+  const toggleStatusRef = useRef<(bug: BugWithMeta) => Promise<void>>(async () => {})
+  useEffect(() => {
+    toggleStatusRef.current = (bug) =>
+      bug.status === 'resolved'
+        ? reopenWithUndo(bug.id, bug.resolution_note)
+        : resolveWithUndo(bug.id, null)
+  })
+  const toggleStatus = useCallback(
+    (bug: BugWithMeta) => {
+      void toggleStatusRef.current(bug).catch((err: unknown) => {
+        toast(err instanceof Error ? err.message : 'Could not update the status.', {
+          tone: 'error',
+        })
+      })
+    },
+    [toast],
+  )
 
   async function assignWithUndo(id: string, userId: string | null) {
     const before = bugs.find((bug) => bug.id === id)
@@ -1101,6 +1121,7 @@ export default function Workspace() {
               onResolve={resolveBug}
               onReopen={reopenBug}
               onAssign={assign}
+              onToggleStatus={toggleStatus}
               onSend={claude.sendBugs}
               onCopy={claude.copyBugs}
               onInvite={() => setInviteOpen(true)}
