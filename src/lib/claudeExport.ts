@@ -1,3 +1,4 @@
+import { parseAnnotations, toClaudeRegions } from './annotations'
 import { formatContext } from './bugContext'
 import { supabase } from './supabase'
 import type { BugWithMeta, Comment, WorkspaceMember } from './types'
@@ -39,6 +40,22 @@ function shellQuote(value: string): string {
 function extension(path: string): string {
   const match = /\.([a-z0-9]+)$/i.exec(path)
   return match ? match[1].toLowerCase() : 'webp'
+}
+
+/**
+ * The screenshot's markup as structured regions for Claude, or nothing when it has none.
+ * JSON with backticks escaped, so a note can never close the fence.
+ */
+function regionLines(annotations: unknown): string[] {
+  const regions = toClaudeRegions(parseAnnotations(annotations))
+  if (regions.length === 0) return []
+  const json = JSON.stringify(regions, null, 2).replace(/`/g, '\\u0060')
+  return [
+    '  Marked regions (x, y, w, h are fractions of the image width and height from the top left; a pin is a point):',
+    '  ```json',
+    ...json.split('\n').map((line) => `  ${line}`),
+    '  ```',
+  ]
 }
 
 function indent(text: string): string {
@@ -113,6 +130,7 @@ export function formatClaudePrompt({
   const names = new Map(members.map((m) => [m.user_id, m.profile.display_name]))
   const nameOf = (id: string | null) => (id ? (names.get(id) ?? 'Deleted user') : 'Unknown')
   const downloads: ScreenshotDownload[] = []
+  let hasRegions = false
   const sections = bugs.map((bug) => {
     const lines = [
       `## ${bug.kind === 'feature' ? 'Feature request' : 'Bug'} #${bug.number}: ${bug.title}`,
@@ -142,6 +160,9 @@ export function formatClaudePrompt({
         } else {
           lines.push(`- ${file}: unavailable, could not create a download link`)
         }
+        const marked = regionLines(a.annotations)
+        if (marked.length > 0) hasRegions = true
+        lines.push(...marked)
       })
     }
     const thread = comments.filter((c) => c.bug_id === bug.id)
@@ -175,6 +196,12 @@ export function formatClaudePrompt({
         ' && \\',
       'pwd && ls',
       '```',
+      '',
+    )
+  }
+  if (hasRegions) {
+    intro.push(
+      'Some screenshots list marked regions. Treat each numbered pin as a checklist item: address every one and mention it by number (for example "Pin 1") in your summary.',
       '',
     )
   }

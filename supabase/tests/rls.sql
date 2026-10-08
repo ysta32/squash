@@ -804,6 +804,100 @@ do $$ begin
     raise exception 'FAIL[84]: bug_events replica identity is not default'; end if;
 end $$;
 
+-- ===== Attachment annotations (0009). Numbered from [120] so other sections can append. =====
+:as_a
+-- [120] uploader inserts valid annotations; uploaded_by is forced to the inserting user
+-- [121] malformed annotations are rejected (non-object, v <> 1, shapes not an array, > 50 shapes, > 32 KB)
+do $$ declare bid uuid; aid uuid; payload jsonb; begin
+  insert into public.bugs (workspace_id, title, description, severity, filed_by)
+    values (current_setting('t.ws1')::uuid, 'Markup bug', 'markup', 'low', auth.uid())
+    returning id into bid;
+  insert into public.bug_attachments (bug_id, storage_path, width, height, size_bytes, uploaded_by, annotations)
+    values (bid, current_setting('t.ws1') || '/' || bid || '/m.webp', 10, 10, 10,
+            '10000000-0000-0000-0000-000000000002',
+            '{"v":1,"shapes":[{"type":"pin","n":1,"x":0.5,"y":0.5,"color":"danger","note":"Here"}]}')
+    returning id into aid;
+  perform set_config('t.markup_att', aid::text, true);
+  if (select uploaded_by from public.bug_attachments where id = aid) is distinct from auth.uid() then
+    raise exception 'FAIL[120]: uploaded_by not forced to the uploader'; end if;
+  if (select annotations->'shapes'->0->>'note' from public.bug_attachments where id = aid) is distinct from 'Here' then
+    raise exception 'FAIL[120]: annotations insert/read failed'; end if;
+  foreach payload in array array[
+    '[]'::jsonb, '"text"'::jsonb, '42'::jsonb, 'null'::jsonb, '{}'::jsonb,
+    '{"v":2,"shapes":[]}'::jsonb, '{"shapes":[]}'::jsonb, '{"v":"1","shapes":[]}'::jsonb,
+    '{"v":1,"shapes":{}}'::jsonb, '{"v":1}'::jsonb,
+    jsonb_build_object('v', 1, 'shapes', (select jsonb_agg(jsonb_build_object('type', 'pin')) from generate_series(1, 51))),
+    jsonb_build_object('v', 1, 'shapes', jsonb_build_array(jsonb_build_object('note', repeat('x', 33000))))
+  ] loop
+    begin
+      update public.bug_attachments set annotations = payload where id = aid;
+      raise exception 'FAIL[121]: malformed annotations accepted: %', left(payload::text, 60);
+    exception when check_violation then null;
+    end;
+  end loop;
+  begin
+    insert into public.bug_attachments (bug_id, storage_path, width, height, size_bytes, annotations)
+      values (bid, current_setting('t.ws1') || '/' || bid || '/bad.webp', 10, 10, 10, '{"v":1,"shapes":"no"}');
+    raise exception 'FAIL[121]: malformed annotations inserted';
+  exception when check_violation then null;
+  end;
+end $$;
+-- [122] uploader can update and clear annotations (50 shapes is allowed)
+do $$ begin
+  update public.bug_attachments
+    set annotations = jsonb_build_object('v', 1, 'shapes', (select jsonb_agg(jsonb_build_object('type', 'box')) from generate_series(1, 50)))
+    where id = current_setting('t.markup_att')::uuid;
+  if not found then raise exception 'FAIL[122]: uploader cannot update annotations'; end if;
+  update public.bug_attachments set annotations = null where id = current_setting('t.markup_att')::uuid;
+  if (select annotations from public.bug_attachments where id = current_setting('t.markup_att')::uuid) is not null then
+    raise exception 'FAIL[122]: uploader cannot clear annotations'; end if;
+  update public.bug_attachments set annotations = '{"v":1,"shapes":[]}' where id = current_setting('t.markup_att')::uuid;
+  if not found then raise exception 'FAIL[122]: uploader cannot set empty annotations'; end if;
+end $$;
+-- [123] no one may update other attachment columns, the uploader included
+do $$ begin
+  begin
+    update public.bug_attachments set uploaded_by = '10000000-0000-0000-0000-000000000002' where id = current_setting('t.markup_att')::uuid;
+    raise exception 'FAIL[123]: uploaded_by is client-writable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.bug_attachments set storage_path = 'elsewhere' where id = current_setting('t.markup_att')::uuid;
+    raise exception 'FAIL[123]: storage_path is client-writable';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+:as_b
+-- [124] another member reads annotations but cannot update them
+do $$ begin
+  if (select annotations->>'v' from public.bug_attachments where id = current_setting('t.markup_att')::uuid) is distinct from '1' then
+    raise exception 'FAIL[124]: member cannot read annotations'; end if;
+  update public.bug_attachments set annotations = null where id = current_setting('t.markup_att')::uuid;
+  if found then raise exception 'FAIL[124]: non-uploader updated annotations'; end if;
+end $$;
+:as_c
+-- [125] outsider can neither read nor update annotations
+do $$ begin
+  if exists (select 1 from public.bug_attachments where id = current_setting('t.markup_att')::uuid) then
+    raise exception 'FAIL[125]: outsider can read annotations'; end if;
+  update public.bug_attachments set annotations = null where id = current_setting('t.markup_att')::uuid;
+  if found then raise exception 'FAIL[125]: outsider updated annotations'; end if;
+end $$;
+:as_pg
+-- [126] an uploader who is not (or no longer) a member cannot update annotations
+update public.bug_attachments set uploaded_by = '10000000-0000-0000-0000-000000000003'
+  where id = current_setting('t.markup_att')::uuid;
+:as_c
+do $$ begin
+  update public.bug_attachments set annotations = null where id = current_setting('t.markup_att')::uuid;
+  if found then raise exception 'FAIL[126]: non-member uploader updated annotations'; end if;
+end $$;
+:as_pg
+do $$ begin
+  if (select annotations from public.bug_attachments where id = current_setting('t.markup_att')::uuid) is null then
+    raise exception 'FAIL[126]: annotations changed by a non-member'; end if;
+end $$;
+
 -- ===== Context constraints and existing bug RLS (0007) =====
 :as_a
 -- [85] filer can insert context; [86] oversized objects are rejected

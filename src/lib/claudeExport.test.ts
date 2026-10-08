@@ -107,6 +107,64 @@ describe('formatClaudePrompt', () => {
   })
 })
 
+describe('formatClaudePrompt with live markup', () => {
+  const marked = (annotations: unknown) =>
+    bug({
+      attachments: [{ ...bug().attachments[0], annotations: annotations as never }],
+    })
+
+  it('lists each screenshot’s pins as structured regions and asks for a per-pin checklist', () => {
+    const { prompt } = formatClaudePrompt({
+      ...base,
+      localDir: '.squash/bugs/x',
+      bugs: [
+        marked({
+          v: 1,
+          shapes: [
+            { type: 'box', color: 'danger', x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
+            {
+              type: 'pin',
+              color: 'danger',
+              n: 1,
+              x: 0.25,
+              y: 0.5,
+              note: 'Banner overlaps `Pay now`',
+            },
+          ],
+        }),
+      ],
+    })
+    expect(prompt).toContain('Treat each numbered pin as a checklist item')
+    const block = /Marked regions[^\n]*\n {2}```json\n([\s\S]*?)\n {2}```/.exec(prompt)
+    expect(block).not.toBeNull()
+    expect(block?.[1]).not.toContain('`')
+    expect(JSON.parse(block?.[1] ?? '')).toEqual([
+      {
+        label: 'Pin 1',
+        kind: 'pin',
+        x: 0.25,
+        y: 0.5,
+        w: 0,
+        h: 0,
+        note: 'Banner overlaps `Pay now`',
+      },
+      { label: 'Box 1', kind: 'box', x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
+    ])
+    expect(prompt.indexOf('bug-12-1.webp (800×600)')).toBeLessThan(prompt.indexOf('Marked regions'))
+  })
+
+  it.each([
+    ['no annotations', undefined],
+    ['null annotations', null],
+    ['empty shapes', { v: 1, shapes: [] }],
+    ['an unknown version', { v: 2, shapes: [{ type: 'pin', n: 1, x: 0, y: 0 }] }],
+  ])('adds nothing for %s', (_, annotations) => {
+    const { prompt } = formatClaudePrompt({ ...base, bugs: [marked(annotations)] })
+    expect(prompt).not.toContain('Marked regions')
+    expect(prompt).not.toContain('checklist item')
+  })
+})
+
 describe('formatClaudePrompt for feature requests', () => {
   it('asks Claude to build a feature, not fix a bug', () => {
     const { prompt } = formatClaudePrompt({ ...base, bugs: [bug({ kind: 'feature' })] })

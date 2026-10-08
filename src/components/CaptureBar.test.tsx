@@ -441,4 +441,176 @@ describe('CaptureBar', () => {
       vi.unstubAllGlobals()
     }
   })
+  it('keeps live markup layers on the chip, re-edits them and files them with the original', async () => {
+    let loaded: HTMLImageElement | undefined
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          loaded = document.createElement('img')
+          Object.defineProperties(loaded, {
+            naturalWidth: { value: 100 },
+            naturalHeight: { value: 100 },
+          })
+          return loaded
+        }
+      },
+    )
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    const ctx = new Proxy({}, { get: () => vi.fn() })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    )
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) =>
+      callback(new Blob(['marked'], { type })),
+    )
+    try {
+      const { box, onSubmit } = setup()
+      const first = new File(['first'], 'first.png', { type: 'image/png' })
+      const second = new File(['second'], 'second.png', { type: 'image/png' })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first, second] } })
+      fireEvent.change(box, { target: { value: 'Pinned screenshot' } })
+
+      const openEditor = (name: string) => {
+        fireEvent.click(screen.getByRole('button', { name: `Mark up ${name}` }))
+        if (!loaded) throw new Error('Expected editor image')
+        fireEvent.load(loaded)
+        const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
+        canvas.setPointerCapture = vi.fn()
+        canvas.releasePointerCapture = vi.fn()
+        vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 100,
+          right: 100,
+          bottom: 100,
+          toJSON: () => ({}),
+        })
+        return canvas
+      }
+
+      let canvas = openEditor('first.png')
+      fireEvent.keyDown(window, { key: 'n' })
+      fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, button: 0 })
+      fireEvent.change(screen.getByLabelText('Note for pin 1'), {
+        target: { value: 'Banner overlaps Pay now' },
+      })
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+      )
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      // Reopening edits the layers over the unmarked original.
+      canvas = openEditor('first-marked.png')
+      expect(screen.getByRole('dialog', { name: 'Mark up first.png' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Note for pin 1')).toHaveValue('Banner overlaps Pay now')
+      fireEvent.keyDown(window, { key: 'n' })
+      fireEvent.pointerDown(canvas, { clientX: 75, clientY: 75, button: 0 })
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+      )
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+      const input = onSubmit.mock.calls[0][0]
+      expect(input.files[0].name).toBe('first-marked.png')
+      expect(input.files[1]).toBe(second)
+      expect(input.markup).toEqual([
+        {
+          original: first,
+          annotations: {
+            v: 1,
+            shapes: [
+              {
+                type: 'pin',
+                color: 'danger',
+                n: 1,
+                x: 0.25,
+                y: 0.5,
+                note: 'Banner overlaps Pay now',
+              },
+              { type: 'pin', color: 'danger', n: 2, x: 0.75, y: 0.75 },
+            ],
+          },
+        },
+        null,
+      ])
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('restores the unmarked original when every layer is removed', async () => {
+    let loaded: HTMLImageElement | undefined
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          loaded = document.createElement('img')
+          Object.defineProperties(loaded, {
+            naturalWidth: { value: 100 },
+            naturalHeight: { value: 100 },
+          })
+          return loaded
+        }
+      },
+    )
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    const ctx = new Proxy({}, { get: () => vi.fn() })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    )
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) =>
+      callback(new Blob(['marked'], { type })),
+    )
+    try {
+      const { box, onSubmit } = setup()
+      const first = new File(['first'], 'first.png', { type: 'image/png' })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first] } })
+      fireEvent.change(box, { target: { value: 'Changed my mind' } })
+      for (const name of ['first.png', 'first-marked.png']) {
+        fireEvent.click(screen.getByRole('button', { name: `Mark up ${name}` }))
+        if (!loaded) throw new Error('Expected editor image')
+        fireEvent.load(loaded)
+        const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
+        canvas.setPointerCapture = vi.fn()
+        canvas.releasePointerCapture = vi.fn()
+        vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 100,
+          right: 100,
+          bottom: 100,
+          toJSON: () => ({}),
+        })
+        if (name === 'first.png') {
+          fireEvent.keyDown(window, { key: 'b' })
+          fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, button: 0 })
+          fireEvent.pointerUp(canvas, { clientX: 40, clientY: 40 })
+        } else {
+          fireEvent.click(screen.getByRole('button', { name: 'Remove Box 1' }))
+        }
+        await act(async () =>
+          fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+        )
+      }
+      expect(screen.getByRole('button', { name: 'Mark up first.png' })).toBeInTheDocument()
+      await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+      expect(onSubmit.mock.calls[0][0].files).toEqual([first])
+      expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('markup')
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
 })

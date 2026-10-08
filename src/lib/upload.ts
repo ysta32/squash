@@ -1,5 +1,7 @@
 import type { CompressedImage } from '../hooks/useImageCompression'
+import type { Annotations } from './annotations'
 import { supabase } from './supabase'
+import type { Json } from './database.types'
 import type { BugAttachment } from './types'
 import { randomId } from './utils'
 
@@ -7,9 +9,11 @@ export async function uploadAttachment(args: {
   workspaceId: string
   bugId: string
   image: CompressedImage
+  /** Vector markup stored with the unmarked image. Omitted from the insert when absent. */
+  annotations?: Annotations
   onProgress?: (p: number) => void
 }): Promise<BugAttachment> {
-  const { workspaceId, bugId, image, onProgress } = args
+  const { workspaceId, bugId, image, annotations, onProgress } = args
   const extension = image.blob.type === 'image/jpeg' ? 'jpg' : 'webp'
   const path = `${workspaceId}/${bugId}/${randomId()}.${extension}`
   // Supabase has no upload progress events: 0 is indeterminate, 1 is done.
@@ -30,6 +34,7 @@ export async function uploadAttachment(args: {
       width: image.width,
       height: image.height,
       size_bytes: image.blob.size,
+      ...(annotations ? { annotations: annotations as unknown as Json } : {}),
     })
     .select()
     .single()

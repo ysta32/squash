@@ -192,6 +192,8 @@ export type Database = {
           height: number
           size_bytes: number
           created_at: string
+          annotations: Json | null
+          uploaded_by: string | null
         }
         Insert: {
           id?: string
@@ -201,6 +203,8 @@ export type Database = {
           height: number
           size_bytes: number
           created_at?: string
+          annotations?: Json | null
+          uploaded_by?: string | null
         }
         Update: {
           id?: string
@@ -210,6 +214,8 @@ export type Database = {
           height?: number
           size_bytes?: number
           created_at?: string
+          annotations?: Json | null
+          uploaded_by?: string | null
         }
         Relationships: [
           {

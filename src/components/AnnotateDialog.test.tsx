@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AnnotateDialog } from './AnnotateDialog'
+import type { MarkupShape } from '../lib/annotations'
 
 let loaded: HTMLImageElement
 const ctx = {
@@ -13,6 +14,9 @@ const ctx = {
   lineTo: vi.fn(),
   stroke: vi.fn(),
   strokeRect: vi.fn(),
+  arc: vi.fn(),
+  fill: vi.fn(),
+  fillText: vi.fn(),
 }
 
 beforeEach(() => {
@@ -56,15 +60,12 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function setup() {
+function setup(initialShapes?: MarkupShape[]) {
   const onSave = vi.fn()
   const onClose = vi.fn()
+  const file = new File(['source'], 'screen.shot.jpg', { type: 'image/jpeg' })
   render(
-    <AnnotateDialog
-      file={new File(['source'], 'screen.shot.jpg', { type: 'image/jpeg' })}
-      onSave={onSave}
-      onClose={onClose}
-    />,
+    <AnnotateDialog file={file} initialShapes={initialShapes} onSave={onSave} onClose={onClose} />,
   )
   fireEvent.load(loaded)
   const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
@@ -81,8 +82,15 @@ function setup() {
     bottom: 270,
     toJSON: () => ({}),
   })
-  return { canvas, onSave, onClose }
+  return { canvas, onSave, onClose, file }
 }
+
+function click(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  fireEvent.pointerDown(canvas, { pointerId: 3, clientX, clientY, button: 0 })
+  fireEvent.pointerUp(canvas, { pointerId: 3, clientX, clientY })
+}
+
+const saveButton = () => screen.getByRole('button', { name: 'Use marked-up image' })
 
 function drag(canvas: HTMLCanvasElement) {
   fireEvent.pointerDown(canvas, { pointerId: 7, clientX: 20, clientY: 30, button: 0 })
@@ -264,5 +272,139 @@ describe('AnnotateDialog', () => {
     expect(trigger).toHaveFocus()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:editor')
     trigger.remove()
+  })
+})
+
+describe('AnnotateDialog live markup layers', () => {
+  it('places numbered pins with the pin tool and saves their notes as vector layers', async () => {
+    const { canvas, onSave } = setup()
+    fireEvent.keyDown(window, { key: 'n' })
+    expect(screen.getByRole('button', { name: /^Pin/ })).toHaveAttribute('aria-pressed', 'true')
+    click(canvas, 60, 145) // (0.1, 0.5) of the image
+    const note = screen.getByLabelText('Note for pin 1')
+    expect(note).toHaveFocus()
+    // Typing a note never switches tools, undoes or saves.
+    for (const key of ['b', 'Enter', 'z']) {
+      fireEvent.keyDown(note, { key, ctrlKey: key === 'z' })
+    }
+    expect(screen.getByRole('button', { name: /^Pin/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Note for pin 1')).toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
+    fireEvent.change(note, { target: { value: 'Banner overlaps Pay now' } })
+    // Escape leaves the note for the tools instead of closing the editor.
+    fireEvent.keyDown(note, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toHaveFocus()
+    expect(screen.queryByText('Discard changes?')).toBeNull()
+    click(canvas, 260, 70)
+    expect(screen.getByLabelText('Note for pin 2')).toHaveFocus()
+    ctx.fillText.mockClear()
+    await act(async () =>
+      fireEvent.keyDown(screen.getByLabelText('Note for pin 2'), { key: 'Enter', metaKey: true }),
+    )
+    expect(onSave).toHaveBeenCalledOnce()
+    const [file, annotations] = onSave.mock.calls[0]
+    expect(file.name).toBe('screen.shot-marked.png')
+    expect(annotations).toEqual({
+      v: 1,
+      shapes: [
+        { type: 'pin', color: 'danger', n: 1, x: 0.1, y: 0.5, note: 'Banner overlaps Pay now' },
+        { type: 'pin', color: 'danger', n: 2, x: 0.5, y: 0.2 },
+      ],
+    })
+    // The flattened render has the numbered pins baked in at natural size.
+    expect(ctx.fillText).toHaveBeenCalledWith('1', 100, 250)
+    expect(ctx.fillText).toHaveBeenCalledWith('2', 500, 100)
+  })
+
+  it('saves drags as normalized shapes in the chosen color', async () => {
+    const { canvas, onSave } = setup()
+    fireEvent.keyDown(window, { key: 'b' })
+    fireEvent.click(screen.getByRole('button', { name: 'Warning' }))
+    // Drawn up and left: stored as a positive box.
+    fireEvent.pointerDown(canvas, { pointerId: 7, clientX: 260, clientY: 145, button: 0 })
+    fireEvent.pointerUp(canvas, { pointerId: 7, clientX: 60, clientY: 70 })
+    await act(async () => fireEvent.click(saveButton()))
+    expect(onSave.mock.calls[0][1]).toEqual({
+      v: 1,
+      shapes: [{ type: 'box', color: 'warning', x: 0.1, y: 0.2, w: 0.4, h: 0.3 }],
+    })
+  })
+
+  it('removes a layer and renumbers the remaining pins', () => {
+    const { canvas } = setup()
+    fireEvent.keyDown(window, { key: 'n' })
+    click(canvas, 60, 70)
+    click(canvas, 160, 70)
+    click(canvas, 260, 70)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Pin 2' }))
+    expect(screen.queryByLabelText('Note for pin 3')).toBeNull()
+    expect(screen.getByLabelText('Note for pin 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Note for pin 2')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('edits existing layers and only enables saving after a change', async () => {
+    const initial: MarkupShape[] = [
+      { type: 'pin', color: 'fg', n: 1, x: 0.2, y: 0.2, note: 'Old' },
+      { type: 'arrow', color: 'danger', x1: 0, y1: 0, x2: 0.5, y2: 0.5 },
+    ]
+    const { onSave } = setup(initial)
+    expect(screen.getByLabelText('Note for pin 1')).toHaveValue('Old')
+    expect(screen.getByRole('button', { name: 'Remove Arrow 1' })).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Note for pin 1'), { target: { value: 'New' } })
+    expect(saveButton()).toBeEnabled()
+    await act(async () => fireEvent.click(saveButton()))
+    expect(onSave.mock.calls[0][1].shapes[0]).toEqual({ ...initial[0], note: 'New' })
+  })
+
+  it('closes unchanged existing layers without asking', () => {
+    const { onClose } = setup([{ type: 'pin', color: 'fg', n: 1, x: 0.2, y: 0.2 }])
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('hands back the unmarked original when every layer is removed', async () => {
+    const { onSave, onClose, file } = setup([{ type: 'pin', color: 'fg', n: 1, x: 0.2, y: 0.2 }])
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Pin 1' }))
+    await act(async () => fireEvent.click(saveButton()))
+    expect(onSave).toHaveBeenCalledWith(file, { v: 1, shapes: [] })
+    expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('caps an image at 50 marks', () => {
+    const pins = Array.from({ length: 50 }, (_, i): MarkupShape => ({
+      type: 'pin',
+      color: 'danger',
+      n: i + 1,
+      x: 0.5,
+      y: 0.5,
+    }))
+    const { canvas } = setup(pins)
+    fireEvent.keyDown(window, { key: 'n' })
+    click(canvas, 60, 70)
+    expect(screen.getByRole('alert')).toHaveTextContent('Up to 50 marks per image')
+    expect(screen.queryByLabelText('Note for pin 51')).toBeNull()
+  })
+
+  it('keeps the marks and explains when the layers are too large to store', async () => {
+    const pins = Array.from({ length: 50 }, (_, i): MarkupShape => ({
+      type: 'pin',
+      color: 'danger',
+      n: i + 1,
+      x: 0.5,
+      y: 0.5,
+      note: '漢'.repeat(279),
+    }))
+    const { onSave, onClose } = setup(pins)
+    fireEvent.change(screen.getByLabelText('Note for pin 1'), {
+      target: { value: '漢'.repeat(280) },
+    })
+    await act(async () => fireEvent.click(saveButton()))
+    expect(screen.getByRole('alert')).toHaveTextContent('Too many marks to save')
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(saveButton()).toBeEnabled()
   })
 })

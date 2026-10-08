@@ -2,12 +2,13 @@ import { collectEnvContext, extractUrl, sanitizeContext } from '../lib/bugContex
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, RefObject } from 'react'
 import { Camera, CircleAlert, ImagePlus, Info, Mic, Paperclip, X } from 'lucide-react'
-import type { NewBugInput } from '../hooks/useBugs'
+import type { AttachmentMarkup, NewBugInput } from '../hooks/useBugs'
 import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
 import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 import { fitUnder } from '../lib/annotate'
+import type { Annotations } from '../lib/annotations'
 import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, isMac, randomId } from '../lib/utils'
@@ -42,8 +43,11 @@ interface CaptureBarProps {
 
 interface Chip {
   id: string
+  /** The image to upload: the flattened render when marked up. */
   file: File
   previewUrl: string
+  /** Live markup layers over the unmarked original. */
+  markup?: AttachmentMarkup
 }
 
 function isCoarsePointer(): boolean {
@@ -291,6 +295,9 @@ export function CaptureBar({
         severity: snapshot.severity,
         kind,
         files,
+        ...(snapshot.chips.some((c) => c.markup)
+          ? { markup: snapshot.chips.map((c) => c.markup ?? null) }
+          : {}),
       })
       snapshot.chips.forEach((c) => URL.revokeObjectURL(c.previewUrl))
     } catch (err) {
@@ -324,7 +331,18 @@ export function CaptureBar({
     }
   }
 
-  const saveMarkedUp = async (file: File): Promise<void> => {
+  const saveMarkedUp = async (file: File, annotations: Annotations): Promise<void> => {
+    if (annotations.shapes.length === 0) {
+      // Every mark was removed: back to the unmarked original.
+      const current = chipsRef.current.find((chip) => chip.id === editingId)
+      if (!current) return
+      const previewUrl = URL.createObjectURL(file)
+      URL.revokeObjectURL(current.previewUrl)
+      setChips((previous) =>
+        previous.map((chip) => (chip.id === current.id ? { id: chip.id, file, previewUrl } : chip)),
+      )
+      return
+    }
     try {
       file = await fitUnder(file, MAX_ORIGINAL_BYTES)
     } catch (error) {
@@ -342,8 +360,11 @@ export function CaptureBar({
     if (!current) return
     const previewUrl = URL.createObjectURL(file)
     URL.revokeObjectURL(current.previewUrl)
+    const markup = { original: current.markup?.original ?? current.file, annotations }
     setChips((previous) =>
-      previous.map((chip) => (chip.id === current.id ? { ...chip, file, previewUrl } : chip)),
+      previous.map((chip) =>
+        chip.id === current.id ? { ...chip, file, previewUrl, markup } : chip,
+      ),
     )
   }
 
@@ -626,7 +647,8 @@ export function CaptureBar({
       {editingChip && (
         <AnnotateDialog
           key={editingChip.id}
-          file={editingChip.file}
+          file={editingChip.markup?.original ?? editingChip.file}
+          initialShapes={editingChip.markup?.annotations.shapes}
           onClose={() => setEditingId(null)}
           onSave={saveMarkedUp}
         />
