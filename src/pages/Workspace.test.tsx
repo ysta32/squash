@@ -135,6 +135,10 @@ vi.mock('../hooks/useBug', () => ({
   useBug: () => ({ comments: [], events: [], addComment: vi.fn(), loading: false }),
 }))
 vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: () => null }))
+// Fix runs have their own tests (FixRecord.test.tsx); here the server has none.
+vi.mock('../hooks/useFixRuns', () => ({
+  useFixRuns: () => ({ runs: [], loading: false, available: false, error: null }),
+}))
 vi.mock('../hooks/usePresence', () => ({
   usePresence: () => ({ online: [], viewers: () => [] }),
 }))

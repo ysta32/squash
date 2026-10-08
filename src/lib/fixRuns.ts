@@ -178,3 +178,32 @@ export function formatDiffStat(
   const files = `${run.files_changed} file${run.files_changed === 1 ? '' : 's'}`
   return `${files}, +${run.additions ?? 0} −${run.deletions ?? 0}`
 }
+
+/** `e3f9a12` */
+export function shortSha(sha: string): string {
+  return sha.slice(0, 7)
+}
+
+/** "PR #412" for GitHub / GitLab / Bitbucket style URLs, else the host and path. */
+export function prLabel(url: string): string {
+  const number = url.match(/\/(?:pull|pulls|merge_requests|pull-requests)\/(\d+)/)?.[1]
+  return number ? `PR #${number}` : url.replace(/^https:\/\//, '').replace(/\/$/, '')
+}
+
+const CELLS = 5
+
+/** GitHub-style five-cell bar: the share of added vs deleted lines, grey cells for small diffs. */
+export function diffCells(additions: number, deletions: number): ('add' | 'del' | 'none')[] {
+  const total = additions + deletions
+  const filled = Math.min(CELLS, total)
+  let add = total === 0 ? 0 : Math.round((filled * additions) / total)
+  // Each side that changed keeps at least one cell when there is room for both.
+  if (filled >= 2 && additions > 0 && add === 0) add = 1
+  if (filled >= 2 && deletions > 0 && add === filled) add = filled - 1
+  const del = filled - add
+  return [
+    ...Array<'add'>(add).fill('add'),
+    ...Array<'del'>(del).fill('del'),
+    ...Array<'none'>(CELLS - filled).fill('none'),
+  ]
+}

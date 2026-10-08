@@ -168,11 +168,46 @@ export const tooltipDark = shell(
   { dark: true },
 )
 
+/** Lumen's profile settings with the avatar rendered soft (bug #18) or sharp (after its fix). */
+const avatarSettings = (sharp) =>
+  shell(`
+  ${nav('Settings')}
+  <div style="padding:32px 40px; display:flex; gap:40px">
+    <div style="width:180px; font-size:14px; line-height:2.4" class="muted">
+      <div class="active">Profile</div><div>Workspace</div><div>Billing</div><div>Notifications</div>
+    </div>
+    <div class="card" style="flex:1; padding:28px">
+      <div style="font-size:20px; font-weight:700">Profile</div>
+      <div class="muted" style="font-size:14px; margin-top:4px">How teammates see you in Lumen.</div>
+      <div style="display:flex; align-items:center; gap:22px; margin-top:26px">
+        <div style="width:96px; height:96px; border-radius:50%; overflow:hidden; flex:none; position:relative; background:#d97706; ${sharp ? '' : 'filter:blur(2.6px);'}">
+          <div style="position:absolute; left:30px; top:34px; width:36px; height:36px; border-radius:50%; background:#fff7ed"></div>
+          <div style="position:absolute; left:18px; top:72px; width:60px; height:40px; border-radius:50%; background:#fff7ed"></div>
+        </div>
+        <div style="font-size:14px; line-height:1.6">
+          <div style="font-weight:600; font-size:16px">Jordan Ellis</div>
+          <div class="muted">jordan@lumen.dev</div>
+          <div style="margin-top:10px; display:inline-block; padding:7px 12px; border:1px solid #e5e7eb; border-radius:8px; font-weight:600">Change photo</div>
+        </div>
+      </div>
+      <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:14px">
+        <div><div class="muted" style="font-size:12px">Display name</div><div style="margin-top:6px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px">Jordan Ellis</div></div>
+        <div><div class="muted" style="font-size:12px">Time zone</div><div style="margin-top:6px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px">Europe/London</div></div>
+      </div>
+    </div>
+  </div>
+`)
+
+export const avatarBlurry = avatarSettings(false)
+export const avatarSharp = avatarSettings(true)
+
 export const fixtures = [
   { file: 'checkout-mobile.png', html: checkoutMobile, width: 390, height: 700 },
   { file: 'checkout-desktop.png', html: checkoutDesktop, width: 800, height: 500 },
   { file: 'chart-labels.png', html: chartLabels, width: 1200, height: 560 },
   { file: 'tooltip-dark.png', html: tooltipDark, width: 800, height: 500 },
+  { file: 'avatar-blurry.png', html: avatarBlurry, width: 800, height: 500 },
+  { file: 'avatar-sharp.png', html: avatarSharp, width: 800, height: 500 },
 ]
 
 /** 1280 × 640 card for GitHub's social preview, with the dark workspace screenshot. */

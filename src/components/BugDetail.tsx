@@ -16,9 +16,11 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { useDismiss } from '../hooks/useDismiss'
+import { useFixRuns } from '../hooks/useFixRuns'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { ClaudeRun } from '../lib/claudeExport'
+import { shortSha } from '../lib/fixRuns'
 import type {
   Bug,
   BugAttachment,
@@ -34,6 +36,7 @@ import { AssigneePicker } from './AssigneePicker'
 import { SeverityPicker } from './SeverityPicker'
 import { ClaudeProgress, SparkMark, StatusGlyph } from './ClaudeProgress'
 import { CommentThread } from './CommentThread'
+import { FixRecord } from './FixRecord'
 import { Lightbox, type LightboxMarkup } from './Lightbox'
 import { AnnotationChecklist } from './AnnotationChecklist'
 import { AnnotationOverlay } from './AnnotationOverlay'
@@ -202,6 +205,14 @@ function BugBody({
   const descRef = useRef<HTMLTextAreaElement>(null)
   /** Set by Esc so the blur that follows discards the draft instead of saving it. */
   const cancelRef = useRef(false)
+  const fix = useFixRuns(bug.optimistic ? null : bug.id)
+  /** Screenshots a fix run attached as its "after", labeled with that run (newest run wins). */
+  const afterOf = new Map<string, string>()
+  for (const r of fix.runs) {
+    if (r.after_attachment_id && !afterOf.has(r.after_attachment_id)) {
+      afterOf.set(r.after_attachment_id, r.commit_sha ? `fix ${shortSha(r.commit_sha)}` : 'fix run')
+    }
+  }
 
   const profiles = new Map(members.map((m) => [m.user_id, m.profile]))
   const filer = profiles.get(bug.filed_by) ?? null
@@ -368,7 +379,9 @@ function BugBody({
     ...bug.attachments.map((a) => ({
       key: a.id,
       url: signed[a.storage_path] ?? null,
-      caption: attachmentCaption(a),
+      caption: [afterOf.has(a.id) ? `After ${afterOf.get(a.id)}` : '', attachmentCaption(a)]
+        .filter(Boolean)
+        .join(' · '),
       markup: a.annotations
         ? { annotations: a.annotations, width: a.width, height: a.height }
         : null,
@@ -678,7 +691,8 @@ function BugBody({
                     key={a.id}
                     attachment={a}
                     figure={i + 1}
-                    label={`Open screenshot ${i + 1}`}
+                    after={afterOf.get(a.id)}
+                    label={`Open screenshot ${i + 1}${afterOf.has(a.id) ? `, after ${afterOf.get(a.id)}` : ''}`}
                     onSigned={onSigned}
                     onOpen={() => setLightboxKey(a.id)}
                   />
@@ -710,6 +724,8 @@ function BugBody({
           )}
 
           {claudeRun && <ClaudeProgress run={claudeRun} />}
+
+          <FixRecord bugId={bug.id} fix={fix} attachments={bug.attachments} />
 
           <CommentThread
             bugId={bug.optimistic ? null : bug.id}
@@ -1069,11 +1085,30 @@ function DeleteDialog({
 const THUMB_CLASS =
   't focus-ring group relative block aspect-[4/3] w-full overflow-hidden rounded-lg bg-surface-3 shadow-elev-3 after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--border-1)] hover:-translate-y-0.5'
 
-function FigureCaption({ figure, size }: { figure: number; size?: string }) {
+function FigureCaption({
+  figure,
+  size,
+  after,
+}: {
+  figure: number
+  size?: string
+  /** Set on a fix run's "after" screenshot: the run it proves, e.g. "fix e3f9a12". */
+  after?: string
+}) {
   return (
     <figcaption className="specimen-label mt-2 flex items-center justify-between gap-2 text-ink-3">
-      <span>Fig. {figure}</span>
-      {size && <span>{size}</span>}
+      <span title={after ? `After ${after}` : undefined} className="min-w-0 truncate">
+        Fig. {figure}
+        {after && (
+          <>
+            {' · '}
+            <span className="text-status-resolved">After</span>{' '}
+            <span className="normal-case">{after}</span>
+          </>
+        )}
+      </span>
+      {/* An "after" label needs the room more than the size, which the viewer still shows. */}
+      {size && !after && <span className="shrink-0">{size}</span>}
     </figcaption>
   )
 }
@@ -1081,12 +1116,14 @@ function FigureCaption({ figure, size }: { figure: number; size?: string }) {
 function AttachmentThumb({
   attachment,
   figure,
+  after,
   label,
   onSigned,
   onOpen,
 }: {
   attachment: BugAttachment
   figure: number
+  after?: string
   label: string
   onSigned: (path: string, url: string | null) => void
   onOpen: () => void
@@ -1127,6 +1164,7 @@ function AttachmentThumb({
         </button>
         <FigureCaption
           figure={figure}
+          after={after}
           size={
             attachment.width > 0 && attachment.height > 0
               ? `${attachment.width}×${attachment.height}`

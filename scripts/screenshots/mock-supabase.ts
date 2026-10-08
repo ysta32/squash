@@ -13,6 +13,7 @@ const db: Record<string, Row[]> = {
   bug_attachments: [...seed.bug_attachments],
   comments: [...seed.comments],
   bug_events: [...seed.bug_events],
+  fix_runs: [...seed.fix_runs],
 }
 
 const byId = (table: string, id: unknown) => db[table].find((r) => r.id === id) ?? null

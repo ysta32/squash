@@ -162,6 +162,37 @@ const STATES = {
         })
     },
   },
+  // Proof of fix on the resolved #18: the fix record scrolled to the top of the detail pane, its
+  // earlier runs expanded and the before/after slider moved off centre with the keyboard.
+  'fix-record': {
+    path: `${WS}/bug/18`,
+    run: async (page) => {
+      const slider = page.getByRole('slider', { name: /^Before and after/ })
+      await slider.waitFor({ timeout: SHORT })
+      await page.getByText('2 earlier runs', { exact: true }).click({ timeout: SHORT })
+      await slider.focus()
+      await slider.press('ArrowLeft')
+      for (const alt of ['Before the fix', 'After the fix']) {
+        await page
+          .getByAltText(alt)
+          .evaluate((img) =>
+            Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 5_000))]),
+          )
+      }
+      await page
+        .getByRole('region', { name: 'Fix record' })
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }))
+    },
+  },
+  // A run still in progress on #24 (next to the live Claude panel).
+  'fix-running': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      const record = page.getByRole('region', { name: 'Fix record' })
+      await record.getByText('Running', { exact: true }).waitFor({ timeout: SHORT })
+      await record.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+    },
+  },
   'resolve-popover': {
     path: `${WS}/bug/24`,
     run: async (page) => {

@@ -49,6 +49,17 @@ export function clearSignedUrlCache(): void {
 }
 
 export function useSignedUrl(storagePath: string | null): string | null {
+  return useSignedUrlState(storagePath).url
+}
+
+export interface SignedUrlState {
+  url: string | null
+  /** True once signing gave up after its retries (it tries again when the browser is back online). */
+  failed: boolean
+}
+
+/** Like useSignedUrl, but also says when signing failed, so callers can stop showing a skeleton. */
+export function useSignedUrlState(storagePath: string | null): SignedUrlState {
   const [resolved, setResolved] = useState<{ path: string; url: string | null } | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -101,8 +112,9 @@ export function useSignedUrl(storagePath: string | null): string | null {
     }
   }, [storagePath, refreshTick])
 
-  if (!storagePath) return null
+  if (!storagePath) return { url: null, failed: false }
   const cached = cache.get(storagePath)
-  if (cached) return cached.url
-  return resolved?.path === storagePath ? resolved.url : null
+  if (cached) return { url: cached.url, failed: false }
+  const mine = resolved?.path === storagePath ? resolved : null
+  return { url: mine?.url ?? null, failed: mine !== null && mine.url === null }
 }

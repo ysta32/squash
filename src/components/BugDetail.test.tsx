@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import type { FixRun } from '../lib/fixRuns'
 import type { BugEvent, BugWithMeta, Comment, WorkspaceMember } from '../lib/types'
 import { BugDetail } from './BugDetail'
 
@@ -13,6 +14,18 @@ vi.mock('../hooks/useBug', () => ({
 }))
 vi.mock('../hooks/useSignedUrl', () => ({
   useSignedUrl: (path: string | null) => (path ? `https://cdn.test/${path}` : null),
+}))
+// Fix runs have their own tests (FixRecord.test.tsx); by default the server has none.
+const fixRuns = vi.hoisted(() => ({
+  runs: [] as FixRun[],
+  available: false,
+  bugIds: [] as (string | null)[],
+}))
+vi.mock('../hooks/useFixRuns', () => ({
+  useFixRuns: (bugId: string | null) => {
+    fixRuns.bugIds.push(bugId)
+    return { runs: fixRuns.runs, loading: false, available: fixRuns.available, error: null }
+  },
 }))
 
 const NOW = new Date().toISOString()
@@ -141,6 +154,9 @@ describe('BugDetail', () => {
     thread.comments = []
     thread.events = []
     addComment.mockReset()
+    fixRuns.runs = []
+    fixRuns.available = false
+    fixRuns.bugIds = []
   })
   afterEach(cleanup)
 
@@ -473,6 +489,45 @@ describe('BugDetail', () => {
     )
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
     expect(within(viewer).queryByTestId('annotation-overlay')).toBeNull()
+  })
+
+  it('asks for no fix runs while the bug is still being filed', () => {
+    setup(makeBug({ number: 0, optimistic: true }))
+    expect(fixRuns.bugIds.length).toBeGreaterThan(0)
+    expect(fixRuns.bugIds.every((id) => id === null)).toBe(true)
+  })
+
+  it('labels a fix run’s after screenshot in the strip and the viewer', () => {
+    fixRuns.available = true
+    fixRuns.runs = [
+      {
+        id: 'r1',
+        bug_id: 'b1',
+        workspace_id: 'w1',
+        run_id: 'run-1',
+        status: 'succeeded',
+        branch: 'fix/login',
+        commit_sha: 'e3f9a12c4b',
+        pr_url: null,
+        files_changed: 1,
+        additions: 2,
+        deletions: 1,
+        summary: null,
+        after_attachment_id: 'a2',
+        created_by: 'u1',
+        started_at: NOW,
+        finished_at: NOW,
+      },
+    ]
+    setup(makeBug({ attachments: [attachment('a1'), attachment('a2')] }))
+    expect(fixRuns.bugIds).toContain('b1')
+    expect(screen.getByRole('button', { name: 'Open screenshot 1' })).toBeInTheDocument()
+    const after = screen.getByRole('button', { name: 'Open screenshot 2, after fix e3f9a12' })
+    expect(after.closest('figure')).toHaveTextContent('Fig. 2 · After fix e3f9a12')
+    expect(screen.getByRole('region', { name: 'Fix record' })).toBeInTheDocument()
+    fireEvent.click(after)
+    const viewer = screen.getByRole('dialog', { name: 'Screenshot viewer' })
+    expect(viewer).toHaveTextContent('After fix e3f9a12 · 10×10 · a2.webp')
   })
 
   it('keeps the description draft when the save fails', async () => {

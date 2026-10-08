@@ -1,5 +1,6 @@
 // Demo data for README screenshots: a small team building "Lumen", a fictional analytics app.
 import type { ClaudeRun } from '../../src/lib/claudeExport'
+import type { FixRun } from '../../src/lib/fixRuns'
 import type { Bug, BugAttachment, BugEvent, Comment, Profile, Workspace } from '../../src/lib/types'
 
 const now = Date.now()
@@ -266,6 +267,9 @@ export const bug_attachments: BugAttachment[] = [
   attachment(24, 'checkout-mobile.png', 1, 780, 1400),
   attachment(23, 'chart-labels.png', 0, 2400, 1120),
   attachment(20, 'tooltip-dark.png', 0, 1600, 1000),
+  attachment(18, 'avatar-blurry.png', 0, 1600, 1000),
+  // The "after" screenshot Claude Code's helper attached to the fix run below.
+  attachment(18, 'avatar-sharp.png', 1, 1600, 1000),
 ]
 
 export const comments: Comment[] = [
@@ -383,6 +387,70 @@ export const claudeRuns: ClaudeRun[] = [
     ],
     stepCount: 14,
   },
+]
+
+const fixRun = (over: Partial<FixRun> & Pick<FixRun, 'id' | 'bug_id' | 'run_id'>): FixRun => ({
+  workspace_id: WORKSPACE_ID,
+  status: 'succeeded',
+  branch: null,
+  commit_sha: null,
+  pr_url: null,
+  files_changed: null,
+  additions: null,
+  deletions: null,
+  summary: null,
+  after_attachment_id: null,
+  created_by: ME,
+  started_at: ago(5),
+  finished_at: ago(1),
+  ...over,
+})
+
+/** Proof of fix: the runs the helper recorded (0008_fix_runs.sql), newest first per bug. */
+export const fix_runs: FixRun[] = [
+  fixRun({
+    id: 'fix-24-1',
+    bug_id: 'bug-24',
+    run_id: 'run-1',
+    status: 'running',
+    branch: 'fix/cookie-banner-offset',
+    started_at: ago(2.4),
+    finished_at: null,
+  }),
+  fixRun({
+    id: 'fix-18-3',
+    bug_id: 'bug-18',
+    run_id: 'squash-18-c',
+    branch: 'fix/avatar-srcset',
+    commit_sha: 'e3f9a12c4b7d08e1f2a3b4c5d6e7f8091a2b3c4d',
+    pr_url: 'https://github.com/lumen-dev/lumen/pull/412',
+    files_changed: 2,
+    additions: 14,
+    deletions: 3,
+    summary:
+      'The settings avatar requested the 64px thumbnail and stretched it to 128px on 2x screens. Added a srcset with the 128px variant and a test that checks the rendered image source at devicePixelRatio 2.',
+    after_attachment_id: 'att-18-1',
+    started_at: ago(60 * 21),
+    finished_at: ago(60 * 20.5),
+  }),
+  fixRun({
+    id: 'fix-18-2',
+    bug_id: 'bug-18',
+    run_id: 'squash-18-b',
+    status: 'failed',
+    branch: 'fix/avatar-srcset',
+    started_at: ago(60 * 22),
+    finished_at: ago(60 * 21.8),
+  }),
+  fixRun({
+    id: 'fix-18-1',
+    bug_id: 'bug-18',
+    run_id: 'squash-18-a',
+    status: 'cancelled',
+    branch: 'main',
+    started_at: ago(60 * 23),
+    finished_at: ago(60 * 22.9),
+  }),
 ]
 
 /** Per-person totals for the stats popover (the workspace_stats RPC). */
