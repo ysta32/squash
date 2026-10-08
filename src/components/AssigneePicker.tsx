@@ -23,6 +23,8 @@ export interface AssigneePickerProps {
   variant?: 'compact' | 'toolbar'
   /** Which edge of the trigger the menu aligns to. */
   align?: 'start' | 'end'
+  /** Opens upwards, for triggers at the bottom of a pane. */
+  side?: 'below' | 'above'
 }
 
 interface Option {
@@ -42,6 +44,7 @@ export function AssigneePicker({
   openRequest,
   variant = 'compact',
   align = 'end',
+  side = 'below',
 }: AssigneePickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -198,7 +201,8 @@ export function AssigneePicker({
       {open && (
         <div
           className={cn(
-            'panel absolute top-full z-30 mt-1 w-56 animate-in p-1',
+            'panel absolute z-30 w-56 animate-in p-1',
+            side === 'above' ? 'bottom-full mb-1' : 'top-full mt-1',
             align === 'end' ? 'right-0' : 'left-0',
           )}
         >

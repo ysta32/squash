@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugFilters } from '../hooks/useBugs'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import * as bugExport from '../lib/export'
+import { isMac } from '../lib/utils'
 import { BugList } from './BugList'
 import type { BugListProps } from './BugList'
 
@@ -94,8 +95,21 @@ function Harness(props: Partial<BugListProps>) {
   )
 }
 
-/** Opens the filter chip named `label` and picks `option` from its listbox. */
+/** Opens the Filter popover unless it is already open. */
+function openFilters() {
+  if (screen.queryByRole('dialog', { name: 'Filters' })) return
+  fireEvent.click(screen.getByRole('button', { name: /^Filter(,|$)/ }))
+}
+
+/** A filter row's trigger inside the Filter popover, opening the popover first. */
+function filterButton(name: string | RegExp) {
+  openFilters()
+  return screen.getByRole('button', { name })
+}
+
+/** Opens the filter menu named `label` in the Filter popover and picks `option` from its listbox. */
 function pickFilter(label: string, option: string) {
+  openFilters()
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label}(:|$)`) }))
   fireEvent.click(
     within(screen.getByRole('listbox', { name: label })).getByRole('option', { name: option }),
@@ -187,10 +201,10 @@ describe('BugList', () => {
     const download = vi.spyOn(bugExport, 'downloadText').mockImplementation(() => {})
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Resolved 1' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
-    expect(screen.getByRole('menuitem', { name: 'CSV' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Markdown' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('menuitem', { name: format }))
+    fireEvent.click(screen.getByRole('button', { name: 'List actions' }))
+    expect(screen.getByRole('menuitem', { name: 'Export as CSV' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Export as Markdown' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: `Export as ${format}` }))
     expect(download).toHaveBeenCalledWith(
       expect.stringMatching(
         format === 'CSV'
@@ -271,9 +285,9 @@ describe('BugList', () => {
       const guide = screen.getByRole('list', { name: 'How to file' })
       expect(within(guide).getAllByRole('listitem')).toHaveLength(3)
       expect(Array.from(guide.querySelectorAll('kbd'), (key) => key.textContent)).toEqual([
-        '⌘V',
-        'type',
-        'Enter',
+        isMac ? '⌘V' : 'Ctrl V',
+        'N',
+        '↵',
       ])
     }
   })
@@ -376,21 +390,18 @@ describe('BugList', () => {
   it('combines member and severity filters and clears them while preserving the tab', () => {
     render(<Harness filters={{ ...filters, tab: 'all' }} />)
     pickFilter('Filed by', 'Grace')
-    expect(screen.getByRole('button', { name: 'Filed by: Grace' })).toHaveAttribute(
-      'aria-haspopup',
-      'listbox',
-    )
+    expect(filterButton('Filed by: Grace')).toHaveAttribute('aria-haspopup', 'listbox')
     expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
     pickFilter('Resolved by', 'Ada')
     expect(screen.getByRole('option', { name: '#2 Fixed layout' })).toBeInTheDocument()
     pickFilter('Severity', 'High')
-    expect(screen.getByRole('button', { name: 'Severity: High' })).toBeInTheDocument()
+    expect(filterButton('Severity: High')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.getByRole('button', { name: 'All 2' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Filed by' })).toBeInTheDocument()
+    expect(filterButton('Filed by')).toBeInTheDocument()
   })
 
   it('clears a single filter from its chip', () => {
@@ -400,12 +411,12 @@ describe('BugList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear Severity filter' }))
     expect(onFilters).toHaveBeenLastCalledWith({ ...filters, tab: 'all' })
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'Severity' })).toBeInTheDocument()
+    expect(filterButton('Severity')).toBeInTheDocument()
   })
 
   it('operates filter menus from the keyboard', () => {
     render(<Harness filters={{ ...filters, tab: 'all' }} />)
-    const trigger = screen.getByRole('button', { name: 'Severity' })
+    const trigger = filterButton('Severity')
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     const menu = screen.getByRole('listbox', { name: 'Severity' })
@@ -424,7 +435,7 @@ describe('BugList', () => {
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'Enter' })
     expect(screen.queryByRole('listbox', { name: 'Severity' })).not.toBeInTheDocument()
-    const chosen = screen.getByRole('button', { name: 'Severity: Low' })
+    const chosen = filterButton('Severity: Low')
     expect(chosen).toHaveFocus()
     expect(screen.getByRole('option', { name: '#2 Fixed layout' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
@@ -448,7 +459,7 @@ describe('BugList', () => {
   it('closes a filter menu on an outside pointer press without changing the filter', () => {
     const onFilters = vi.fn()
     render(<Harness onFilters={onFilters} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Filed by' }))
+    fireEvent.click(filterButton('Filed by'))
     expect(screen.getByRole('listbox', { name: 'Filed by' })).toBeInTheDocument()
     fireEvent.pointerDown(document.body)
     expect(screen.queryByRole('listbox', { name: 'Filed by' })).not.toBeInTheDocument()
@@ -462,13 +473,13 @@ describe('BugList', () => {
       bug({ id: 'nobody', number: 3, title: 'Typo on pricing' }),
     ]
     render(<Harness bugs={assigned} selfId="ada" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
+    fireEvent.click(filterButton('Assignee'))
     expect(
       within(screen.getByRole('listbox', { name: 'Assignee' }))
         .getAllByRole('option')
         .map((o) => o.getAttribute('aria-label')),
     ).toEqual(['Anyone', 'Unassigned', 'Me', 'Grace'])
-    fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
+    fireEvent.click(filterButton('Assignee'))
     const rows = () =>
       within(screen.getByRole('listbox', { name: /bugs/i }))
         .getAllByRole('option')
@@ -477,15 +488,72 @@ describe('BugList', () => {
     pickFilter('Assignee', 'Me')
     expect(rows()).toEqual(['#2 Slow search'])
     pickFilter('Assignee', 'Unassigned')
-    expect(screen.getByRole('button', { name: 'Assignee: Unassigned' })).toBeInTheDocument()
+    expect(filterButton('Assignee: Unassigned')).toBeInTheDocument()
     expect(rows()).toEqual(['#3 Typo on pricing'])
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(screen.getByRole('button', { name: 'Assignee' })).not.toHaveAttribute(
-      'aria-expanded',
+    expect(filterButton('Assignee')).not.toHaveAttribute('aria-expanded', 'true')
+    expect(
+      (openFilters(), screen.queryByRole('button', { name: /^Assignee:/ })),
+    ).not.toBeInTheDocument()
+    expect(rows()).toHaveLength(3)
+  })
+
+  it('asks once before sending every bug in view to Claude Code', () => {
+    const onSend = vi.fn()
+    render(<Harness filters={{ ...filters, tab: 'all' }} onSend={onSend} />)
+    const send = () => screen.getByRole('button', { name: 'Send 2 to Claude Code' })
+    fireEvent.click(send())
+    expect(onSend).not.toHaveBeenCalled()
+    expect(screen.getByText(/Start Claude Code on/)).toHaveTextContent(
+      'Start Claude Code on 2 bugs?',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(send())
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Send' }), { key: 'Escape' })
+    expect(screen.queryByText(/Start Claude Code on/)).not.toBeInTheDocument()
+    expect(onSend).not.toHaveBeenCalled()
+    fireEvent.click(send())
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSend).toHaveBeenCalledTimes(1)
+    expect(onSend.mock.calls[0][0]).toHaveLength(2)
+    // The footer only labels the view when it differs from the tab count.
+    expect(screen.queryByText(/in view/)).not.toBeInTheDocument()
+  })
+
+  it('sends a single bug in view without confirming and labels a narrowed view', () => {
+    const onSend = vi.fn()
+    render(<Harness filters={{ ...filters, tab: 'all', severity: 'low' }} onSend={onSend} />)
+    expect(screen.getByText('1 bug in view')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send 1 to Claude Code' }))
+    expect(onSend).toHaveBeenCalledWith([expect.objectContaining({ id: 'resolved' })])
+  })
+
+  it('switches status from the narrow-screen status menu', () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Status: Open' }))
+    const menu = screen.getByRole('menu', { name: 'Status' })
+    const open = within(menu).getByRole('menuitemradio', { name: /^Open/ })
+    expect(open).toHaveAttribute('aria-checked', 'true')
+    expect(open).toHaveFocus()
+    fireEvent.keyDown(open, { key: 'ArrowDown' })
+    const resolved = within(menu).getByRole('menuitemradio', { name: /^Resolved/ })
+    expect(resolved).toHaveFocus()
+    fireEvent.click(resolved)
+    expect(screen.queryByRole('menu', { name: 'Status' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Status: Resolved' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Resolved 1' })).toHaveAttribute(
+      'aria-pressed',
       'true',
     )
-    expect(screen.queryByRole('button', { name: /^Assignee:/ })).not.toBeInTheDocument()
-    expect(rows()).toHaveLength(3)
+  })
+
+  it('shows the open count only on the inactive kind tab', () => {
+    render(<Harness openByKind={{ bug: 1, feature: 3 }} />)
+    expect(screen.getByRole('tab', { name: 'Bugs' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Features 3' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
   })
 
   it('binds the external search ref and clears and blurs on Escape', () => {
@@ -499,7 +567,8 @@ describe('BugList', () => {
       />,
     )
     expect(searchRef.current).toBe(screen.getByRole('searchbox'))
-    expect(searchRef.current).toHaveAttribute('placeholder', 'Search  /')
+    expect(searchRef.current).toHaveAttribute('placeholder', 'Search')
+    expect(searchRef.current?.parentElement?.querySelector('kbd')).toHaveTextContent('/')
     searchRef.current?.focus()
     const shortcut = vi.fn()
     container.addEventListener('keydown', shortcut)
@@ -528,8 +597,13 @@ describe('BugList', () => {
       'aria-selected',
       'true',
     )
-    expect(screen.getByRole('option', { name: '#1 Broken login' })).toHaveClass('bg-accent/8')
-    expect(screen.getByRole('option', { name: '#2 Fixed layout' })).not.toHaveClass('bg-accent/8')
+    expect(screen.getByRole('option', { name: '#1 Broken login' })).toHaveClass(
+      'bg-accent-tint',
+      'shadow-[inset_2px_0_0_var(--accent)]',
+    )
+    expect(screen.getByRole('option', { name: '#2 Fixed layout' })).not.toHaveClass(
+      'bg-accent-tint',
+    )
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
     expect(scrollIntoView.mock.instances[0]).toBe(
       screen.getByRole('option', { name: '#1 Broken login' }),
@@ -545,11 +619,18 @@ describe('BugList', () => {
   it('renders severity, filer, timestamp and muted resolved rows with resolver', () => {
     render(<Harness filters={{ ...filters, tab: 'all' }} />)
     const open = screen.getByRole('option', { name: '#1 Broken login' })
-    expect(within(open).getByTitle('High severity')).toHaveClass('bg-sev-high')
+    const ticks = within(open).getByRole('img', { name: 'High severity' })
+    expect(ticks).toHaveAttribute('title', 'High severity')
+    expect(ticks.querySelectorAll('.bg-sev-high')).toHaveLength(3)
     expect(within(open).getByTitle('Filed by Ada')).toBeInTheDocument()
     expect(open.querySelector('time')).toHaveAttribute('datetime', bugs[0].created_at)
     const resolved = screen.getByRole('option', { name: '#2 Fixed layout' })
-    expect(resolved).toHaveClass('opacity-60')
+    expect(resolved).toHaveAttribute('data-status', 'resolved')
+    expect(within(resolved).getByTitle('Fixed layout')).toHaveClass(
+      'text-ink-3',
+      'after:scale-x-100',
+    )
+    expect(within(open).getByTitle('Broken login')).toHaveClass('text-ink', 'after:scale-x-0')
     expect(within(resolved).getByTitle('Resolved by Ada')).toBeInTheDocument()
     expect(within(resolved).getByLabelText('Resolved')).toBeInTheDocument()
     expect(within(resolved).getByTitle('Filed by Grace')).toBeInTheDocument()
@@ -605,14 +686,17 @@ describe('BugList', () => {
     ])
     const { rerender } = render(<Harness highlightIds={new Set(['open'])} viewersOf={viewersOf} />)
     const row = screen.getByRole('option', { name: '#1 Broken login' })
-    expect(row).toHaveClass('bg-accent/10')
+    expect(row).toHaveAttribute('data-highlighted', 'true')
     expect(viewersOf).toHaveBeenCalledWith('open')
-    expect(within(row).getByTitle('Grace is viewing').firstChild).toHaveClass('ring-success')
     const viewing = within(row).getByLabelText('Currently viewing')
-    expect(viewing.nextElementSibling).toBe(within(row).getByTitle('Filed by Ada'))
-    expect(viewing.previousElementSibling).toBe(row.querySelector('time'))
+    expect(within(row).getByTitle('Grace is viewing')).toBe(viewing)
+    // Viewers sit in the meta column, before the time; the person stays pinned right.
+    expect(viewing.nextElementSibling).toBe(row.querySelector('time'))
+    expect(row.querySelector('time')?.nextElementSibling).toBe(
+      within(row).getByTitle('Filed by Ada'),
+    )
     rerender(<Harness />)
-    expect(row).not.toHaveClass('bg-accent/10')
+    expect(row).not.toHaveAttribute('data-highlighted')
     expect(screen.queryByLabelText('Currently viewing')).not.toBeInTheDocument()
   })
 })

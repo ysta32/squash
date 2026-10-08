@@ -250,28 +250,28 @@ const filterProps = {
 
 describe('export menu', () => {
   it.each([
-    ['CSV', 'csv'],
-    ['Markdown', 'md'],
+    ['Export as CSV', 'csv'],
+    ['Export as Markdown', 'md'],
   ] as const)('calls the export callback for %s', (label, format) => {
     const onExport = vi.fn()
     render(createElement(BugFilters, { ...filterProps, onExport }))
-    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    fireEvent.click(screen.getByRole('button', { name: 'List actions' }))
     fireEvent.click(screen.getByRole('menuitem', { name: label }))
     expect(onExport).toHaveBeenCalledWith(format)
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Export' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'List actions' })).toHaveFocus()
   })
 
   it.each([
-    ['CSV', 'csv', 'text/csv;charset=utf-8'],
-    ['Markdown', 'md', 'text/markdown;charset=utf-8'],
+    ['Export as CSV', 'csv', 'text/csv;charset=utf-8'],
+    ['Export as Markdown', 'md', 'text/markdown;charset=utf-8'],
   ] as const)('downloads %s using the workspace slug and date', (label, extension, mime) => {
     const { click, createObjectURL } = mockDownload()
     vi.setSystemTime(new Date('2026-10-07T12:00:00Z'))
     render(
       createElement(BugFilters, { ...filterProps, bugs: [bug()], workspaceName: 'Acme / Team' }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    fireEvent.click(screen.getByRole('button', { name: 'List actions' }))
     fireEvent.click(screen.getByRole('menuitem', { name: label }))
     const anchor = click.mock.instances[0] as HTMLAnchorElement | undefined
     expect(anchor?.download).toBe(`squash-acme-team-2026-10-07.${extension}`)
@@ -286,12 +286,12 @@ describe('export menu', () => {
 
   it('supports menu keyboard navigation, Escape and outside dismissal', () => {
     render(createElement(BugFilters, filterProps))
-    const trigger = screen.getByRole('button', { name: 'Export' })
+    const trigger = screen.getByRole('button', { name: 'List actions' })
     fireEvent.click(trigger)
-    const csv = screen.getByRole('menuitem', { name: 'CSV' })
+    const csv = screen.getByRole('menuitem', { name: 'Export as CSV' })
     expect(csv).toHaveFocus()
     fireEvent.keyDown(csv, { key: 'ArrowDown' })
-    const markdown = screen.getByRole('menuitem', { name: 'Markdown' })
+    const markdown = screen.getByRole('menuitem', { name: 'Export as Markdown' })
     expect(markdown).toHaveFocus()
     fireEvent.keyDown(markdown, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()

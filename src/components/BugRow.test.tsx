@@ -108,22 +108,23 @@ describe('BugRow', () => {
       )
     }
 
+    // One Avatar (the filer) renders per row render; viewers show as an eye and count.
     onRowRender.mockClear()
     const { rerender } = render(<Parent revision={0} />)
-    expect(onRowRender).toHaveBeenCalledTimes(2)
+    expect(onRowRender).toHaveBeenCalledTimes(1)
 
     rerender(<Parent revision={1} />)
     expect(screen.getByText('Parent revision 1')).toBeInTheDocument()
-    expect(onRowRender).toHaveBeenCalledTimes(2)
+    expect(onRowRender).toHaveBeenCalledTimes(1)
 
     rerender(<Parent revision={2} picked />)
-    expect(onRowRender).toHaveBeenCalledTimes(4)
+    expect(onRowRender).toHaveBeenCalledTimes(2)
     expect(screen.getByLabelText('Picked')).toBeInTheDocument()
 
     const viewers = [...props.viewers, { ...props.viewers[0], user_id: 'grace' }]
     rerender(<Parent revision={3} picked viewers={viewers} />)
-    expect(onRowRender).toHaveBeenCalledTimes(7)
-    expect(screen.getByTitle('Grace is viewing')).toBeInTheDocument()
+    expect(onRowRender).toHaveBeenCalledTimes(3)
+    expect(screen.getByTitle('Ada and Grace are viewing')).toBeInTheDocument()
 
     rerender(
       <Parent
@@ -133,7 +134,7 @@ describe('BugRow', () => {
         bug={{ ...props.bug, title: 'Updated login' }}
       />,
     )
-    expect(onRowRender).toHaveBeenCalledTimes(10)
+    expect(onRowRender).toHaveBeenCalledTimes(4)
     expect(screen.getByRole('option', { name: '#1 Updated login' })).toBeInTheDocument()
   })
 

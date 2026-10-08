@@ -426,14 +426,14 @@ function BugBody({
     <div className="@container h-full min-w-0 overflow-y-auto [scrollbar-gutter:stable]">
       <article
         aria-label={`${KIND_LABEL[bug.kind].one} ${bug.optimistic ? '' : `#${bug.number}`}`.trim()}
-        className="w-full max-w-[760px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[32px] @xl:pt-8 @min-[1200px]:mx-auto sm:pb-16"
+        className="w-full max-w-[808px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[48px] @xl:pt-8 sm:pb-16"
       >
         <header className="border-b border-line pb-6">
           <button
             type="button"
             onClick={onBack}
             title="Back (Esc)"
-            className="t focus-ring -mt-2 mb-2 -ml-3 inline-flex h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-ink-2 hover:bg-surface-3 hover:text-ink md:hidden"
+            className="t focus-ring -mt-2 mb-2 -ml-3 inline-flex h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-ink-2 hover:bg-surface-3 hover:text-ink lg:hidden"
           >
             <ArrowLeft size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
             Back

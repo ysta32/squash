@@ -216,7 +216,7 @@ describe('BulkBar', () => {
   it('exports the selected saved items', () => {
     const onSend = vi.fn()
     const props = setup({ onSend })
-    fireEvent.click(screen.getByRole('button', { name: 'Send 2 to Claude' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send 2 to Claude Code' }))
     expect(onSend).toHaveBeenCalledExactlyOnceWith(props.bugs)
   })
 

@@ -1,25 +1,45 @@
-const TITLE_WIDTHS = ['w-3/5', 'w-2/5', 'w-1/2', 'w-2/3', 'w-1/3', 'w-[45%]']
+import { cn } from '../lib/utils'
 
-export function Skeleton() {
+const TITLE_WIDTHS = ['62%', '44%', '55%', '68%', '40%', '50%']
+
+/** Row geometry shared with BugRow: 36px desktop, 48px on touch, a hairline under each row. */
+export const ROW_BOX =
+  'flex h-[2.5714rem] items-center gap-3 border-b border-line pr-3 pl-4 pointer-coarse:h-[3.4286rem]'
+
+const BLOCK = 'rounded-xs bg-surface-3'
+
+/**
+ * Loading rows that match BugRow exactly (DESIGN.md "States: Loading"): severity ticks, number,
+ * a title bar at 40–70% width, time and avatar. Static blocks with a slow opacity pulse; no
+ * shimmer and no spinner.
+ */
+export function Skeleton({ rows = TITLE_WIDTHS.length }: { rows?: number }) {
   return (
-    <div role="status" aria-label="Loading bugs" className="space-y-px p-1.5">
+    <div role="status" aria-label="Loading bugs">
       <span className="sr-only">Loading bugs…</span>
-      {TITLE_WIDTHS.map((width, index) => (
+      {Array.from({ length: rows }, (_, index) => (
         <div
           key={index}
           aria-hidden="true"
-          className="flex h-11 animate-pulse items-center gap-2.5 rounded-md pl-3 pr-2.5 motion-reduce:animate-none"
-          style={{ animationDelay: `${index * 80}ms` }}
+          className={cn(ROW_BOX, 'animate-skeleton')}
+          style={{ animationDelay: `${index * 90}ms` }}
         >
-          <span className="flex w-3 justify-center">
-            <span className="h-2 w-2 rounded-full bg-fg/[0.07]" />
+          <span className="flex size-[16px] shrink-0 items-center justify-center gap-[2px]">
+            {[0, 1, 2, 3].map((tick) => (
+              <span key={tick} className={cn('h-[8px] w-[2px]', BLOCK)} />
+            ))}
           </span>
-          <span className="h-2.5 w-7 rounded-sm bg-fg/[0.07]" />
+          <span className="flex w-[4ch] shrink-0 justify-end font-mono text-xs">
+            <span className={cn('h-2.5 w-[3ch]', BLOCK)} />
+          </span>
           <span className="min-w-0 flex-1">
-            <span className={`block h-2.5 rounded-sm bg-fg/[0.07] ${width}`} />
+            <span
+              className={cn('block h-2.5', BLOCK)}
+              style={{ width: TITLE_WIDTHS[index % TITLE_WIDTHS.length] }}
+            />
           </span>
-          <span className="h-2.5 w-8 rounded-sm bg-fg/[0.07]" />
-          <span className="h-5 w-5 rounded-full bg-fg/[0.07]" />
+          <span className={cn('h-2.5 w-[3ch] font-mono text-xs', BLOCK)} />
+          <span className="size-[20px] shrink-0 rounded-full bg-surface-3" />
         </div>
       ))}
     </div>

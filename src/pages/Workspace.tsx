@@ -5,17 +5,31 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Search, SquarePen, UserRound } from 'lucide-react'
+import {
+  ArrowLeft,
+  Lock,
+  MousePointerClick,
+  Search,
+  SearchX,
+  SquarePen,
+  UserRound,
+} from 'lucide-react'
 import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
 import { BugList } from '../components/BugList'
 import { CaptureBar } from '../components/CaptureBar'
 import { Header } from '../components/Header'
 import { InviteDialog } from '../components/InviteDialog'
-import { ReconnectingPill } from '../components/ReconnectingPill'
+import { ConnectionStatus } from '../components/ConnectionStatus'
+import { HINT_ROW, StatePanel } from '../components/EmptyState'
+import { PaneSplitter } from '../components/PaneSplitter'
+import { useListWidth } from '../lib/listWidth'
+import { Skeleton } from '../components/Skeleton'
+import { Button, ButtonLink, Kbd } from '../components/ui'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, sortBugs, useBugs } from '../hooks/useBugs'
@@ -54,8 +68,12 @@ async function lastAssigner(bugId: string, userId: string): Promise<string | nul
   return data?.actor_id ?? null
 }
 
+/**
+ * List and detail sit side by side from 1024px (Tailwind `lg`); below that the workspace is one
+ * pane at a time (list → detail), so nothing is squeezed at tablet widths.
+ */
 function isDesktop(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches
+  return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches
 }
 
 export default function Workspace() {
@@ -285,6 +303,7 @@ export default function Workspace() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+  const [listWidth, setListWidth] = useListWidth()
   const captureRef = useRef<HTMLTextAreaElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -788,27 +807,32 @@ export default function Workspace() {
 
   if (ws.notFound) {
     return (
-      <main
-        id="main"
-        tabIndex={-1}
-        className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-fg"
-      >
-        <p className="text-sm">You&apos;re not a member of this workspace</p>
-        <Link to="/app" className="text-sm text-accent underline-offset-4 hover:underline">
-          Go to your workspaces
-        </Link>
+      <main id="main" tabIndex={-1} className="min-h-screen bg-bg text-ink">
+        <div className="mx-auto max-w-[40rem] pt-[18vh]">
+          <StatePanel
+            icon={Lock}
+            title="You're not a member of this workspace"
+            body="Ask a teammate for an invite link, or open one of your own workspaces."
+            action={
+              <ButtonLink to="/app" variant="secondary" size="sm">
+                Go to your workspaces
+              </ButtonLink>
+            }
+          />
+        </div>
       </main>
     )
   }
 
   if (!ws.workspace) {
     return (
-      <div role="status" aria-label="Loading workspace" className="min-h-screen bg-bg">
+      <div role="status" aria-label="Loading workspace" className="paper-grain flex h-dvh flex-col">
         <span className="sr-only">Loading…</span>
-        <div className="h-12 border-b border-border" />
-        <div className="mx-auto mt-4 max-w-3xl space-y-3 px-4">
-          <div className="h-20 animate-pulse rounded-lg bg-bg-subtle" />
-          <div className="h-10 animate-pulse rounded-lg bg-bg-subtle" />
+        <div className="h-[3.4286rem] shrink-0 border-b border-line" />
+        <div className="h-[4rem] shrink-0 border-b border-line" />
+        <div className="min-h-0 flex-1 bg-surface-1 lg:w-[440px] lg:border-r lg:border-line">
+          <div className="h-[6.2857rem] border-b border-line" />
+          <Skeleton />
         </div>
       </div>
     )
@@ -817,7 +841,7 @@ export default function Workspace() {
   const workspace = ws.workspace
 
   let detail: ReactNode
-  if (selected || !hasNumberParam) {
+  if (selected) {
     detail = (
       <BugDetail
         bug={selected}
@@ -833,34 +857,59 @@ export default function Workspace() {
         resolveRequest={resolveRequest}
         reopenRequest={reopenRequest}
         onToast={toast}
-        onRetryUploads={selected ? () => void retryUploads(selected.id) : undefined}
+        onRetryUploads={() => void retryUploads(selected.id)}
         onSend={(bug) => claude.sendBugs([bug])}
         onCopy={(bug) => claude.copyBugs([bug])}
-        claudeRun={selected && !selected.optimistic ? claude.runs.get(selected.number) : undefined}
+        claudeRun={!selected.optimistic ? claude.runs.get(selected.number) : undefined}
+      />
+    )
+  } else if (!hasNumberParam) {
+    const one = filters.kind === 'feature' ? 'feature request' : 'bug'
+    detail = (
+      <StatePanel
+        inset="deep"
+        icon={MousePointerClick}
+        title={`No ${one} open`}
+        body={`Pick a ${one} from the list to read it, mark it up or send it to Claude Code.`}
+        hints={
+          <ul aria-label="Shortcuts">
+            <li className={HINT_ROW}>
+              <span className="flex gap-1">
+                <Kbd>J</Kbd>
+                <Kbd>K</Kbd>
+              </span>
+              Move through the list
+            </li>
+            <li className={HINT_ROW}>
+              <Kbd>N</Kbd> File a new {one}
+            </li>
+            <li className={HINT_ROW}>
+              <Kbd>?</Kbd> All shortcuts
+            </li>
+          </ul>
+        }
       />
     )
   } else if (notFound) {
     detail = (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-        <p className="text-sm font-medium text-fg">Bug #{numberParam} not found</p>
-        <p className="text-sm text-muted">
-          It may have been deleted, or the link is from another workspace.
-        </p>
-        <button
-          type="button"
-          onClick={deselect}
-          className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-md text-sm text-accent hover:underline"
-        >
-          <ArrowLeft size={14} aria-hidden="true" /> Back to list
-        </button>
-      </div>
+      <StatePanel
+        inset="deep"
+        icon={SearchX}
+        title={`Bug #${numberParam} not found`}
+        body="It may have been deleted, or the link is from another workspace."
+        action={
+          <Button variant="secondary" size="sm" onClick={deselect}>
+            <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" /> Back to list
+          </Button>
+        }
+      />
     )
   } else {
     detail = <BugDetailSkeleton />
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-bg text-fg">
+    <div className="paper-grain flex h-dvh flex-col text-ink">
       <a
         href="#main"
         onClick={() => document.getElementById('main')?.focus()}
@@ -878,32 +927,30 @@ export default function Workspace() {
         onShowShortcuts={() => setShortcutsOpen(true)}
         role={ws.role}
       />
+      <ConnectionStatus />
       <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
         <h1 className="sr-only">{workspace.name}</h1>
         <section
           aria-label="File a bug"
           className={cn(
-            'sticky top-0 z-10 border-b border-border bg-bg p-3',
-            showDetail && 'hidden md:block',
+            'relative z-20 shrink-0 border-b border-line px-3 py-2.5 sm:px-4',
+            showDetail && 'hidden lg:block',
           )}
         >
-          <div className="mx-auto max-w-5xl">
-            <CaptureBar
-              workspaceId={workspaceId}
-              onSubmit={fileAndSelect}
-              kind={filters.kind}
-              onToast={toast}
-              focusRef={captureRef}
-            />
-          </div>
+          {/* Full width of list + detail (DESIGN.md "App shell"); the bar styles itself. */}
+          <CaptureBar
+            workspaceId={workspaceId}
+            onSubmit={fileAndSelect}
+            kind={filters.kind}
+            onToast={toast}
+            focusRef={captureRef}
+          />
         </section>
-        <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)]">
-          <div
-            className={cn(
-              'h-full min-h-0 md:block md:border-r md:border-border',
-              showDetail && 'hidden',
-            )}
-          >
+        <div
+          className="min-h-0 flex-1 lg:grid lg:grid-cols-[var(--list-w)_1px_minmax(0,1fr)]"
+          style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+        >
+          <div id="bug-list-pane" className={cn('h-full min-h-0 lg:block', showDetail && 'hidden')}>
             <BugList
               bugs={sorted}
               workspaceName={ws.workspace?.name}
@@ -935,9 +982,15 @@ export default function Workspace() {
               claudeRuns={claude.runs}
             />
           </div>
+          <PaneSplitter
+            width={listWidth}
+            onWidth={setListWidth}
+            controls="bug-list-pane"
+            className="hidden lg:block"
+          />
           <div
             className={cn(
-              'h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto md:block',
+              'h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] lg:block',
               !showDetail && 'hidden',
             )}
           >
@@ -967,7 +1020,6 @@ export default function Workspace() {
         pending={claude.pending}
         onSendPending={() => claude.sendBugs(claude.pending)}
       />
-      <ReconnectingPill />
     </div>
   )
 }

@@ -629,10 +629,10 @@ describe('Workspace', () => {
     act(() => mocks.onRemoteInsert?.(remote))
     expect(screen.getByText('Grace filed #4')).toBeInTheDocument()
     const row = screen.getByRole('option', { name: '#4 Bug number 4' })
-    expect(row).toHaveClass('bg-accent/10')
+    expect(row).toHaveAttribute('data-highlighted', 'true')
     act(() => vi.advanceTimersByTime(5000))
     expect(screen.queryByText('Grace filed #4')).toBeNull()
-    expect(row).not.toHaveClass('bg-accent/10')
+    expect(row).not.toHaveAttribute('data-highlighted')
   })
 
   it('I assigns the selected bug to me, and unassigns it when it is already mine', () => {

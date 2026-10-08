@@ -99,6 +99,20 @@ const STATES = {
       await page.getByText('No matches', { exact: true }).waitFor({ timeout: SHORT })
     },
   },
+  'filter-popover': {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: /^Filter(,|$)/ }).click({ timeout: SHORT })
+      await page.getByRole('dialog', { name: 'Filters' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'list-actions': {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'List actions' }).click({ timeout: SHORT })
+      await page.getByRole('menu', { name: 'List actions' }).waitFor({ timeout: SHORT })
+    },
+  },
   'empty-workspace': {
     path: '/app/ws-side',
     run: (page) => page.getByRole('textbox', { name: /^Describe the/ }).waitFor({ timeout: SHORT }),

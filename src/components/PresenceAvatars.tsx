@@ -25,10 +25,10 @@ export function PresenceAvatars({ online, members, selfId }: PresenceAvatarsProp
   const label = `${others.length} online: ${names}`
 
   return (
-    <div className="mr-1 flex items-center gap-2.5">
+    <div className="mr-1 flex items-center gap-2.5 sm:mr-2 sm:gap-3">
       <div role="group" aria-label={label} title={label} className="flex items-center">
         <span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-success sm:mr-2" />
-        <span aria-hidden="true" className="text-xs font-medium text-muted tabular-nums sm:hidden">
+        <span aria-hidden="true" className="font-mono text-xs text-ink-2 tabular-nums sm:hidden">
           {others.length}
         </span>
         <div className="hidden items-center -space-x-0.5 sm:flex">
@@ -45,14 +45,14 @@ export function PresenceAvatars({ online, members, selfId }: PresenceAvatarsProp
           {hidden.length > 0 && (
             <span
               title={hidden.map((m) => m.profile.display_name).join(', ')}
-              className="relative inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-bg-subtle px-1 text-[10px] font-semibold text-muted tabular-nums ring-2 ring-bg"
+              className="relative inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-surface-3 px-1 font-mono text-label text-ink-2 tabular-nums ring-2 ring-bg"
             >
               +{hidden.length}
             </span>
           )}
         </div>
       </div>
-      <span aria-hidden="true" className="h-5 w-px bg-border" />
+      <span aria-hidden="true" className="h-4 w-px bg-line-2" />
     </div>
   )
 }
