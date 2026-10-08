@@ -14,7 +14,7 @@ import { relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer } from 'vite'
-import { renderFixtures } from '../screenshots/render-fixtures.mjs'
+import { fixturesDir, renderFixtures } from '../screenshots/render-fixtures.mjs'
 
 const DEFAULT_ROUTES = [
   'public:/',
@@ -176,6 +176,43 @@ const STATES = {
         .getByRole('button', { name: 'Delete bug', exact: true })
         .click({ timeout: SHORT })
       await page.getByRole('button', { name: 'Dismiss notification' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'toast-action': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByText('#24').first().waitFor({ timeout: SHORT })
+      await page.keyboard.press('i')
+      await page.getByRole('button', { name: 'Undo', exact: true }).waitFor({ timeout: SHORT })
+    },
+  },
+  'claude-setup': {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.keyboard.type('Set up Claude Code')
+      await page.keyboard.press('Enter')
+      await page.getByRole('dialog', { name: 'Connect Claude Code' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'invite-regenerate': {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Invite', exact: true }).click({ timeout: SHORT })
+      const dialog = page.getByRole('dialog', { name: 'Invite people' })
+      await dialog.getByRole('button', { name: 'Regenerate' }).click({ timeout: SHORT })
+      await dialog.getByRole('button', { name: 'Yes, regenerate' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'capture-staged': {
+    path: WS,
+    run: async (page) => {
+      const box = page.getByRole('textbox', { name: /^Describe the/ })
+      await box.click({ timeout: SHORT })
+      await box.fill(`${SAMPLE_DESCRIPTION} on https://shop.example.com/checkout`)
+      await page.getByTestId('file-input').setInputFiles(`${fixturesDir}checkout-desktop.png`)
+      await page.getByRole('button', { name: /^Mark up/ }).waitFor({ timeout: SHORT })
     },
   },
   'settings-profile': settingsState('profile'),

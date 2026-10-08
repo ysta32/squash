@@ -7,9 +7,9 @@ import {
   Lightbulb,
   Search,
   Settings2,
-  Share,
+  Download,
+  ListFilter,
   SlidersHorizontal,
-  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { useOverlayOpen } from '../hooks/useKeyboard'
@@ -24,12 +24,18 @@ export interface Command {
   keywords?: string[]
   /** Leading icon; defaults to the icon of the command's group. */
   icon?: LucideIcon
+  /**
+   * Accession number such as "#24" that the label starts with. It replaces the icon and is set
+   * in a fixed mono column so bug titles line up.
+   */
+  accession?: string
   run: () => void
 }
 
 const GROUP_ICON: Record<string, LucideIcon> = {
-  Actions: Zap,
-  Export: Share,
+  Actions: CornerDownLeft,
+  Navigate: ListFilter,
+  Export: Download,
   Bugs: Bug,
   Features: Lightbulb,
   'Switch workspace': ArrowLeftRight,
@@ -40,6 +46,12 @@ const GROUP_ICON: Record<string, LucideIcon> = {
 
 function commandIcon(command: Command): LucideIcon {
   return command.icon ?? GROUP_ICON[command.group] ?? CornerDownLeft
+}
+
+/** The label without its leading accession number, or null when the command has none. */
+function accessionTitle(command: Command): string | null {
+  const prefix = command.accession ? `${command.accession} ` : null
+  return prefix && command.label.startsWith(prefix) ? command.label.slice(prefix.length) : null
 }
 
 export interface CommandPaletteProps {
@@ -178,7 +190,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
         onMouseDown={(e) => {
           if (e.target !== inputRef.current) e.preventDefault()
         }}
-        className="w-full max-w-160 overflow-hidden rounded-xl border border-line bg-surface-2/80 text-ink shadow-elev-3 backdrop-blur-lg backdrop-saturate-150 transition-[opacity,transform] duration-(--dur-emphasis) ease-out starting:translate-y-1 starting:opacity-0"
+        className="w-full max-w-160 overflow-hidden rounded-xl border border-line bg-surface-2/92 text-ink shadow-elev-3 backdrop-blur-lg backdrop-saturate-150 transition-[opacity,transform] duration-(--dur-emphasis) ease-out starting:translate-y-1 starting:opacity-0"
       >
         <div className="flex h-12 items-center gap-3 border-b border-line px-4">
           <Search
@@ -240,6 +252,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                   const i = index
                   const selected = i === activeIndex
                   const Icon = commandIcon(command)
+                  const title = accessionTitle(command)
                   return (
                     <div
                       key={command.id}
@@ -256,14 +269,25 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                         selected ? 'bg-ink/6 text-ink before:bg-accent' : 'text-ink',
                       )}
                     >
-                      <Icon
-                        aria-hidden="true"
-                        size={16}
-                        absoluteStrokeWidth
-                        strokeWidth={1.5}
-                        className={cn('shrink-0', selected ? 'text-ink' : 'text-ink-3')}
-                      />
-                      <span className="min-w-0 flex-1 truncate">{command.label}</span>
+                      {title !== null ? (
+                        <>
+                          <span className="min-w-[4ch] shrink-0 text-right font-mono font-medium text-ink-3 nums">
+                            {command.accession}
+                          </span>{' '}
+                          <span className="min-w-0 flex-1 truncate">{title}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icon
+                            aria-hidden="true"
+                            size={16}
+                            absoluteStrokeWidth
+                            strokeWidth={1.5}
+                            className={cn('shrink-0', selected ? 'text-ink' : 'text-ink-3')}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{command.label}</span>
+                        </>
+                      )}
                       {command.hint && <Kbd className="ml-auto shrink-0">{command.hint}</Kbd>}
                     </div>
                   )
@@ -282,9 +306,6 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
           </span>
           <span className="flex items-center gap-1.5">
             <Kbd>↵</Kbd> run
-          </span>
-          <span className="ml-auto flex items-center gap-1.5">
-            <Kbd>Esc</Kbd> close
           </span>
         </div>
       </div>

@@ -231,9 +231,9 @@ describe('CaptureBar', () => {
   it('severity control shows the label, picks from its menu, and resets after filing', async () => {
     const { onSubmit, box } = setup()
     const send = screen.getByRole('button', { name: 'File bug' })
-    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('aria-disabled', 'true')
     fireEvent.change(box, { target: { value: 'x' } })
-    expect(send).toBeEnabled()
+    expect(send).not.toHaveAttribute('aria-disabled')
     fireEvent.click(screen.getByRole('button', { name: 'Severity: Medium' }))
     fireEvent.click(screen.getByRole('option', { name: /High/ }))
     expect(screen.getByRole('button', { name: 'Severity: High' })).toBeInTheDocument()
@@ -251,7 +251,7 @@ describe('CaptureBar', () => {
     Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
     fireEvent.change(input, { target: { files: [ok, big] } })
     // The size error shows inline at the bar, not as a toast.
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('status')).toHaveTextContent(
       'Screenshot not added: the file is over 5 MB. Try a smaller crop.',
     )
     expect(onToast).not.toHaveBeenCalled()
@@ -259,7 +259,43 @@ describe('CaptureBar', () => {
     fireEvent.click(screen.getByLabelText('Remove a.png'))
     expect(screen.queryByLabelText('Remove a.png')).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('clears the attach error on dismiss and on the next keystroke', () => {
+    const { box } = setup()
+    const big = new File(['b'], 'big.png', { type: 'image/png' })
+    Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
+    const input = screen.getByTestId('file-input')
+    fireEvent.change(input, { target: { files: [big] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }))
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.change(input, { target: { files: [big] } })
+    expect(screen.getByRole('status')).toHaveTextContent('over 5 MB')
+    fireEvent.change(box, { target: { value: 'x' } })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('falls back to a toast for attach errors while the bar is hidden', () => {
+    const original = HTMLElement.prototype.checkVisibility
+    HTMLElement.prototype.checkVisibility = () => false
+    try {
+      const { onToast } = setup()
+      const big = new File(['b'], 'big.png', { type: 'image/png' })
+      Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [big] } })
+      expect(onToast).toHaveBeenCalledWith(
+        'Screenshot not added: the file is over 5 MB. Try a smaller crop.',
+      )
+    } finally {
+      HTMLElement.prototype.checkVisibility = original
+    }
+  })
+
+  it('an idle File button files nothing', () => {
+    const { onSubmit } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'File bug' }))
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('shows a fixed-width Filing… state while the submit is in flight', async () => {

@@ -57,7 +57,7 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
           onKeyDown={onMenuKey}
           className={cn(
             popoverClass,
-            'absolute top-full right-0 z-30 mt-2 w-64 max-w-[calc(100vw-1.5rem)] p-1',
+            'absolute top-full right-0 z-30 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] p-1',
           )}
         >
           <div className="flex items-center gap-2.5 px-2 py-2">

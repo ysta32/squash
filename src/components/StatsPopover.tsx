@@ -64,7 +64,7 @@ export function StatsPopover({ workspaceId, members }: StatsPopoverProps) {
       aria-label="Team stats"
       className={cn(
         popoverClass,
-        'absolute top-full right-0 z-30 mt-2 w-108 py-2 outline-none max-sm:fixed max-sm:inset-x-3 max-sm:top-13 max-sm:w-auto',
+        'absolute top-full right-0 z-30 mt-1.5 w-108 py-2 outline-none max-sm:fixed max-sm:inset-x-3 max-sm:top-13 max-sm:w-auto',
       )}
     >
       <div className="flex items-baseline justify-between gap-4 px-3 pt-1 pb-3">

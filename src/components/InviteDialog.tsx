@@ -13,6 +13,9 @@ import {
   scrimClass,
 } from './dialogStyles'
 
+/** Full-width 44px buttons on phones; regular height from 480px unless the pointer is coarse. */
+const TOUCH = 'max-[479px]:h-11 max-[479px]:w-full pointer-coarse:h-11'
+
 interface InviteDialogProps {
   workspace: Workspace
   open: boolean
@@ -104,7 +107,8 @@ export function InviteDialog({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className={cn(dialogTitleClass, 'truncate')}>Invite to {workspace.name}</h2>
+            <p className={eyebrowClass}>Workspace · invite</p>
+            <h2 className={cn(dialogTitleClass, 'mt-1 truncate')}>Invite to {workspace.name}</h2>
             <p className="mt-1 text-sm text-ink-2">Anyone with this link can join.</p>
           </div>
           <button type="button" aria-label="Close" onClick={onClose} className={closeButtonClass}>
@@ -147,37 +151,54 @@ export function InviteDialog({
             <p className="text-sm text-ink-2">
               This invalidates the current link and code. Continue?
             </p>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button onClick={() => setConfirming(false)}>Cancel</Button>
-              <Button variant="danger" disabled={busy} onClick={() => void regenerate()}>
+            <div className="mt-3 flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end">
+              {/* Focus lands on the safe choice; the Regenerate button that had it is gone. */}
+              <Button autoFocus onClick={() => setConfirming(false)} className={TOUCH}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={() => void regenerate()}
+                className={TOUCH}
+              >
                 Yes, regenerate
               </Button>
             </div>
           </div>
         ) : (
-          <div className="mt-6 flex flex-wrap items-center gap-2">
+          // Phones stack Copy link, Share, then Regenerate; wider screens put Regenerate on the left
+          // and the actions on the right (secondary before primary).
+          <div className="mt-6 flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:items-center">
             {canRegenerate && onRegenerate && (
-              <Button variant="ghost" onClick={() => setConfirming(true)} className="-ml-3">
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="t focus-ring inline-flex h-11 items-center justify-center gap-1.5 rounded-md text-sm text-ink-3 underline-offset-2 hover:text-ink hover:underline min-[480px]:mr-auto min-[480px]:h-9 min-[480px]:justify-start pointer-coarse:h-11"
+              >
                 <RefreshCw size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
                 Regenerate
+              </button>
+            )}
+            {canShare && (
+              <Button onClick={() => void share()} className={TOUCH}>
+                <Share2 size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                Share
               </Button>
             )}
-            <div className="ml-auto flex gap-2">
-              {canShare && (
-                <Button onClick={() => void share()}>
-                  <Share2 size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-                  Share
-                </Button>
+            <Button
+              data-autofocus
+              variant="primary"
+              onClick={() => void copy()}
+              className={cn(TOUCH, 'min-[480px]:min-w-31')}
+            >
+              {copied ? (
+                <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+              ) : (
+                <Copy size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
               )}
-              <Button variant="primary" onClick={() => void copy()} className="min-w-31">
-                {copied ? (
-                  <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-                ) : (
-                  <Copy size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
-                )}
-                {copied ? 'Copied' : 'Copy link'}
-              </Button>
-            </div>
+              {copied ? 'Copied' : 'Copy link'}
+            </Button>
           </div>
         )}
       </div>

@@ -200,6 +200,7 @@ export function ClaudeSetupDialog({
                   className="min-w-0 flex-1 font-mono text-xs"
                 />
                 <Button
+                  data-autofocus
                   type="button"
                   onClick={() => void copy()}
                   variant={pending.length > 0 ? 'secondary' : 'primary'}

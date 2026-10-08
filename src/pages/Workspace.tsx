@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Search, SquarePen, UserRound } from 'lucide-react'
 import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
 import { BugList } from '../components/BugList'
 import { CaptureBar } from '../components/CaptureBar'
@@ -599,12 +599,29 @@ export default function Workspace() {
     opts,
   )
 
+  const applyFilters = (next: typeof filters) => {
+    // Switching between Bugs and Features starts fresh: no picks, nothing open.
+    if (next.kind !== filters.kind) {
+      clearPicked()
+      setPendingId(null)
+      if (hasNumberParam) {
+        navigate({
+          pathname: basePath,
+          search: writeFilters(new URLSearchParams(search), next).toString(),
+        })
+        return
+      }
+    }
+    setFilters(next)
+  }
+
   const commands: Command[] = [
     {
       id: 'new',
       label: filters.kind === 'feature' ? 'New feature request' : 'New bug',
       group: 'Actions',
       hint: 'N',
+      icon: SquarePen,
       keywords: ['file', 'capture', 'report'],
       run: () => focusInList(captureRef),
     },
@@ -613,6 +630,7 @@ export default function Workspace() {
       label: 'Search',
       group: 'Actions',
       hint: '/',
+      icon: Search,
       keywords: ['find', 'filter'],
       run: () => focusInList(searchRef),
     },
@@ -646,11 +664,37 @@ export default function Workspace() {
             id: 'filter-assigned-me',
             label: 'Show bugs assigned to me',
             group: 'Actions',
+            icon: UserRound,
             keywords: ['assignee', 'mine', 'filter'],
             run: () => setFilters((f) => ({ ...f, assignee: selfId })),
           },
         ]
       : []),
+    ...(
+      [
+        { id: 'nav-bugs', label: 'Show bugs', next: { kind: 'bug' as const }, words: ['kind'] },
+        {
+          id: 'nav-features',
+          label: 'Show feature requests',
+          next: { kind: 'feature' as const },
+          words: ['kind', 'ideas'],
+        },
+        { id: 'nav-open', label: 'Show open', next: { tab: 'open' as const }, words: ['status'] },
+        {
+          id: 'nav-resolved',
+          label: 'Show resolved',
+          next: { tab: 'resolved' as const },
+          words: ['status', 'closed', 'done'],
+        },
+        { id: 'nav-all', label: 'Show all', next: { tab: 'all' as const }, words: ['status'] },
+      ] satisfies { id: string; label: string; next: Partial<typeof filters>; words: string[] }[]
+    ).map(({ id, label, next, words }): Command => ({
+      id,
+      label,
+      group: 'Navigate',
+      keywords: ['filter', 'tab', ...words],
+      run: () => applyFilters({ ...filters, ...next }),
+    })),
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,
       label: `Export visible bugs as ${format === 'csv' ? 'CSV' : 'Markdown'}`,
@@ -670,6 +714,7 @@ export default function Workspace() {
       .map((b): Command => ({
         id: `bug-${b.id}`,
         label: `#${b.number} ${b.title}`,
+        accession: `#${b.number}`,
         group: b.kind === 'feature' ? 'Features' : 'Bugs',
         keywords: [String(b.number)],
         run: () => select(b.id),
@@ -696,6 +741,13 @@ export default function Workspace() {
       group: 'Workspace',
       keywords: ['members', 'share', 'link'],
       run: () => setInviteOpen(true),
+    },
+    {
+      id: 'claude-setup',
+      label: 'Set up Claude Code',
+      group: 'Workspace',
+      keywords: ['claude', 'bridge', 'helper', 'connect'],
+      run: claude.openSetup,
     },
     {
       id: 'claude-guide',
@@ -848,21 +900,7 @@ export default function Workspace() {
               counts={counts}
               openByKind={openByKind}
               filters={filters}
-              onFilters={(next) => {
-                // Switching between Bugs and Features starts fresh: no picks, nothing open.
-                if (next.kind !== filters.kind) {
-                  clearPicked()
-                  setPendingId(null)
-                  if (hasNumberParam) {
-                    navigate({
-                      pathname: basePath,
-                      search: writeFilters(new URLSearchParams(search), next).toString(),
-                    })
-                    return
-                  }
-                }
-                setFilters(next)
-              }}
+              onFilters={applyFilters}
               selectedId={selected?.id ?? null}
               onSelect={select}
               members={ws.members}

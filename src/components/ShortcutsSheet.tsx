@@ -14,6 +14,7 @@ import {
 
 const ALT = isMac ? '⌥' : 'Alt'
 const MOD = isMac ? '⌘' : 'Ctrl'
+const ENTER = isMac ? '↵' : 'Enter'
 
 interface Shortcut {
   keys: string[]
@@ -28,8 +29,8 @@ const COLUMNS: { title: string; items: Shortcut[] }[][] = [
       items: [
         { keys: ['N'], label: 'New bug (focus capture bar)' },
         { keys: [MOD, 'V'], label: 'Paste screenshot and start typing' },
-        { keys: ['↵'], label: 'File bug' },
-        { keys: ['Shift', '↵'], label: 'New line' },
+        { keys: [ENTER], label: 'File bug' },
+        { keys: ['Shift', ENTER], label: 'New line' },
         { keys: [ALT, '1–4'], label: 'Set severity while capturing' },
       ],
     },
@@ -114,7 +115,7 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
       >
         <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6 pb-4">
           <div>
-            <p className={eyebrowClass}>Reference</p>
+            <p className={eyebrowClass}>Reference · keys</p>
             <h2 id="shortcuts-title" className={cn(dialogTitleClass, 'mt-1')}>
               Keyboard shortcuts
             </h2>

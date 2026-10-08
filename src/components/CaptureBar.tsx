@@ -1,7 +1,7 @@
 import { collectEnvContext, extractUrl, sanitizeContext } from '../lib/bugContext'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, RefObject } from 'react'
-import { Camera, ImagePlus, Info, Mic, Paperclip, X } from 'lucide-react'
+import { Camera, CircleAlert, ImagePlus, Info, Mic, Paperclip, X } from 'lucide-react'
 import type { NewBugInput } from '../hooks/useBugs'
 import { useSpeech } from '../hooks/useSpeech'
 import { usePasteImage } from '../hooks/usePasteImage'
@@ -10,7 +10,7 @@ import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 import { fitUnder } from '../lib/annotate'
 import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
-import { cn, randomId } from '../lib/utils'
+import { cn, isMac, randomId } from '../lib/utils'
 import { AttachmentChip } from './AttachmentChip'
 import { AnnotateDialog } from './AnnotateDialog'
 import { SeverityPicker } from './SeverityPicker'
@@ -24,6 +24,9 @@ const MAX_TEXTAREA_PX = 8 * 24
 const ICON_BUTTON =
   't focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink sm:size-9 pointer-coarse:size-11'
 const ICON = { size: 16, absoluteStrokeWidth: true, strokeWidth: 1.5, 'aria-hidden': true } as const
+
+const ENTER_GLYPH = isMac ? '↵' : 'Enter'
+const ENTER_NAME = isMac ? 'Return' : 'Enter'
 
 const TOO_LARGE = 'Screenshot not added: the file is over 5 MB. Try a smaller crop.'
 const TOO_MANY = `Up to ${MAX_FILES} screenshots per bug. The rest weren’t added.`
@@ -142,25 +145,34 @@ export function CaptureBar({
     innerRef.current?.focus()
   }
 
-  const addFiles = useCallback((files: File[]) => {
-    const images = files.filter((f) => f.type.startsWith('image/'))
-    if (images.length === 0) return
-    const accepted: Chip[] = []
-    let tooLarge = false
-    let tooMany = false
-    const room = MAX_FILES - chipsRef.current.length
-    for (const file of images) {
-      if (file.size > MAX_ORIGINAL_BYTES) {
-        tooLarge = true
-      } else if (accepted.length >= room) {
-        tooMany = true
-      } else {
-        accepted.push({ id: randomId(), file, previewUrl: URL.createObjectURL(file) })
+  const addFiles = useCallback(
+    (files: File[]) => {
+      const images = files.filter((f) => f.type.startsWith('image/'))
+      if (images.length === 0) return
+      const accepted: Chip[] = []
+      let tooLarge = false
+      let tooMany = false
+      const room = MAX_FILES - chipsRef.current.length
+      for (const file of images) {
+        if (file.size > MAX_ORIGINAL_BYTES) {
+          tooLarge = true
+        } else if (accepted.length >= room) {
+          tooMany = true
+        } else {
+          accepted.push({ id: randomId(), file, previewUrl: URL.createObjectURL(file) })
+        }
       }
-    }
-    setAttachError(tooLarge ? TOO_LARGE : tooMany ? TOO_MANY : null)
-    if (accepted.length > 0) setChips((prev) => [...prev, ...accepted])
-  }, [])
+      const error = tooLarge ? TOO_LARGE : tooMany ? TOO_MANY : null
+      setAttachError(error)
+      // The bar is hidden on phones while a bug is open; its inline error would go unseen there.
+      const bar = innerRef.current
+      if (error && bar && typeof bar.checkVisibility === 'function' && !bar.checkVisibility()) {
+        onToast?.(error)
+      }
+      if (accepted.length > 0) setChips((prev) => [...prev, ...accepted])
+    },
+    [onToast],
+  )
 
   // Files dragged anywhere over the page drop into the bar (usePasteImage handles the drop), so the
   // bar shows the drop state for the whole drag. A depth count copes with nested enter/leave pairs.
@@ -339,18 +351,24 @@ export function CaptureBar({
   const editingChip = chips.find((chip) => chip.id === editingId)
   const showHint = !canSubmit && !coarse && !focused && !speech.listening && chips.length === 0
   const hasExtras = chips.length > 0 || Boolean(contextUrl) || Boolean(attachError)
+  const expanded = focused || value !== '' || Boolean(interim) || hasExtras
 
   return (
-    // The outer box reserves the one-line height; the bar itself grows over the content below it,
-    // so typing, staging screenshots or the URL chip never push the list down.
-    <div data-workspace={workspaceId} onKeyDown={onKeyDown} className="relative h-27.5 sm:h-13.5">
+    // Below md the bar sits in the flow and grows, pushing content down. From md the outer box
+    // reserves the one-line height and the bar grows over the list below it with more elevation,
+    // so typing, staging screenshots or the URL chip never shift the list.
+    <div data-workspace={workspaceId} onKeyDown={onKeyDown} className="relative md:h-13.5">
       <div
         data-dragging={dragging || undefined}
+        data-expanded={expanded || undefined}
         className={cn(
-          't absolute inset-x-0 top-0 z-20 rounded-lg border bg-surface-2 p-2',
+          't relative rounded-lg border bg-surface-2 p-2 md:absolute md:inset-x-0 md:top-0 md:z-20',
           dragging
             ? 'border-dashed border-accent shadow-elev-2'
-            : 'border-line shadow-elev-1 hover:border-line-2 has-[textarea:focus]:border-focus has-[textarea:focus]:shadow-elev-2',
+            : expanded
+              ? 'border-line-2 shadow-elev-1 md:shadow-elev-2'
+              : 'border-line shadow-elev-1 hover:border-line-2',
+          !dragging && 'has-[textarea:focus]:border-focus',
         )}
       >
         <div
@@ -385,7 +403,10 @@ export function CaptureBar({
                   : `Paste a screenshot or describe the ${kind === 'feature' ? 'feature' : 'bug'}`
               }
               aria-label={`Describe the ${noun}`}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setValue(e.target.value)
+                setAttachError(null)
+              }}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               className="relative block min-h-11 w-full resize-none bg-transparent px-2 py-2.5 text-base leading-6 text-ink outline-none placeholder:text-ink-3 sm:min-h-9 sm:py-1.5"
@@ -491,14 +512,14 @@ export function CaptureBar({
               type="button"
               aria-label={`File ${noun}`}
               aria-busy={filing || undefined}
-              title={`File ${noun} (Enter)`}
-              disabled={!canSubmit}
+              aria-disabled={!canSubmit || undefined}
+              title={canSubmit ? `File ${noun} (${ENTER_NAME})` : 'Type or paste to file'}
               onClick={() => void submit()}
               className={cn(
-                't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border pr-1.5 pl-3.5 text-sm font-medium whitespace-nowrap sm:h-9 pointer-coarse:h-11',
+                't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-medium whitespace-nowrap sm:h-9 sm:pr-1.5 pointer-coarse:h-11 pointer-coarse:pr-3.5',
                 canSubmit || filing
                   ? 'border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong active:translate-y-px'
-                  : 'border-line bg-surface-3 text-ink-2',
+                  : 'cursor-default border-line bg-transparent text-ink-3',
               )}
             >
               {/* Both labels share one grid cell, so the button keeps its width while filing. */}
@@ -510,14 +531,15 @@ export function CaptureBar({
               </span>
               <kbd
                 aria-hidden="true"
+                // The Enter hint is for keyboards: hidden on phones and coarse pointers to save room.
                 className={cn(
-                  'inline-flex h-6 min-w-6 items-center justify-center rounded-sm border px-1 font-mono text-xs leading-none',
+                  'hidden h-6 min-w-6 items-center justify-center rounded-sm border px-1 font-mono text-xs leading-none sm:inline-flex pointer-coarse:hidden',
                   canSubmit || filing
                     ? 'border-accent-fg/40 text-accent-fg'
-                    : 'border-line-2 text-ink-2',
+                    : 'border-line-2 text-ink-3 opacity-50',
                 )}
               >
-                ↵
+                {ENTER_GLYPH}
               </kbd>
             </button>
           </div>
@@ -558,9 +580,26 @@ export function CaptureBar({
                 </button>
               )}
               {attachError && (
-                <p role="alert" className="w-full text-xs text-danger">
-                  {attachError}
-                </p>
+                <div className="flex w-full items-center gap-2 text-xs text-danger">
+                  <CircleAlert
+                    size={14}
+                    absoluteStrokeWidth
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                    className="shrink-0"
+                  />
+                  <p role="status" aria-live="polite" className="min-w-0 flex-1">
+                    {attachError}
+                  </p>
+                  <button
+                    type="button"
+                    aria-label="Dismiss error"
+                    onClick={() => setAttachError(null)}
+                    className="t focus-ring -my-1 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:size-11"
+                  >
+                    <X size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                </div>
               )}
             </div>
           )}

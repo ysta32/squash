@@ -59,7 +59,7 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
           aria-label="Workspaces"
           className={cn(
             popoverClass,
-            'absolute top-full left-0 z-30 mt-2 w-64 max-w-[calc(100vw-1.5rem)] p-1',
+            'absolute top-full left-0 z-30 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] p-1',
           )}
         >
           <div role="none" className="specimen-label px-2 pt-2 pb-1.5">

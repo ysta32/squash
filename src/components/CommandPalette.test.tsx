@@ -85,6 +85,17 @@ describe('CommandPalette', () => {
     expect(input).not.toHaveAttribute('aria-activedescendant')
   })
 
+  it('sets accession numbers in their own column in place of the icon', () => {
+    const cmds: Command[] = [
+      { id: 'b', label: '#24 Checkout hidden', accession: '#24', group: 'Bugs', run: vi.fn() },
+    ]
+    openPalette(cmds)
+    const option = screen.getByRole('option', { name: '#24 Checkout hidden' })
+    expect(within(option).getByText('#24')).toHaveClass('font-mono')
+    expect(within(option).getByText('Checkout hidden')).toBeInTheDocument()
+    expect(option.querySelector('svg')).toBeNull()
+  })
+
   it('ranks prefix matches above substring above subsequence matches', () => {
     const cmds: Command[] = [
       { id: 'a', label: 'Abc sequence', group: 'G', run: vi.fn() },
