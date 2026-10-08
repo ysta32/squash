@@ -165,7 +165,7 @@ export function InviteDialog({
             </div>
           </div>
         ) : (
-          // Same weights as the settings invite row: Copy link and Regenerate are both secondary.
+          // Copy link is the dialog's one primary action; Share and Regenerate stay secondary.
           // Phones stack Copy link, Share, then Regenerate; wider screens put Regenerate on the left.
           <div className={cn(dialogActionsClass, STACK)}>
             {canRegenerate && onRegenerate && (
@@ -183,7 +183,11 @@ export function InviteDialog({
                 Share
               </Button>
             )}
-            <Button onClick={() => void copy()} className={cn(TOUCH, 'min-[480px]:min-w-31')}>
+            <Button
+              variant="primary"
+              onClick={() => void copy()}
+              className={cn(TOUCH, 'min-[480px]:min-w-31')}
+            >
               {copied ? (
                 <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
               ) : (

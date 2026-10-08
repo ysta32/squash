@@ -45,6 +45,8 @@ const DEFAULT_ROUTES = [
   '/app/ws-lumen/settings',
   '/no-such-page',
 ]
+/** Routes that only render signed out (signed in, they redirect), whatever their prefix. */
+const SIGNED_OUT_ONLY = /^\/signin(?:[?#]|$)/
 const FORBIDDEN_PORTS = new Set([5173, 5174, 3000, 5000, 8080])
 
 const args = process.argv.slice(2)
@@ -331,7 +333,8 @@ const STATES = {
     run: async (page) => {
       const field = page.getByRole('textbox', { name: 'Display name' })
       await field.fill('Sam Rivera', { timeout: SHORT })
-      await field.press('Tab')
+      // Blur rather than Tab: the shot is about the tick, not focus on the next control.
+      await field.blur()
       await page.getByRole('status').getByText('Saved').waitFor({ timeout: SHORT })
     },
   },
@@ -471,8 +474,10 @@ try {
         return page
       }
       for (const route of routes) {
-        const signedOut = route.startsWith('public:')
-        const path = signedOut ? route.slice(7) : route
+        const isPublic = route.startsWith('public:')
+        const path = isPublic ? route.slice(7) : route
+        // A signed-in visit to /signin only redirects to the app, so it is always shot signed out.
+        const signedOut = isPublic || SIGNED_OUT_ONLY.test(path)
         for (const width of widths) {
           const page = await open(width, { signedOut })
           await page.goto(origin + path, { waitUntil: 'networkidle' })

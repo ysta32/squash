@@ -8,7 +8,7 @@ export const TOUCH = 'max-sm:min-h-[3.1429rem]'
 
 /** Filled danger action: only used inside a confirm dialog (outlined everywhere else). */
 export const dangerFillClass =
-  't focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-danger px-3.5 text-sm font-medium whitespace-nowrap text-bg hover:opacity-90 disabled:pointer-events-none disabled:bg-surface-3 disabled:text-ink-3'
+  't focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-danger px-3.5 text-sm font-medium whitespace-nowrap text-bg hover:opacity-90 disabled:pointer-events-none disabled:bg-surface-3 disabled:text-ink-3 pointer-coarse:h-[3.1429rem]'
 
 /** Destructive action in a list row: ghost until hovered, in the danger ink so it reads as one. */
 export const dangerGhostClass =

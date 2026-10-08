@@ -61,7 +61,7 @@ function ChooseWorkspace() {
 
 /** Width of the fade at a scrolled edge of the mobile tab strip, and the margin kept around the
  * active tab when it is scrolled into view (so it never sits under a fade). */
-const EDGE_FADE = 24
+const EDGE_FADE = 40
 
 /**
  * The phone-width tab strip scrolls sideways. Keep the active tab fully in view, and fade only
@@ -237,12 +237,12 @@ export default function Settings() {
               data-fade-end={edges.end || undefined}
               className={cn(
                 '-mx-4 overflow-x-auto [scrollbar-width:none] max-md:border-b max-md:border-line sm:-mx-6 md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden',
-                // Fade only an edge with more tabs past it (24px), never a resting first tab.
+                // Fade only an edge with more tabs past it (40px, EDGE_FADE), never a resting first tab.
                 'max-md:[--fade-l:black] max-md:[--fade-r:black] max-md:data-fade-start:[--fade-l:transparent] max-md:data-fade-end:[--fade-r:transparent]',
-                'max-md:[mask-image:linear-gradient(to_right,var(--fade-l),black_24px,black_calc(100%-24px),var(--fade-r))]',
+                'max-md:[mask-image:linear-gradient(to_right,var(--fade-l),black_40px,black_calc(100%-40px),var(--fade-r))]',
               )}
             >
-              <ol className="flex gap-1 px-4 sm:px-6 md:flex-col md:gap-0 md:px-0">
+              <ol className="flex gap-1 px-4 max-md:w-max sm:px-6 md:flex-col md:gap-0 md:px-0">
                 {TABS.map(({ value, label }, index) => {
                   const current = tab === value
                   return (

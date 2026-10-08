@@ -41,7 +41,8 @@ function Step({ n, done, children }: { n: number; done: boolean; children: React
     <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-2 border-t border-line pt-4">
       <span
         className={cn(
-          'flex h-6 items-center font-mono text-xs font-medium nums',
+          // One text-sm line tall, so the number or tick centres on the step's first line.
+          'flex h-[1.4286rem] items-center font-mono text-xs font-medium nums',
           done ? 'text-success' : 'text-ink-3',
         )}
       >
@@ -190,7 +191,7 @@ export function ClaudeSetupDialog({
                   aria-expanded={showInstall}
                   aria-controls={installId}
                   onClick={() => setShowInstall((v) => !v)}
-                  className="t focus-ring -mx-1 -my-0.5 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left font-medium text-ink hover:text-accent pointer-coarse:min-h-[3.1429rem]"
+                  className="t focus-ring -mx-1 -my-0.5 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left font-medium text-ink hover:text-accent pointer-coarse:-my-[0.8571rem] pointer-coarse:min-h-[3.1429rem]"
                 >
                   Helper installed
                   <span className="font-normal text-ink-2">
