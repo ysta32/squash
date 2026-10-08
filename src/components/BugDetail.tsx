@@ -992,7 +992,7 @@ function MenuIcon({ icon: Icon }: { icon: LucideIcon }) {
 
 /** Static placeholder that matches the detail layout: label, title, toolbar, description, shots. */
 export function BugDetailSkeleton() {
-  const block = 'animate-skeleton bg-surface-3'
+  const block = 'animate-skeleton bg-skeleton'
   return (
     <div role="status" aria-label="Loading bug" className="@container h-full min-w-0">
       <span className="sr-only">Loading…</span>
@@ -1212,7 +1212,7 @@ function AttachmentThumb({
           ) : url ? (
             <img src={url} alt="" className="h-full w-full object-cover object-left-top" />
           ) : (
-            <span className="absolute inset-0 animate-skeleton bg-surface-3" />
+            <span className="absolute inset-0 animate-skeleton bg-skeleton" />
           )}
         </button>
         <FigureCaption

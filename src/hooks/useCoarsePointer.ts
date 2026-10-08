@@ -9,6 +9,9 @@ function mediaQuery(query: string): MediaQueryList | null {
     : null
 }
 
+/** Any attached pointer is precise (mouse, trackpad, stylus): a laptop, or a tablet with one docked. */
+export const ANY_FINE_POINTER_QUERY = '(any-pointer: fine)'
+
 /** Snapshot of a media query for non-hook callers; false when matchMedia is unavailable. */
 export function matchesMedia(query: string): boolean {
   return mediaQuery(query)?.matches ?? false
@@ -49,4 +52,20 @@ export function isCoarsePointer(): boolean {
  */
 export function useCoarsePointer(): boolean {
   return useMediaQuery(COARSE_POINTER_QUERY)
+}
+
+/**
+ * Snapshot: a touch-only device, where the primary pointer is coarse and no precise pointer is
+ * attached at all. Keyboard-only UI (the shortcuts sheet) is a no-op there. A tablet docked to a
+ * keyboard with a trackpad reports a fine pointer, so it keeps its shortcuts.
+ */
+export function isTouchOnly(): boolean {
+  return matchesMedia(COARSE_POINTER_QUERY) && !matchesMedia(ANY_FINE_POINTER_QUERY)
+}
+
+/** Live version of `isTouchOnly`. */
+export function useTouchOnly(): boolean {
+  const coarse = useMediaQuery(COARSE_POINTER_QUERY)
+  const fine = useMediaQuery(ANY_FINE_POINTER_QUERY)
+  return coarse && !fine
 }

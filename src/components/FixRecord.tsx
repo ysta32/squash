@@ -199,7 +199,7 @@ function Comparison({
         fallback={
           <div
             style={props.frameStyle}
-            className="w-full animate-skeleton rounded-lg bg-surface-3"
+            className="w-full animate-skeleton rounded-lg bg-skeleton"
           />
         }
       >

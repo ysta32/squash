@@ -31,6 +31,8 @@
   --surface-1: #fbfaf7;
   --surface-2: #ffffff;
   --surface-3: #ece9e2;
+  /* loading placeholders: one step past --surface-3 so they read on the paper */
+  --skeleton: #e0dcd2;
   --text-1: #1c1b18;
   --text-2: #57534b;
   --text-3: #6e695f;
@@ -63,6 +65,8 @@
   --markup: #e0321c;
   /* warm umber wash: a grey scrim reads as dirty over the paper ground */
   --scrim: rgb(66 52 32 / 0.2);
+  /* bottom sheets on phones: the page behind must clearly step back */
+  --scrim-strong: rgb(42 33 20 / 0.48);
   /* paper grain: ink-colored fractal noise, about 3.5% average opacity */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.11 0 0 0 0 0.106 0 0 0 0 0.094 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
   /* elevation */
@@ -92,6 +96,7 @@
   --surface-1: #1a1917;
   --surface-2: #22211e;
   --surface-3: #2d2b27;
+  --skeleton: #36342f;
   --text-1: #edeae3;
   --text-2: #b5b0a5;
   --text-3: #9a9589;
@@ -115,6 +120,7 @@
   --on-danger: #141412;
   --highlight: #4a4116;
   --scrim: rgb(0 0 0 / 0.6);
+  --scrim-strong: rgb(0 0 0 / 0.72);
   /* slate grain: pale noise, about 2% average opacity */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.92 0 0 0 0 0.89 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
   --elev-1: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 1px 2px rgb(0 0 0 / 0.4);
@@ -188,6 +194,7 @@
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-skeleton: var(--skeleton);
   --color-ink: var(--text-1);
   --color-ink-2: var(--text-2);
   --color-ink-3: var(--text-3);
@@ -214,6 +221,7 @@
   --color-highlight: var(--highlight);
   --color-markup: var(--markup);
   --color-scrim: var(--scrim);
+  --color-scrim-strong: var(--scrim-strong);
   /* temporary aliases: delete after migration */
   --color-fg: var(--text-1);
   --color-muted: var(--text-3);

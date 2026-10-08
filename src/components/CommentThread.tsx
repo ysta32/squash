@@ -97,8 +97,8 @@ export function CommentThread({
       </h2>
       {loading && entries.length === 0 ? (
         <div role="status" aria-label="Loading timeline" className="space-y-3">
-          <div className="h-4 w-1/2 animate-skeleton rounded-sm bg-surface-3" />
-          <div className="h-4 w-1/3 animate-skeleton rounded-sm bg-surface-3" />
+          <div className="h-4 w-1/2 animate-skeleton rounded-sm bg-skeleton" />
+          <div className="h-4 w-1/3 animate-skeleton rounded-sm bg-skeleton" />
         </div>
       ) : entries.length === 0 ? (
         <p className="text-xs text-ink-3">No activity yet.</p>

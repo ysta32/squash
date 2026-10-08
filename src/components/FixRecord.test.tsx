@@ -352,6 +352,21 @@ describe('before/after slider', () => {
     expect(s).toHaveAttribute('aria-valuetext', '50% before, 50% after')
   })
 
+  it('starts clear of the subject the reporter marked on the before shot', async () => {
+    const before = {
+      ...attachment('a1'),
+      annotations: {
+        v: 1,
+        shapes: [{ type: 'box', color: 'danger', x: 0.35, y: 0.3, w: 0.14, h: 0.2 }],
+      },
+    }
+    show([run({ after_attachment_id: 'a2' })], {}, [before, attachment('a2')])
+    fireEvent.load(await screen.findByAltText('Before the fix'))
+    fireEvent.load(screen.getByAltText('After the fix'))
+    // Right edge 0.49 plus a 4% gap.
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '53')
+  })
+
   it('moves with the arrow, page, Home and End keys', async () => {
     const s = await slider()
     fireEvent.keyDown(s, { key: 'ArrowLeft' })

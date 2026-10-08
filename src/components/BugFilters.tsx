@@ -503,7 +503,7 @@ export function Count({ value, pending = false }: { value: number; pending?: boo
     <span
       aria-hidden="true"
       data-testid="count-pending"
-      className="inline-block h-2.5 w-[2ch] animate-skeleton rounded-xs bg-surface-3 font-mono text-xs"
+      className="inline-block h-2.5 w-[2ch] animate-skeleton rounded-xs bg-skeleton font-mono text-xs"
     />
   ) : (
     <span className="inline-block min-w-[2ch] font-mono text-xs font-normal text-ink-3 tabular-nums">

@@ -59,9 +59,10 @@ function ChooseWorkspace() {
   )
 }
 
-/** Width of the fade at a scrolled edge of the mobile tab strip, and the margin kept around the
- * active tab when it is scrolled into view (so it never sits under a fade). */
-const EDGE_FADE = 40
+/** Width of the fade at a scrolled edge of the mobile tab strip (fully clear for the last 12px, so
+ * a cut-off label dissolves instead of stopping hard), and the margin kept around the active tab
+ * when it is scrolled into view (so it never sits under a fade). Matches the mask below. */
+const EDGE_FADE = 72
 
 /**
  * The phone-width tab strip scrolls sideways. Keep the active tab fully in view, and fade only
@@ -229,63 +230,66 @@ export default function Settings() {
         >
           <div className="min-w-0 md:sticky md:top-24 md:self-start">
             <h1 className="specimen-label text-ink-3 max-md:sr-only md:pb-4">Settings</h1>
-            <nav
-              ref={stripRef}
-              onScroll={onStripScroll}
-              aria-label="Settings tabs"
-              data-fade-start={edges.start || undefined}
-              data-fade-end={edges.end || undefined}
-              className={cn(
-                '-mx-4 overflow-x-auto [scrollbar-width:none] max-md:border-b max-md:border-line sm:-mx-6 md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden',
-                // Fade only an edge with more tabs past it (40px, EDGE_FADE), never a resting first tab.
-                'max-md:[--fade-l:black] max-md:[--fade-r:black] max-md:data-fade-start:[--fade-l:transparent] max-md:data-fade-end:[--fade-r:transparent]',
-                'max-md:[mask-image:linear-gradient(to_right,var(--fade-l),black_40px,black_calc(100%-40px),var(--fade-r))]',
-              )}
-            >
-              <ol className="flex gap-1 px-4 max-md:w-max sm:px-6 md:flex-col md:gap-0 md:px-0">
-                {TABS.map(({ value, label }, index) => {
-                  const current = tab === value
-                  return (
-                    <li key={value} className="shrink-0">
-                      <Link
-                        to={tabHref(value)}
-                        replace
-                        aria-current={current ? 'page' : undefined}
-                        className={cn(
-                          't focus-ring-inset relative flex h-11 items-center gap-2.5 rounded-md px-2 text-sm whitespace-nowrap max-md:min-h-[3.1429rem] md:h-9 pointer-coarse:min-h-[3.1429rem]',
-                          !current && 'text-ink-2 hover:bg-surface-3 hover:text-ink',
-                          current && 'font-medium text-ink',
-                        )}
-                      >
-                        <span
-                          aria-hidden="true"
+            {/* The hairline lives on this wrapper so the strip's edge fade does not eat it. */}
+            <div className="-mx-4 max-md:border-b max-md:border-line sm:-mx-6 md:mx-0">
+              <nav
+                ref={stripRef}
+                onScroll={onStripScroll}
+                aria-label="Settings tabs"
+                data-fade-start={edges.start || undefined}
+                data-fade-end={edges.end || undefined}
+                className={cn(
+                  'overflow-x-auto [scrollbar-width:none] md:overflow-visible [&::-webkit-scrollbar]:hidden',
+                  // Fade only an edge with more tabs past it (72px, EDGE_FADE), never a resting first tab.
+                  'max-md:[--fade-l:black] max-md:[--fade-r:black] max-md:data-fade-start:[--fade-l:transparent] max-md:data-fade-end:[--fade-r:transparent]',
+                  'max-md:[mask-image:linear-gradient(to_right,var(--fade-l)_12px,black_72px,black_calc(100%-72px),var(--fade-r)_calc(100%-12px))]',
+                )}
+              >
+                <ol className="flex gap-1 px-4 max-md:w-max sm:px-6 md:flex-col md:gap-0 md:px-0">
+                  {TABS.map(({ value, label }, index) => {
+                    const current = tab === value
+                    return (
+                      <li key={value} className="shrink-0">
+                        <Link
+                          to={tabHref(value)}
+                          replace
+                          aria-current={current ? 'page' : undefined}
                           className={cn(
-                            'font-mono text-xs nums',
-                            current && value === 'danger'
-                              ? 'text-danger'
-                              : current
-                                ? 'text-accent'
-                                : 'text-ink-3',
+                            't focus-ring-inset relative flex h-11 items-center gap-2.5 rounded-md px-2 text-sm whitespace-nowrap max-md:min-h-[3.1429rem] md:h-9 pointer-coarse:min-h-[3.1429rem]',
+                            !current && 'text-ink-2 hover:bg-surface-3 hover:text-ink',
+                            current && 'font-medium text-ink',
                           )}
                         >
-                          {String(index + 1).padStart(2, '0')}
-                        </span>
-                        {label}
-                        {current && (
                           <span
                             aria-hidden="true"
                             className={cn(
-                              'absolute max-md:inset-x-2 max-md:bottom-0 max-md:h-0.5 md:inset-y-2 md:-left-3 md:w-[2px]',
-                              value === 'danger' ? 'bg-danger' : 'bg-accent',
+                              'font-mono text-xs nums',
+                              current && value === 'danger'
+                                ? 'text-danger'
+                                : current
+                                  ? 'text-accent'
+                                  : 'text-ink-3',
                             )}
-                          />
-                        )}
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ol>
-            </nav>
+                          >
+                            {String(index + 1).padStart(2, '0')}
+                          </span>
+                          {label}
+                          {current && (
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'absolute max-md:inset-x-2 max-md:bottom-0 max-md:h-0.5 md:inset-y-2 md:-left-3 md:w-[2px]',
+                                value === 'danger' ? 'bg-danger' : 'bg-accent',
+                              )}
+                            />
+                          )}
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </nav>
+            </div>
           </div>
           <div className="min-w-0">{content}</div>
         </main>

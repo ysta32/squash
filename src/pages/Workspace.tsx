@@ -57,6 +57,7 @@ import { useAuth } from '../lib/auth'
 import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
+import { isTouchOnly } from '../hooks/useCoarsePointer'
 import { NEXT_THEME, useTheme } from '../lib/theme'
 import type { Bug, BugKind } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
@@ -329,6 +330,11 @@ export default function Workspace() {
   const [assignRequest, setAssignRequest] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // The shortcuts sheet is a keyboard reference: on a touch-only device (no precise pointer, so
+  // almost certainly no hardware keyboard) every way of opening it does nothing.
+  const openShortcuts = useCallback(() => {
+    if (!isTouchOnly()) setShortcutsOpen(true)
+  }, [])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const [listWidth, setListWidth, resetListWidth] = useListWidth()
@@ -669,8 +675,9 @@ export default function Workspace() {
   useShortcut(
     '?',
     (e) => {
+      if (isTouchOnly()) return
       e.preventDefault()
-      setShortcutsOpen(true)
+      openShortcuts()
     },
     opts,
   )
@@ -886,7 +893,7 @@ export default function Workspace() {
       hint: '?',
       keywords: ['keys', 'help'],
       keyboardOnly: true,
-      run: () => setShortcutsOpen(true),
+      run: openShortcuts,
     },
   ]
 
@@ -1029,7 +1036,11 @@ export default function Workspace() {
   }
 
   return (
-    <div className="paper-grain flex h-dvh flex-col text-ink">
+    <div
+      className="paper-grain flex h-dvh flex-col text-ink"
+      // The header lines its right cluster up with the capture bar from 1440px, so both read it.
+      style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+    >
       <a
         href="#main"
         onClick={() => document.getElementById('main')?.focus()}
@@ -1044,16 +1055,11 @@ export default function Workspace() {
         online={presence.online}
         selfId={selfId}
         onInvite={() => setInviteOpen(true)}
-        onShowShortcuts={() => setShortcutsOpen(true)}
+        onShowShortcuts={openShortcuts}
         role={ws.role}
       />
       <ConnectionStatus />
-      <main
-        id="main"
-        tabIndex={-1}
-        className="flex min-h-0 flex-1 flex-col"
-        style={{ '--list-w': `${listWidth}px` } as CSSProperties}
-      >
+      <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
         <h1 className="sr-only">{workspace.name}</h1>
         <section
           aria-label="File a bug"

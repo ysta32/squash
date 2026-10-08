@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import { AlertCircle, ChevronsLeftRight } from 'lucide-react'
 import { useSignedUrlState } from '../hooks/useSignedUrl'
+import { initialSplit } from '../lib/initialSplit'
 import type { BugAttachment } from '../lib/types'
 import { cn } from '../lib/utils'
 
@@ -55,7 +56,7 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
   const afterUrl = useSignedUrlState(after.storage_path)
   const beforeImg = useImageState(beforeUrl.url)
   const afterImg = useImageState(afterUrl.url)
-  const [pos, setPos] = useState(50)
+  const [pos, setPos] = useState(() => initialSplit(before.annotations))
   const [dragging, setDragging] = useState(false)
   /** The one pointer driving the drag; other pointers (a second finger) are ignored. */
   const pointerRef = useRef<number | null>(null)
@@ -196,9 +197,11 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
             className={cn('pointer-events-none absolute inset-0', motion)}
             style={{ transform: `translateX(${pos}%)` }}
           >
+            {/* A 2px light rule with a soft shadow: it holds on light and dark screenshots
+                without the weight of a dark bar. */}
             <span
               aria-hidden="true"
-              className="absolute inset-y-0 left-0 w-px -translate-x-1/2 bg-surface-2 shadow-[0_0_0_1px_var(--border-2)]"
+              className="absolute inset-y-0 left-0 w-[2px] -translate-x-1/2 bg-white shadow-[0_0_0_0.5px_rgb(0_0_0/0.16),0_0_6px_rgb(0_0_0/0.28)]"
             />
             <div
               ref={handleRef}
@@ -211,10 +214,13 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
               aria-valuenow={shown}
               aria-valuetext={`${shown}% before, ${100 - shown}% after`}
               onKeyDown={onKeyDown}
-              className="t focus-ring pointer-events-auto absolute top-1/2 left-0 inline-flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-line-2 bg-surface-2 text-ink shadow-elev-2 pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]"
+              // A small grip low on the rule, clear of the middle of the shot where the subject
+              // usually is. The whole frame takes drags; on touch an invisible ring makes the
+              // grip itself a 44px target.
+              className="t focus-ring pointer-events-auto absolute bottom-3 left-0 inline-flex size-[24px] -translate-x-1/2 cursor-ew-resize items-center justify-center rounded-full bg-white text-[#1c1b18] shadow-[0_0_0_0.5px_rgb(0_0_0/0.16),0_1px_4px_rgb(0_0_0/0.3)] pointer-coarse:after:absolute pointer-coarse:after:-inset-[10px]"
             >
               <ChevronsLeftRight
-                size={16}
+                size={14}
                 strokeWidth={1.5}
                 absoluteStrokeWidth
                 aria-hidden="true"
@@ -227,7 +233,7 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
         <span
           role="status"
           aria-label="Loading the before and after screenshots"
-          className="absolute inset-0 animate-skeleton bg-surface-3"
+          className="absolute inset-0 animate-skeleton bg-skeleton"
         />
       )}
     </div>

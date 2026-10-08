@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import { X } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { Button, ENTER_KEY, Keys, MOD_KEY } from './ui'
 import { cn } from '../lib/utils'
@@ -16,6 +17,9 @@ export interface ResolvePopoverProps {
    */
   placement?: 'below' | 'responsive'
 }
+
+/** How far (px) the phone sheet must be dragged down by its grab bar to close. */
+const DISMISS_DRAG = 64
 
 /** Popover anchored to its (relatively positioned) parent. */
 export function ResolvePopover({
@@ -39,6 +43,25 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
   })
 
   const verb = mode === 'resolve' ? 'Resolve' : 'Reopen'
+  // Phone sheet: dragging its grab bar down past DISMISS_DRAG closes it; a shorter drag springs back.
+  const [drag, setDrag] = useState<{ pointerId: number; startY: number; dy: number } | null>(null)
+
+  function onGrabDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return
+    // jsdom has no pointer capture.
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setDrag({ pointerId: e.pointerId, startY: e.clientY, dy: 0 })
+  }
+  function onGrabMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (drag?.pointerId !== e.pointerId) return
+    setDrag({ ...drag, dy: Math.max(0, e.clientY - drag.startY) })
+  }
+  function onGrabEnd(e: ReactPointerEvent<HTMLDivElement>) {
+    if (drag?.pointerId !== e.pointerId) return
+    const dismiss = e.type === 'pointerup' && Math.max(0, e.clientY - drag.startY) > DISMISS_DRAG
+    setDrag(null)
+    if (dismiss) onCloseRef.current()
+  }
 
   useEffect(() => {
     function onPointerDown(e: MouseEvent) {
@@ -75,24 +98,54 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
   const sheet = placement === 'responsive'
   return (
     <>
-      {/* Phones: a scrim behind the sheet; a tap on it lands outside the dialog and closes it. */}
+      {/* Phones: a firm scrim behind the sheet; a tap on it lands outside the dialog and closes it. */}
       {sheet && (
-        <div aria-hidden="true" className="fixed inset-0 z-30 animate-fade bg-scrim sm:hidden" />
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-30 animate-fade bg-scrim-strong sm:hidden"
+        />
       )}
       <div
         ref={rootRef}
         role="dialog"
         aria-label={`${verb} bug`}
+        style={drag && drag.dy > 0 ? { transform: `translateY(${drag.dy}px)` } : undefined}
         className={cn(
           'panel absolute top-full right-0 z-30 mt-2 w-[320px] max-w-[calc(100vw-2rem)] animate-in p-3',
           sheet &&
-            'max-sm:fixed max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:mt-0 max-sm:w-auto max-sm:max-w-none max-sm:animate-[toast-in_200ms_var(--ease-out)] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-4 max-sm:pt-4 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+            'max-sm:fixed max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:mt-0 max-sm:w-auto max-sm:max-w-none max-sm:animate-[toast-in_200ms_var(--ease-out)] max-sm:rounded-t-xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-4 max-sm:pt-0 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+          sheet && !drag && 'max-sm:transition-transform max-sm:duration-(--dur-standard)',
         )}
       >
         {sheet && (
-          <p aria-hidden="true" className="specimen-label mb-2 text-ink-3 sm:hidden">
-            {mode === 'resolve' ? 'Resolution note' : 'Reopen note'}
-          </p>
+          // Grab bar and title row: drag down to dismiss, or use the X.
+          <div
+            data-testid="sheet-grab"
+            onPointerDown={onGrabDown}
+            onPointerMove={onGrabMove}
+            onPointerUp={onGrabEnd}
+            onPointerCancel={onGrabEnd}
+            className="-mx-4 touch-none px-4 sm:hidden"
+          >
+            <span
+              aria-hidden="true"
+              className="mx-auto mt-2 mb-1 block h-1 w-9 rounded-full bg-line-input/60"
+            />
+            <div className="flex items-center justify-between">
+              <p aria-hidden="true" className="specimen-label text-ink-3">
+                {mode === 'resolve' ? 'Resolution note' : 'Reopen note'}
+              </p>
+              <button
+                type="button"
+                aria-label="Close"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={onClose}
+                className="t focus-ring -mr-3 flex size-[44px] items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink"
+              >
+                <X size={18} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         )}
         <textarea
           data-autofocus

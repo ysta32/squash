@@ -160,11 +160,16 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
                     aria-hidden="true"
                     style={{
                       backgroundColor: value,
+                      ['--swatch' as string]: value,
                       ['--swatch-dark' as string]: avatarDarkColor(value),
                     }}
                     className={cn(
                       't flex size-[2.2857rem] items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgb(28_27_24/0.12)] ring-offset-2 ring-offset-bg outline-offset-[5px] outline-focus group-focus-visible:outline-2 dark:bg-(--swatch-dark)! dark:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.16)]',
-                      selected ? 'ring-2 ring-ink' : 'group-hover:ring-2 group-hover:ring-line-2',
+                      // Selected wears a ring in its own color, so it never reads as the
+                      // (accent, keyboard-only) focus outline.
+                      selected
+                        ? 'ring-2 ring-(--swatch) dark:ring-(--swatch-dark)'
+                        : 'group-hover:ring-2 group-hover:ring-line-2',
                     )}
                   >
                     {selected && (

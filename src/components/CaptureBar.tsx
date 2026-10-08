@@ -659,8 +659,12 @@ export function CaptureBar({
                 't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-medium whitespace-nowrap sm:h-9 sm:pr-1.5 pointer-coarse:h-[3.1429rem] pointer-coarse:pr-3.5',
                 canSubmit || filing
                   ? 'border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong active:translate-y-px'
-                  : // Disabled reads as a quiet secondary control: border-2 and text-2, key cap kept.
-                    'cursor-default border-line-2 bg-transparent text-ink-2',
+                  : !online
+                    ? // Offline it cannot work at all: no outline, a flat sunken fill and faint
+                      // text, so it never reads as tappable.
+                      'cursor-not-allowed border-transparent bg-surface-3 text-ink-3 opacity-70'
+                    : // Empty draft reads as a quiet secondary control: border-2 and text-2, key cap kept.
+                      'cursor-default border-line-2 bg-transparent text-ink-2',
               )}
             >
               {/* Both labels share one grid cell, so the button keeps its width while filing. */}

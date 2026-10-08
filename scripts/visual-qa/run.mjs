@@ -63,7 +63,8 @@ const FIXED_TIME = new Date('2026-10-06T14:30:00Z')
 
 /**
  * Scripted states. `path` is loaded first (with optional mock `delayBugs` ms), then `run` interacts
- * until the state is visible. `run` may return a cleanup. A state whose UI never appears
+ * until the state is visible. `run` may return a cleanup. `pointer: 'fine'` shoots a state only at
+ * mouse-and-keyboard widths, `pointer: 'touch'` only at touch-emulated phone widths. A state whose UI never appears
  * (timeout) is logged as a warning and skipped, never failing the run.
  */
 const searchbox = (page) => page.getByRole('searchbox', { name: /^Search/ })
@@ -90,12 +91,33 @@ const STATES = {
       await page.getByRole('dialog', { name: 'Command palette' }).waitFor({ timeout: SHORT })
     },
   },
+  // The shortcuts sheet is a keyboard reference, so it is only shot where there is a keyboard. At
+  // touch widths the run proves the opposite instead (state:shortcuts-touch).
   shortcuts: {
     path: WS,
+    pointer: 'fine',
     run: async (page) => {
       await searchbox(page).waitFor({ timeout: SHORT })
       await page.keyboard.press('?')
       await page.getByRole('dialog').waitFor({ timeout: SHORT })
+    },
+  },
+  // What a phone user gets from `?` (say, a Bluetooth keyboard on a touch-only phone): nothing.
+  // Fails loudly if the context is not really touch-only or if the sheet opens anyway.
+  'shortcuts-touch': {
+    path: WS,
+    pointer: 'touch',
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      const touchOnly = await page.evaluate(
+        () => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches,
+      )
+      if (!touchOnly) throw new Error('the touch context still reports a fine pointer')
+      await page.keyboard.press('?')
+      await page.waitForTimeout(500)
+      if ((await page.getByRole('dialog').count()) > 0) {
+        throw new Error('? opened a dialog on a touch-only device')
+      }
     },
   },
   invite: {
@@ -198,16 +220,14 @@ const STATES = {
         })
     },
   },
-  // Proof of fix on the resolved #18: the fix record scrolled to the top of the detail pane, its
-  // other runs expanded and the before/after slider moved off centre with the keyboard.
+  // Proof of fix on the resolved #18: the fix record scrolled to the top of the detail pane and its
+  // other runs expanded. The slider is left where it starts: clear of the boxed avatar.
   'fix-record': {
     path: `${WS}/bug/18`,
     run: async (page) => {
       const slider = page.getByRole('slider', { name: /^Before and after/ })
       await slider.waitFor({ timeout: SHORT })
       await page.getByText('2 other runs', { exact: true }).click({ timeout: SHORT })
-      await slider.focus()
-      await slider.press('ArrowLeft')
       for (const alt of ['Before the fix', 'After the fix']) {
         await page
           .getByAltText(alt)
@@ -327,14 +347,19 @@ const STATES = {
   'settings-notifications': settingsState('notifications'),
   'settings-claude': settingsState('claude'),
   'settings-danger': settingsState('danger'),
-  // The inline "Saved" tick after a field autosaves on blur.
+  // The inline "Saved" tick after an autosave: try another avatar color, then go back to Madder,
+  // so the demo identity (Maya Chen, Madder) matches every other shot. The swatch keeps focus from
+  // the click, which must not draw a focus ring (focus-visible only).
   'settings-saved': {
     path: `${WS}/settings?tab=profile`,
     run: async (page) => {
-      const field = page.getByRole('textbox', { name: 'Display name' })
-      await field.fill('Sam Rivera', { timeout: SHORT })
-      // Blur rather than Tab: the shot is about the tick, not focus on the next control.
-      await field.blur()
+      const swatch = (name) => page.getByRole('button', { name: `Avatar color ${name}` })
+      await swatch('Viridian').click({ timeout: SHORT })
+      await page.getByRole('status').getByText('Saved').waitFor({ timeout: SHORT })
+      await swatch('Madder').click({ timeout: SHORT })
+      await page
+        .getByRole('button', { name: 'Avatar color Madder', pressed: true })
+        .waitFor({ timeout: SHORT })
       await page.getByRole('status').getByText('Saved').waitFor({ timeout: SHORT })
     },
   },
@@ -496,6 +521,13 @@ try {
           continue
         }
         for (const width of widths) {
+          const touch = width <= TOUCH_MAX_WIDTH
+          if ((state.pointer === 'fine' && touch) || (state.pointer === 'touch' && !touch)) {
+            console.log(
+              `skip state:${name} @${width}: ${touch ? 'needs a keyboard' : 'touch only'}`,
+            )
+            continue
+          }
           const page = await open(width, { delayBugs: state.delayBugs })
           let cleanup
           try {

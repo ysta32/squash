@@ -67,7 +67,10 @@ export function Header({
   useDismiss(statsRef, closeStats, statsOpen)
 
   return (
-    <header className="flex h-[3.4286rem] shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-3 sm:pr-3 sm:pl-4">
+    // From 1440px the right cluster ends where the capture bar and the detail column do (see the
+    // capture bar in Workspace): the window less the list and the 760px column, halved. Marked
+    // important because Tailwind orders arbitrary min-[…] variants before `sm:`.
+    <header className="flex h-[3.4286rem] shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-3 sm:pr-3 sm:pl-4 min-[1440px]:pr-[max(0.75rem,calc((100%-var(--list-w,0px)-761px)/2))]!">
       <div className="flex min-w-0 items-center">
         <Link
           to="/app"

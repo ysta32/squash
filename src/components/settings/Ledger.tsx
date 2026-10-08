@@ -185,8 +185,8 @@ export function LedgerSkeleton({ rows = 3, label }: { rows?: number; label: stri
     <div role="status" aria-label={label}>
       <span className="sr-only">{label}</span>
       <div aria-hidden="true" className="space-y-3 pb-8">
-        <div className="h-7 w-40 animate-skeleton rounded-sm bg-surface-3" />
-        <div className="h-4 w-72 max-w-full animate-skeleton rounded-sm bg-surface-3" />
+        <div className="h-7 w-40 animate-skeleton rounded-sm bg-skeleton" />
+        <div className="h-4 w-72 max-w-full animate-skeleton rounded-sm bg-skeleton" />
       </div>
       <div aria-hidden="true" className="border-t border-line">
         {Array.from({ length: rows }, (_, index) => (
@@ -195,10 +195,10 @@ export function LedgerSkeleton({ rows = 3, label }: { rows?: number; label: stri
             className="flex items-center justify-between gap-8 border-b border-line py-5"
           >
             <div className="min-w-0 flex-1 space-y-2">
-              <div className="h-4 w-32 animate-skeleton rounded-sm bg-surface-3" />
-              <div className="h-3.5 w-3/5 animate-skeleton rounded-sm bg-surface-3" />
+              <div className="h-4 w-32 animate-skeleton rounded-sm bg-skeleton" />
+              <div className="h-3.5 w-3/5 animate-skeleton rounded-sm bg-skeleton" />
             </div>
-            <div className="h-8 w-24 animate-skeleton rounded-md bg-surface-3" />
+            <div className="h-8 w-24 animate-skeleton rounded-md bg-skeleton" />
           </div>
         ))}
       </div>

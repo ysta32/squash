@@ -73,9 +73,10 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
       aria-modal="true"
       aria-label="Screenshot viewer"
       // One dark glass scrim in both themes: a screenshot reads best on a dim surround.
-      // Phones: the image runs edge to edge from just under the close button, with the caption
-      // and then prev/next right under it, instead of a thin strip floating mid-screen.
-      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] py-16 backdrop-blur-[14px] max-sm:justify-start max-sm:gap-3 max-sm:pt-[76px] max-sm:pb-6 sm:px-20"
+      // Phones: the image runs edge to edge with the caption and then prev/next right under it,
+      // the group centred in the space under the close button (and pinned there, not clipped,
+      // when a tall shot fills it).
+      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] py-16 backdrop-blur-[14px] max-sm:justify-center-safe max-sm:gap-3 max-sm:pt-[76px] max-sm:pb-6 sm:px-20"
       onClick={onClose}
     >
       <button

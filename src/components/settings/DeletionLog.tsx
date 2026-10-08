@@ -31,9 +31,9 @@ export function DeletionLog({
                 aria-hidden="true"
                 className="flex h-12 items-center gap-4 border-b border-line"
               >
-                <span className="h-3 w-8 animate-skeleton rounded-sm bg-surface-3" />
+                <span className="h-3 w-8 animate-skeleton rounded-sm bg-skeleton" />
                 <span
-                  className="h-3 animate-skeleton rounded-sm bg-surface-3"
+                  className="h-3 animate-skeleton rounded-sm bg-skeleton"
                   style={{ width: `${width * 100}%` }}
                 />
               </div>

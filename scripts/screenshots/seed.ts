@@ -263,12 +263,19 @@ const checkoutMarkup = {
   ],
 }
 
+/** The blurry avatar on the settings fixture, boxed by the reporter. */
+const avatarMarkup = {
+  v: 1,
+  shapes: [{ type: 'box', color: 'danger', x: 0.35, y: 0.355, w: 0.14, h: 0.23 }],
+}
+
 export const bug_attachments: BugAttachment[] = [
   attachment(24, 'checkout-desktop.png', 0, 1600, 1000, checkoutMarkup),
   attachment(24, 'checkout-mobile.png', 1, 780, 1400),
   attachment(23, 'chart-labels.png', 0, 2400, 1120),
   attachment(20, 'tooltip-dark.png', 0, 1600, 1000),
-  attachment(18, 'avatar-blurry.png', 0, 1600, 1000),
+  // The reporter boxed the blurry avatar, so the fix record's slider starts clear of it.
+  attachment(18, 'avatar-blurry.png', 0, 1600, 1000, avatarMarkup),
   // The "after" screenshot Claude Code's helper attached to the fix run below.
   attachment(18, 'avatar-sharp.png', 1, 1600, 1000),
 ]

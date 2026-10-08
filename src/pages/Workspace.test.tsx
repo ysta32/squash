@@ -645,6 +645,40 @@ describe('Workspace', () => {
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
   })
 
+  it.each([
+    { pointers: ['(pointer: coarse)'], opens: false, device: 'a touch-only phone' },
+    {
+      pointers: ['(pointer: coarse)', '(any-pointer: fine)'],
+      opens: true,
+      device: 'a tablet with a trackpad',
+    },
+  ])('? on $device opens the shortcut sheet: $opens', ({ pointers, opens }) => {
+    const matchMedia = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: pointers.includes(query),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      show('/app/ws')
+      const event = new KeyboardEvent('keydown', {
+        key: '?',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+      act(() => {
+        document.body.dispatchEvent(event)
+      })
+      expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' }) !== null).toBe(opens)
+      // A no-op leaves the key alone for whatever else wants it.
+      expect(event.defaultPrevented).toBe(opens)
+    } finally {
+      window.matchMedia = matchMedia
+    }
+  })
+
   it('palette Navigate commands on a phone bug detail return to the filtered list', () => {
     show('/app/ws/bug/2')
     const mod = isMac ? { metaKey: true } : { ctrlKey: true }

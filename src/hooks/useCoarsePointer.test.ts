@@ -1,6 +1,13 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { COARSE_POINTER_QUERY, isCoarsePointer, useCoarsePointer } from './useCoarsePointer'
+import {
+  ANY_FINE_POINTER_QUERY,
+  COARSE_POINTER_QUERY,
+  isCoarsePointer,
+  isTouchOnly,
+  useCoarsePointer,
+  useTouchOnly,
+} from './useCoarsePointer'
 
 type Listener = () => void
 
@@ -57,3 +64,26 @@ it('updates when the primary pointer changes and unsubscribes on unmount', () =>
   unmount()
   expect(media.listeners.size).toBe(0)
 })
+
+it.each([
+  { coarse: true, fine: false, touchOnly: true },
+  { coarse: true, fine: true, touchOnly: false },
+  { coarse: false, fine: true, touchOnly: false },
+  { coarse: false, fine: false, touchOnly: false },
+])(
+  'touch-only is coarse=$coarse without any fine pointer (fine=$fine)',
+  ({ coarse, fine, touchOnly }) => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((q: string) => ({
+        matches: q === COARSE_POINTER_QUERY ? coarse : q === ANY_FINE_POINTER_QUERY ? fine : false,
+        media: q,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
+    expect(isTouchOnly()).toBe(touchOnly)
+    const { result } = renderHook(() => useTouchOnly())
+    expect(result.current).toBe(touchOnly)
+  },
+)

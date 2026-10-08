@@ -6,7 +6,7 @@ const TITLE_WIDTHS = ['62%', '44%', '55%', '68%', '40%', '50%']
 export const ROW_BOX =
   'flex h-[2.5714rem] items-center gap-3 border-b border-line pr-3 pl-4 pointer-coarse:h-[3.4286rem]'
 
-const BLOCK = 'rounded-xs bg-surface-3'
+const BLOCK = 'rounded-xs bg-skeleton'
 
 /**
  * Loading rows that match BugRow exactly (DESIGN.md "States: Loading"): severity ticks, number,
@@ -39,7 +39,7 @@ export function Skeleton({ rows = TITLE_WIDTHS.length }: { rows?: number }) {
             />
           </span>
           <span className={cn('h-2.5 w-[3ch] font-mono text-xs', BLOCK)} />
-          <span className="size-[20px] shrink-0 rounded-full bg-surface-3" />
+          <span className="size-[20px] shrink-0 rounded-full bg-skeleton" />
         </div>
       ))}
     </div>
