@@ -60,6 +60,23 @@ describe('build-time facts', () => {
     expect(() => parseShortcuts('nothing here')).toThrow(/no shortcuts/)
   })
 
+  it('maps named key constants to their caps', () => {
+    const source = `[
+  { keys: [SHIFT_KEY, ENTER_KEY], label: 'New line' },
+  { keys: [MOD_KEY, ENTER], label: 'Resolve with note' },
+]`
+    expect(parseShortcuts(source)).toEqual([
+      {
+        keys: [
+          { kind: 'key', label: 'Shift' },
+          { kind: 'key', label: '↵' },
+        ],
+        label: 'New line',
+      },
+      { keys: [{ kind: 'mod' }, { kind: 'key', label: '↵' }], label: 'Resolve with note' },
+    ])
+  })
+
   it('computes facts from this repository', () => {
     const { facts, files } = computeFacts(process.cwd())
     const changelog = readFileSync('CHANGELOG.md', 'utf8')

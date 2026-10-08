@@ -45,8 +45,11 @@ export function parseBudgets(script: string): { entry: number; total: number } {
 
 function parseKey(token: string): FactKey {
   const t = token.trim()
-  if (t === 'MOD') return { kind: 'mod' }
-  if (t === 'ALT') return { kind: 'alt' }
+  // Named key constants used by ShortcutsSheet (src/components/ui/keys.ts).
+  if (t === 'MOD' || t === 'MOD_KEY') return { kind: 'mod' }
+  if (t === 'ALT' || t === 'ALT_KEY') return { kind: 'alt' }
+  if (t === 'ENTER' || t === 'ENTER_KEY') return { kind: 'key', label: '↵' }
+  if (t === 'SHIFT' || t === 'SHIFT_KEY') return { kind: 'key', label: 'Shift' }
   const quoted = /^(['"])(.*)\1$/.exec(t)
   if (!quoted) throw new Error(`facts: unexpected shortcut key ${t}`)
   return { kind: 'key', label: quoted[2] }
