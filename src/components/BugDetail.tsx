@@ -1,5 +1,5 @@
 import { formatContext, sanitizeContext } from '../lib/bugContext'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -764,40 +764,40 @@ function SpecimenLabel({ bug, filer }: { bug: BugWithMeta; filer: string }) {
           </>
         )}
       </p>
-      <p className="px-3 py-1.5 [overflow-wrap:anywhere]">
-        <abbr title="Collected by" className="no-underline">
-          Coll.
-        </abbr>{' '}
-        {filer}
-        {sep}
-        <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
-          {labelDate(bug.created_at)}
-        </time>
+      <div className="px-3 py-1.5">
+        <p className="[overflow-wrap:anywhere]">
+          <abbr title="Collected by" className="no-underline">
+            Coll.
+          </abbr>{' '}
+          {filer}
+          {sep}
+          <time dateTime={bug.created_at} title={new Date(bug.created_at).toLocaleString()}>
+            {labelDate(bug.created_at)}
+          </time>
+        </p>
+        {/* The captured context gets its own line, cut to one line: a URL never wraps the label. */}
         {hasContext && (
-          <>
-            {sep}
-            <span
-              role="group"
-              aria-label="Bug context"
-              title={formatContext(context)}
-              className="inline-block max-w-full truncate align-bottom normal-case"
-            >
-              {context.url && (
-                <a
-                  href={context.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="focus-ring rounded-xs text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink"
-                >
-                  {context.url.replace(/^https?:\/\//, '')}
-                </a>
-              )}
-              {context.url && environment && ' · '}
-              {environment}
-            </span>
-          </>
+          <p
+            role="group"
+            aria-label="Bug context"
+            title={formatContext(context)}
+            className="-m-[4px] truncate p-[4px] normal-case"
+          >
+            {context.url && (
+              <a
+                href={context.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="focus-ring rounded-xs text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink"
+              >
+                {context.url.replace(/^https?:\/\//, '')}
+              </a>
+            )}
+            {context.url && environment && sep}
+            {environment}
+          </p>
         )}
-      </p>
+      </div>
     </div>
   )
 }
@@ -881,27 +881,31 @@ function MoreMenu({ items }: { items: MenuItem[] }) {
           onKeyDown={onKeyDown}
           className="panel absolute right-0 bottom-full z-30 mb-2 w-64 animate-in p-1 sm:top-full sm:bottom-auto sm:mt-1 sm:mb-0"
         >
-          {items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              onClick={() => {
-                setOpen(false)
-                triggerRef.current?.focus()
-                item.onSelect()
-              }}
-              className={cn(
-                menuItemClass,
-                'focus-ring-inset pointer-coarse:h-11',
-                item.danger && 'text-danger hover:text-danger [&>svg]:text-danger',
-                item.className,
-              )}
-            >
-              {item.icon}
-              {item.label}
-            </button>
+          {items.map((item, i) => (
+            <Fragment key={item.key}>
+              {/* A hairline sets the destructive action apart from the rest. */}
+              {item.danger && i > 0 && <div role="separator" className="-mx-1 my-1 h-px bg-line" />}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false)
+                  triggerRef.current?.focus()
+                  item.onSelect()
+                }}
+                className={cn(
+                  menuItemClass,
+                  'focus-ring-inset pointer-coarse:h-11',
+                  // `!`: menuItemClass sets text-ink, which would otherwise win on source order.
+                  item.danger && !item.disabled && 'text-danger! [&>svg]:text-danger!',
+                  item.className,
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            </Fragment>
           ))}
         </div>
       )}

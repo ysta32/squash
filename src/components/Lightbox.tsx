@@ -84,7 +84,7 @@ export function Lightbox({ urls, index, onClose, onIndex, captions }: LightboxPr
               onIndex((safeIndex - 1 + count) % count)
             }}
             title="Previous (←)"
-            className={cn(CHROME_BUTTON, 'top-1/2 left-4 -translate-y-1/2')}
+            className={cn(CHROME_BUTTON, 'left-4', SIDE_NAV)}
           >
             <ChevronLeft size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           </button>
@@ -96,7 +96,7 @@ export function Lightbox({ urls, index, onClose, onIndex, captions }: LightboxPr
               onIndex((safeIndex + 1) % count)
             }}
             title="Next (→)"
-            className={cn(CHROME_BUTTON, 'top-1/2 right-4 -translate-y-1/2')}
+            className={cn(CHROME_BUTTON, 'right-4', SIDE_NAV)}
           >
             <ChevronRight size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           </button>
@@ -109,18 +109,27 @@ export function Lightbox({ urls, index, onClose, onIndex, captions }: LightboxPr
       />
       <p
         onClick={(e) => e.stopPropagation()}
-        className="max-w-full shrink-0 truncate text-center font-mono text-xs tracking-[0.06em] text-white/80 uppercase"
+        className="max-w-full shrink-0 text-center font-mono text-xs tracking-[0.06em] text-balance text-white/80 uppercase [overflow-wrap:anywhere] sm:truncate"
       >
         Fig.{' '}
         <span>
           {safeIndex + 1} / {count}
         </span>
-        {caption && <span className="normal-case"> · {caption}</span>}
+        {/* A no-break space ties each dot to the field before it, so a wrapped line never starts
+            with one. */}
+        {caption && (
+          <span className="normal-case">{`\u00a0· ${caption.replaceAll(' · ', '\u00a0· ')}`}</span>
+        )}
       </p>
     </div>,
     document.body,
   )
 }
+
+/** Prev/next: beside the image from `sm` up; on phones they sit under it, in thumb reach, so they
+ *  never cover the screenshot. */
+const SIDE_NAV =
+  'bottom-[max(1rem,env(safe-area-inset-bottom))] sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2'
 
 const CHROME_BUTTON =
   't focus-ring absolute z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'

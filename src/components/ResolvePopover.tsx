@@ -79,8 +79,9 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
       className={cn(
         'panel absolute z-30 w-80 max-w-[calc(100vw-2rem)] animate-in p-3',
         placement === 'responsive'
-          ? // Phones: the trigger starts at the bar's left edge, so open up and left-aligned.
-            'right-auto bottom-full left-0 mb-2 sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:mt-2 sm:mb-0'
+          ? // Phones: the trigger starts at the bar's left edge (16px gutter), so open up,
+            // left-aligned and as wide as the bar.
+            'right-auto bottom-full left-0 mb-2 max-sm:w-[calc(100vw-2rem)] sm:top-full sm:right-0 sm:bottom-auto sm:left-auto sm:mt-2 sm:mb-0'
           : 'top-full right-0 mt-2',
       )}
     >
@@ -95,17 +96,26 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
         className="t block w-full resize-none rounded-md border border-line-input bg-surface-2 px-2.5 py-2 text-sm leading-relaxed text-ink outline-none placeholder:text-ink-3 focus:border-focus focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       />
       <div className="mt-3 flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={() => confirm(false)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="pointer-coarse:h-11"
+          onClick={() => confirm(false)}
+        >
           {verb} without note
         </Button>
         <Button
           variant="primary"
           size="sm"
+          className="pointer-coarse:h-11"
           onClick={() => confirm(true)}
           title={`${isMac ? '⌘' : 'Ctrl'}+Enter`}
         >
           {verb}
-          <span aria-hidden="true" className="-mr-0.5 font-mono text-[11px] opacity-80">
+          <span
+            aria-hidden="true"
+            className="-mr-0.5 font-mono text-[11px] opacity-80 pointer-coarse:hidden"
+          >
             {isMac ? '⌘↵' : 'Ctrl↵'}
           </span>
         </Button>

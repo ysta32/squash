@@ -132,11 +132,45 @@ const STATES = {
         )
     },
   },
+  // The bug detail scrolls inside its own pane, so a full-page shot never reaches the Claude panel,
+  // timeline and comments; this scrolls that pane to the end first.
+  'detail-timeline': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      const timeline = page.getByRole('list', { name: 'Timeline', exact: true })
+      await timeline.waitFor({ timeout: SHORT })
+      await page
+        .locator('article')
+        .first()
+        .evaluate((article) => {
+          for (let el = article.parentElement; el; el = el.parentElement) el.scrollTop = 1e6
+          window.scrollTo(0, document.documentElement.scrollHeight)
+        })
+    },
+  },
+  'resolve-popover': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Resolve', exact: true }).click({ timeout: SHORT })
+      await page.getByRole('textbox', { name: 'Note', exact: true }).waitFor({ timeout: SHORT })
+    },
+  },
+  'detail-menu': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'More actions' }).click({ timeout: SHORT })
+      await page.getByRole('menu', { name: 'More actions' }).waitFor({ timeout: SHORT })
+    },
+  },
   toast: {
     path: `${WS}/bug/24`,
     run: async (page) => {
       // Resolving shows no toast; deleting does (the mock only changes in this page).
-      await page.getByRole('button', { name: 'Delete bug', exact: true }).click({ timeout: SHORT })
+      // Delete lives in the detail's … menu.
+      await page.getByRole('button', { name: 'More actions' }).click({ timeout: SHORT })
+      await page
+        .getByRole('menuitem', { name: 'Delete bug', exact: true })
+        .click({ timeout: SHORT })
       await page
         .getByRole('dialog')
         .getByRole('button', { name: 'Delete bug', exact: true })
