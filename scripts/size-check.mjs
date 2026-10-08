@@ -7,8 +7,10 @@ import { gzipSync } from 'node:zlib'
 // without it the Supabase client is dead-code-eliminated and the total under-reports what users
 // download by ~55 kB. v2.0.0 baseline (real build): entry 68.8 kB, total JS 258.5 kB gzip.
 // Budgets are ~10% above that, rounded; 1 kB = 1000 bytes. See .orch/DECISIONS.md D-15.
+// v2.0.0 added ~14 lazy marketing/docs routes (1.5–4 kB each, never downloaded together); the
+// total sums every chunk, so it rose to 302 kB while the entry stayed at 71.8 kB (D-16).
 export const BUDGET_ENTRY_KB = 83
-export const BUDGET_TOTAL_KB = 285
+export const BUDGET_TOTAL_KB = 320
 
 /** @param {number} entryBytes @param {number} totalJsBytes */
 export function checkBudgets(entryBytes, totalJsBytes) {
