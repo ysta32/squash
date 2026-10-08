@@ -234,7 +234,8 @@ describe('Settings', () => {
       '04Appearance',
       '05Notifications',
       '06Claude Code',
-      '07Danger zone',
+      '07Recently deleted',
+      '08Danger zone',
     ])
     expect(within(tabs).getByRole('link', { name: /Profile/ })).toHaveAttribute(
       'aria-current',
@@ -244,8 +245,16 @@ describe('Settings', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
     fireEvent.click(within(tabs).getByRole('link', { name: /Workspace/ }))
     expect(screen.getByLabelText('Workspace name')).toHaveValue('My workspace')
+    expect(screen.queryByRole('heading', { name: 'Recently deleted' })).not.toBeInTheDocument()
     fireEvent.click(within(tabs).getByRole('link', { name: /Members/ }))
     expect(screen.getByText('Grace')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
+    expect(screen.getByRole('dialog', { name: 'Invite people' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Invite people' })).not.toBeInTheDocument()
+    fireEvent.click(within(tabs).getByRole('link', { name: /Recently deleted/ }))
+    expect(screen.getByRole('heading', { name: 'Recently deleted' })).toBeInTheDocument()
+    expect(screen.getByText('Nothing has been deleted.')).toBeInTheDocument()
     fireEvent.click(within(tabs).getByRole('link', { name: /Danger zone/ }))
     expect(screen.getByRole('button', { name: 'Delete workspace' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete account' })).toBeInTheDocument()

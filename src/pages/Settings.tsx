@@ -1,7 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { ButtonLink, Logo } from '../components/ui'
+import { ButtonLink, Logo, LogoMark } from '../components/ui'
+import { ThemeToggle } from '../components/Header'
+import { ProfileMenu } from '../components/ProfileMenu'
 import { cn } from '../lib/utils'
 import { useAuth } from '../lib/auth'
 import { useWorkspaces } from '../hooks/useWorkspaces'
@@ -26,6 +28,7 @@ const TABS = [
   { value: 'appearance', label: 'Appearance' },
   { value: 'notifications', label: 'Notifications' },
   { value: 'claude', label: 'Claude Code' },
+  { value: 'deleted', label: 'Recently deleted' },
   { value: 'danger', label: 'Danger zone' },
 ] as const
 
@@ -38,7 +41,7 @@ function toTab(value: string | null): Tab {
 }
 
 /** Tabs that only work with a workspace selected. */
-const NEEDS_WORKSPACE: ReadonlySet<Tab> = new Set(['workspace', 'members', 'claude'])
+const NEEDS_WORKSPACE: ReadonlySet<Tab> = new Set(['workspace', 'members', 'claude', 'deleted'])
 
 function ChooseWorkspace() {
   return (
@@ -129,7 +132,7 @@ export default function Settings() {
         Your profile could not be loaded. Reload the page to try again.
       </p>
     )
-  else if (workspaceId && (tab === 'workspace' || tab === 'members'))
+  else if (workspaceId && (tab === 'workspace' || tab === 'members' || tab === 'deleted'))
     content = <WorkspaceSettings key={workspaceId} workspaceId={workspaceId} section={tab} />
   else if (workspaceId && tab === 'claude')
     content = (
@@ -168,37 +171,56 @@ export default function Settings() {
     <>
       <SkipLink />
       <div className="min-h-dvh text-ink">
-        <header className="sticky top-0 z-20 flex h-12 items-center gap-1.5 border-b border-line px-3 paper-grain max-sm:h-14">
-          <Link
-            to={back}
-            className="t focus-ring -ml-1 flex min-h-11 shrink-0 items-center rounded-md px-1 text-ink"
-            aria-label={workspace ? `Squash, back to ${workspace.name}` : 'Squash home'}
-          >
-            <Logo size={18} />
-          </Link>
-          {workspace && (
-            <>
-              <span aria-hidden="true" className="text-sm text-line-2 select-none">
-                /
+        {/* The app header's height, padding and controls (theme, profile), with its contents on
+            the settings grid so the logo lines up with the section nav on wide screens. */}
+        <header className="sticky top-0 z-20 border-b border-line paper-grain">
+          <div className="mx-auto flex h-[3.4286rem] max-w-[1120px] items-center gap-2 pr-2 pl-3 sm:pr-3 sm:pl-4 lg:px-10">
+            <div className="flex min-w-0 flex-1 items-center">
+              <Link
+                to={back}
+                className="t focus-ring -ml-1 flex h-[2.2857rem] shrink-0 items-center rounded-md px-1 text-base text-ink pointer-coarse:h-[3.1429rem] pointer-coarse:min-w-[3.1429rem] pointer-coarse:justify-center"
+                aria-label={workspace ? `Squash, back to ${workspace.name}` : 'Squash home'}
+              >
+                <span className="inline-flex min-[360px]:hidden">
+                  <LogoMark size={20} />
+                </span>
+                <span className="hidden min-[360px]:inline-flex">
+                  <Logo size={18} />
+                </span>
+              </Link>
+              {workspace && (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="mx-1.5 h-4 w-px shrink-0 rotate-[18deg] bg-line-2 sm:mx-2"
+                  />
+                  <span className="min-w-0 truncate text-sm font-medium text-ink-2">
+                    {workspace.name}
+                  </span>
+                </>
+              )}
+              <span
+                aria-hidden="true"
+                className="mx-1.5 h-4 w-px shrink-0 rotate-[18deg] bg-line-2 sm:mx-2"
+              />
+              <span className="shrink-0 text-sm font-medium text-ink">Settings</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+              <Link
+                to={back}
+                aria-label="Back to workspace"
+                className="t focus-ring inline-flex h-[2.2857rem] shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:h-[3.1429rem]"
+              >
+                <ArrowLeft className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+                <span className="sm:hidden">Back</span>
+                <span className="max-sm:hidden">Back to workspace</span>
+              </Link>
+              <span className="max-sm:hidden">
+                <ThemeToggle />
               </span>
-              <span className="min-w-0 truncate text-sm font-medium text-ink-2">
-                {workspace.name}
-              </span>
-            </>
-          )}
-          <span aria-hidden="true" className="text-sm text-line-2 select-none">
-            /
-          </span>
-          <span className="shrink-0 text-sm font-medium text-ink">Settings</span>
-          <Link
-            to={back}
-            aria-label="Back to workspace"
-            className="t focus-ring ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm text-ink-2 hover:bg-surface-3 hover:text-ink sm:h-8 sm:min-h-0"
-          >
-            <ArrowLeft className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
-            <span className="sm:hidden">Back</span>
-            <span className="max-sm:hidden">Back to workspace</span>
-          </Link>
+              {workspaceId && <ProfileMenu workspaceId={workspaceId} />}
+            </div>
+          </div>
         </header>
         <main
           id="main"
@@ -230,7 +252,7 @@ export default function Settings() {
                         replace
                         aria-current={current ? 'page' : undefined}
                         className={cn(
-                          't focus-ring-inset relative flex h-11 items-center gap-2.5 rounded-md px-2 text-sm whitespace-nowrap max-md:min-h-[3.1429rem] md:h-9',
+                          't focus-ring-inset relative flex h-11 items-center gap-2.5 rounded-md px-2 text-sm whitespace-nowrap max-md:min-h-[3.1429rem] md:h-9 pointer-coarse:min-h-[3.1429rem]',
                           !current && 'text-ink-2 hover:bg-surface-3 hover:text-ink',
                           current && 'font-medium text-ink',
                         )}

@@ -10,6 +10,10 @@ export const TOUCH = 'max-sm:min-h-[3.1429rem]'
 export const dangerFillClass =
   't focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-transparent bg-danger px-3.5 text-sm font-medium whitespace-nowrap text-bg hover:opacity-90 disabled:pointer-events-none disabled:bg-surface-3 disabled:text-ink-3'
 
+/** Destructive action in a list row: ghost until hovered, in the danger ink so it reads as one. */
+export const dangerGhostClass =
+  't focus-ring inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium whitespace-nowrap text-danger select-none hover:border-danger/45 hover:bg-danger/8 disabled:pointer-events-none disabled:text-ink-3 max-sm:min-h-[3.1429rem] pointer-coarse:min-h-[3.1429rem]'
+
 /** Confirm-dialog chrome shared by the danger zone dialogs. */
 export const confirmDialogClass =
   'm-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md animate-dialog overflow-y-auto rounded-xl border border-line bg-surface-2 p-6 text-ink shadow-elev-3 backdrop:bg-scrim'
@@ -44,25 +48,36 @@ export function SettingsPanel({
   )
 }
 
-/** A titled group of ledger rows inside a section, headed by a mono eyebrow. */
+/** A titled group of ledger rows inside a section, headed by a mono eyebrow. An `action` sits at
+ * the end of the eyebrow row, and the row is ruled off from the section header above it. */
 export function LedgerGroup({
   title,
   meta,
+  action,
   children,
   className,
 }: {
   title?: string
   meta?: ReactNode
+  action?: ReactNode
   children: ReactNode
   className?: string
 }) {
+  const heading = title && (
+    <h3 className="specimen-label flex items-baseline gap-2 text-ink-3">
+      {title}
+      {meta !== undefined && <span className="text-ink-3">· {meta}</span>}
+    </h3>
+  )
   return (
     <div className={className}>
-      {title && (
-        <h3 className="specimen-label flex items-baseline gap-2 pb-3 text-ink-3">
-          {title}
-          {meta !== undefined && <span className="text-ink-3">· {meta}</span>}
-        </h3>
+      {action ? (
+        <div className="flex items-center justify-between gap-4 border-t border-line py-3">
+          {heading}
+          {action}
+        </div>
+      ) : (
+        heading && <div className="pb-3">{heading}</div>
       )}
       <div className="border-t border-line">{children}</div>
     </div>

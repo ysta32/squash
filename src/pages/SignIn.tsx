@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
@@ -7,6 +7,17 @@ import { AuthLayout } from '../components/AuthLayout'
 import { ArrowLeft } from 'lucide-react'
 import { Button, Field, Input, proseLinkClass } from '../components/ui'
 import { cn } from '../lib/utils'
+
+/** Loose shape check: something@domain.tld with no spaces. The server has the final say. */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** The inline message for a typed address, or null when it is worth sending. */
+function emailProblem(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return 'Enter your email address.'
+  if (!EMAIL_SHAPE.test(trimmed)) return 'Enter a full email address, like you@company.com.'
+  return null
+}
 
 function GoogleIcon() {
   return (
@@ -43,6 +54,7 @@ export default function SignIn() {
   const [googleBusy, setGoogleBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resent, setResent] = useState(false)
+  const emailRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!loading && session) navigate(next, { replace: true })
@@ -68,8 +80,15 @@ export default function SignIn() {
 
   async function handleMagicLink(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (sending) return
     const trimmed = email.trim()
-    if (!trimmed) return
+    // The button stays enabled; an empty or malformed address is explained inline instead.
+    const problem = emailProblem(trimmed)
+    if (problem) {
+      setError(problem)
+      emailRef.current?.focus()
+      return
+    }
     setError(null)
     setSending(true)
     try {
@@ -174,10 +193,11 @@ export default function SignIn() {
           <div className="h-px flex-1 bg-line" />
         </div>
 
-        <form onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
+        <form noValidate onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
           <Field label="Work email" error={error}>
             {({ id, describedBy }) => (
               <Input
+                ref={emailRef}
                 id={id}
                 type="email"
                 required
@@ -185,7 +205,10 @@ export default function SignIn() {
                 inputMode="email"
                 placeholder="you@company.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (error) setError(null)
+                }}
                 aria-describedby={describedBy}
                 aria-invalid={error ? true : undefined}
                 className="max-sm:min-h-[3.1429rem]"
@@ -196,7 +219,7 @@ export default function SignIn() {
             type="submit"
             variant="primary"
             size="lg"
-            disabled={sending || !email.trim()}
+            aria-busy={sending || undefined}
             className="w-full"
           >
             {sending ? 'Sending link…' : 'Email me a link'}

@@ -67,7 +67,7 @@ export function AppearanceSettings() {
           <fieldset
             role="radiogroup"
             aria-label="Color scheme"
-            className="grid w-full grid-cols-2 gap-2 sm:grid-cols-5"
+            className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
           >
             {COLOR_SCHEMES.map((value) => {
               const info = SCHEME_INFO[value]
@@ -88,7 +88,7 @@ export function AppearanceSettings() {
                   />
                   <span
                     className={cn(
-                      't flex h-[3.1429rem] items-center gap-2.5 rounded-md border px-3 text-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus',
+                      't flex h-[3.1429rem] min-w-0 items-center gap-2.5 rounded-md border px-3.5 text-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus',
                       selected
                         ? 'border-ink bg-surface-2 font-medium text-ink'
                         : 'border-line-2 text-ink-2 hover:border-line-input hover:text-ink',

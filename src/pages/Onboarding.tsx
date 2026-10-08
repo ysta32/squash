@@ -6,6 +6,7 @@ import { inviteUrl, setLastWorkspace, useWorkspaces } from '../hooks/useWorkspac
 import { Button, Field, Input, Kbd, LogoMark } from '../components/ui'
 import { INVITE_CODE, INVITE_LENGTH, parseInviteInput } from '../lib/inviteCode'
 import type { Workspace } from '../lib/types'
+import { AVATAR_PALETTE } from '../lib/avatarColor'
 import { cn, isMac } from '../lib/utils'
 
 const STEPS = ['Name it', 'Invite', 'First bug'] as const
@@ -38,12 +39,25 @@ function Steps({ current }: { current: number }) {
   )
 }
 
+/** Made-up teammates who "arrive" in the invite preview: initials and an avatar ink each. */
+const TEAMMATES = [
+  { initials: 'JE', ink: AVATAR_PALETTE[0] },
+  { initials: 'PR', ink: AVATAR_PALETTE[5] },
+  { initials: 'SK', ink: AVATAR_PALETTE[2] },
+] as const
+
+/** A staggered entrance (transform and opacity only; reduced motion turns it into a short fade). */
+const ARRIVE = 'animate-in [animation-fill-mode:backwards]'
+const delay = (ms: number) => ({ animationDelay: `${ms}ms` })
+
 /**
  * The desktop panel during setup: the workspace being made, as it will look the first time it
- * opens (the name as you type it, the capture bar, an empty ledger waiting for No. 001).
+ * opens. It follows the step: the name as you type it, then teammates arriving in the header once
+ * there is an invite link, then the capture bar in focus and No. 001 stamped into the ledger.
  */
-function WorkspacePreview({ name }: { name: string }) {
+function WorkspacePreview({ name, step = 0 }: { name: string; step?: 0 | 1 | 2 }) {
   const shown = name.trim()
+  const filing = step === 2
   return (
     <AuthPanel
       label="Preview of your new workspace"
@@ -60,10 +74,45 @@ function WorkspacePreview({ name }: { name: string }) {
           <span className={cn('truncate font-medium', shown ? 'text-ink' : 'text-ink-3')}>
             {shown || 'Your workspace'}
           </span>
+          {step >= 1 && (
+            <span className="ml-auto flex shrink-0 items-center gap-2.5">
+              {step === 1 && (
+                <span className={cn(ARRIVE, 'specimen-label text-ink-3')}>Joining</span>
+              )}
+              <span className="flex -space-x-0.5">
+                {TEAMMATES.map(({ initials, ink }, index) => (
+                  <span
+                    key={initials}
+                    style={{
+                      ...delay(60 + index * 90),
+                      backgroundColor: ink.value,
+                      ['--ink-dark' as string]: ink.dark,
+                    }}
+                    className={cn(
+                      ARRIVE,
+                      'flex size-7 items-center justify-center rounded-full font-mono text-[0.7143rem] font-medium text-white ring-2 ring-surface-2 dark:bg-(--ink-dark)!',
+                    )}
+                  >
+                    {initials}
+                  </span>
+                ))}
+              </span>
+            </span>
+          )}
         </div>
         <div className="px-5 pt-5">
-          <div className="flex h-11 items-center gap-3 rounded-md border border-line-input bg-surface-1 px-3.5 text-base text-ink-3">
-            <span className="min-w-0 flex-1 truncate">Paste a screenshot or describe a bug</span>
+          <div
+            className={cn(
+              't flex h-11 items-center gap-3 rounded-md border bg-surface-1 px-3.5 text-base text-ink-3',
+              filing ? 'border-focus ring-3 ring-focus/20' : 'border-line-input',
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">
+              {filing && (
+                <span className="mr-0.5 inline-block h-4 w-px translate-y-0.5 bg-ink motion-safe:animate-pulse" />
+              )}
+              Paste a screenshot or describe a bug
+            </span>
             <Kbd>{isMac ? '⌘V' : 'Ctrl+V'}</Kbd>
           </div>
         </div>
@@ -82,7 +131,14 @@ function WorkspacePreview({ name }: { name: string }) {
             >
               {number}
             </span>
-            {index === 0 ? (
+            {index === 0 && filing ? (
+              <span
+                style={delay(180)}
+                className={cn(ARRIVE, 'truncate text-sm font-medium text-ink')}
+              >
+                Checkout button hidden behind the cookie banner
+              </span>
+            ) : index === 0 ? (
               <span className="text-sm text-ink-2">Your first bug lands here.</span>
             ) : (
               <span
@@ -120,7 +176,7 @@ function InviteStep({ workspace, onNext }: { workspace: Workspace; onNext: () =>
     <AuthLayout
       eyebrow={<Steps current={1} />}
       title="Invite a teammate"
-      aside={<WorkspacePreview name={workspace.name} />}
+      aside={<WorkspacePreview name={workspace.name} step={1} />}
       description={`Anyone with this link can join ${workspace.name}. Bugs are better with two people: one files, one fixes.`}
       footer="You can regenerate the link later in Settings, which turns this one off."
     >
@@ -170,7 +226,7 @@ function FirstBugStep({ workspace }: { workspace: Workspace }) {
     <AuthLayout
       eyebrow={<Steps current={2} />}
       title="File your first bug"
-      aside={<WorkspacePreview name={workspace.name} />}
+      aside={<WorkspacePreview name={workspace.name} step={2} />}
       description={`${workspace.name} is ready. The capture bar sits at the top of the workspace.`}
     >
       <ol className="mb-8 border-t border-line text-sm text-ink-2">

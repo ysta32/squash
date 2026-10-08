@@ -2,9 +2,11 @@ import { DialogHeader } from '../DialogHeader'
 import { nativeDialogClass } from '../dialogStyles'
 import { showModal } from '../showModal'
 import { Button, Field, Input } from '../ui'
+import { cn } from '../../lib/utils'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, UserPlus } from 'lucide-react'
+import { InviteDialog } from '../InviteDialog'
 import { Avatar } from '../Avatar'
 import { DeletionLog } from './DeletionLog'
 import { LAST_WORKSPACE_KEY, inviteUrl, useWorkspace } from '../../hooks/useWorkspaces'
@@ -18,12 +20,13 @@ import {
   SettingsPanel,
   TOUCH,
   dangerFillClass,
+  dangerGhostClass,
 } from './Ledger'
 import { useAutosave } from './useAutosave'
 
-export type WorkspaceSection = 'workspace' | 'members' | 'danger'
+export type WorkspaceSection = 'workspace' | 'members' | 'deleted' | 'danger'
 
-/** One workspace settings section: general (name, invite link, recently deleted), members, or
+/** One workspace settings section: general (name, invite link), members, recently deleted, or
  * the owner's delete-workspace block for the danger zone. */
 export function WorkspaceSettings({
   workspaceId,
@@ -53,6 +56,7 @@ export function WorkspaceSettings({
   const [message, setMessage] = useState<string | null>(null)
   const owner = role === 'owner'
   const [copied, setCopied] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
   /** Which group the last status or error belongs to, so it shows next to its control. */
   const [scope, setScope] = useState<'invite' | 'other'>('other')
   const nameSave = useAutosave(
@@ -230,6 +234,8 @@ export function WorkspaceSettings({
     )
   }
 
+  if (section === 'deleted') return <DeletionLog workspaceId={workspaceId} members={members} />
+
   if (section === 'members') {
     const count = members.length
     return (
@@ -242,7 +248,21 @@ export function WorkspaceSettings({
             : 'Everyone with access to this workspace.'
         }
       >
-        <LedgerGroup title="People" meta={<span className="nums">{count}</span>}>
+        <LedgerGroup
+          title="People"
+          meta={<span className="nums">{count}</span>}
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              className={cn(TOUCH, 'pointer-coarse:min-h-[3.1429rem]')}
+              onClick={() => setInviteOpen(true)}
+            >
+              <UserPlus className="size-3.5" strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
+              Invite
+            </Button>
+          }
+        >
           <ul>
             {members.map((member) => (
               <li
@@ -255,11 +275,10 @@ export function WorkspaceSettings({
                 </span>
                 <span className="specimen-label text-ink-3">{member.role}</span>
                 {owner && member.role !== 'owner' && member.user_id !== workspace.owner_id && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
+                    type="button"
                     disabled={busy}
-                    className={TOUCH}
+                    className={dangerGhostClass}
                     aria-label={`Remove ${member.profile.display_name}`}
                     onClick={() => {
                       if (
@@ -269,13 +288,20 @@ export function WorkspaceSettings({
                     }}
                   >
                     Remove
-                  </Button>
+                  </button>
                 )}
               </li>
             ))}
           </ul>
           {feedback && <div className="pt-4 text-sm">{feedback}</div>}
         </LedgerGroup>
+        <InviteDialog
+          workspace={workspace}
+          open={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          canRegenerate={owner}
+          onRegenerate={regenerateInviteCode}
+        />
       </SettingsPanel>
     )
   }
@@ -404,7 +430,6 @@ export function WorkspaceSettings({
           {scope === 'invite' && feedback && <div className="pt-4 text-sm">{feedback}</div>}
         </LedgerGroup>
       )}
-      <DeletionLog workspaceId={workspaceId} members={members} />
     </SettingsPanel>
   )
 }

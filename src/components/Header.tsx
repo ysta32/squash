@@ -29,7 +29,7 @@ const THEME_ICON = { light: Sun, dark: Moon, system: Monitor }
 const ICON_BTN =
   't focus-ring flex size-[2.2857rem] shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem] [&_svg]:size-4'
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const Icon = THEME_ICON[theme]
   return (

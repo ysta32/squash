@@ -141,7 +141,7 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
           <div
             role="group"
             aria-labelledby="avatar-color-label"
-            className="-mx-1.5 grid w-[calc(100%+0.75rem)] grid-cols-8 sm:flex sm:w-auto"
+            className="-mx-1.5 grid w-[calc(100%+0.75rem)] grid-cols-[repeat(auto-fill,minmax(3.1429rem,1fr))] sm:flex sm:w-auto sm:flex-wrap"
           >
             {AVATAR_PALETTE.map(({ name: colorName, value }) => {
               const selected = shown === value
@@ -152,7 +152,7 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
                   aria-label={`Avatar color ${colorName}`}
                   aria-pressed={selected}
                   title={colorName}
-                  className="group focus-ring flex h-[3.1429rem] items-center justify-center rounded-md sm:w-[3.1429rem]"
+                  className="group focus-ring flex h-[3.1429rem] min-w-[3.1429rem] items-center justify-center rounded-md sm:w-[3.1429rem]"
                   onClick={() => commitColor(value)}
                 >
                   <span

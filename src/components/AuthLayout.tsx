@@ -48,8 +48,9 @@ function SpecimenShot({ sizes, eager = false }: { sizes: string; eager?: boolean
         alt={SHOT_ALT}
         loading={eager ? 'eager' : 'lazy'}
         decoding="async"
-        // The capture is a white page; in the darkroom it is dimmed so it does not glare.
-        className="block aspect-[16/10] h-auto w-full dark:brightness-[0.9]"
+        // The capture is a white page; in the darkroom it is dimmed (the marker stays bright on
+        // top) so it reads as a lit print on a dark desk instead of a glaring window.
+        className="block aspect-[16/10] h-auto w-full dark:brightness-[0.66] dark:saturate-[0.9]"
       />
       <svg
         viewBox="0 0 800 500"
@@ -125,15 +126,15 @@ export function AuthPanel({
   return (
     <aside
       aria-label={label}
-      className="relative hidden min-w-0 overflow-hidden border-l border-line cabinet-light lg:block"
+      className="relative hidden min-w-0 flex-col justify-center overflow-hidden border-l border-line cabinet-light lg:flex"
     >
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 hidden bg-[radial-gradient(90%_70%_at_0%_0%,color-mix(in_oklab,var(--text-1)_7%,transparent),transparent_72%)] dark:block"
       />
       {/* One centred stack, at most 760px of exhibit: the display line and the exhibit share a
-          left edge, and the eyebrow sits on the same line as the form's eyebrow. */}
-      <div className="relative mx-auto w-full max-w-[calc(54.2857rem+6rem)] px-12 pt-[calc(var(--auth-top)+4rem)] pb-16">
+          left edge, centred vertically like the form beside it. */}
+      <div className="relative mx-auto w-full max-w-[calc(54.2857rem+6rem)] px-12 py-16">
         <p className="specimen-label text-ink-3">{eyebrow}</p>
         <p className="mt-4 max-w-[30ch] text-2xl font-medium text-balance text-ink xl:text-[2.2857rem] xl:leading-[2.7143rem]">
           {title}
@@ -237,7 +238,7 @@ export function AuthLayout({
   return (
     <>
       <SkipLink />
-      <div className="grid min-h-dvh text-ink [--auth-top:clamp(2rem,9vh,7rem)] lg:grid-cols-[minmax(30rem,5fr)_minmax(0,7fr)] 2xl:grid-cols-[42rem_minmax(0,1fr)]">
+      <div className="grid min-h-dvh text-ink lg:grid-cols-[minmax(30rem,5fr)_minmax(0,7fr)] 2xl:grid-cols-[42rem_minmax(0,1fr)]">
         {/* Below 1024px the form column is centred; from 1024px it sits left of the panel. */}
         <div className="mx-auto flex w-full max-w-[29.7143rem] min-w-0 flex-col px-6 py-5 sm:px-0 sm:py-8 lg:mx-0 lg:max-w-none lg:px-16 lg:py-5">
           <Link
@@ -250,7 +251,7 @@ export function AuthLayout({
           <main
             id="main"
             tabIndex={-1}
-            className="w-full max-w-[25.7143rem] animate-in pt-12 pb-12 focus:outline-none sm:my-auto sm:py-16 lg:my-0 lg:pt-(--auth-top) lg:pb-16"
+            className="w-full max-w-[25.7143rem] animate-in pt-12 pb-12 focus:outline-none sm:my-auto sm:py-16"
           >
             {eyebrow && <div className="specimen-label pb-4 text-ink-3">{eyebrow}</div>}
             <h1 className="text-2xl font-semibold text-balance">{title}</h1>
