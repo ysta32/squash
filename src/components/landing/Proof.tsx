@@ -9,11 +9,14 @@ import { githubUrl } from '../marketing/links'
 import { SpecimenLabel } from '../ui'
 import { Band, SectionHead } from './Section'
 
-/** A repository path that may wrap after each slash, never mid-name, in a narrow column. */
+/**
+ * A repository path that may wrap after each slash, never mid-name (not even at the hyphen in
+ * `size-check.mjs`), in a narrow column.
+ */
 function path(p: string) {
   return p.split('/').map((part, i, all) => (
     <Fragment key={i}>
-      {part}
+      <span className="whitespace-nowrap">{part}</span>
       {i < all.length - 1 && (
         <>
           /<wbr />

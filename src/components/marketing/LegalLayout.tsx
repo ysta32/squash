@@ -62,7 +62,7 @@ export function LegalLayout({
               <li key={section.id}>
                 <a
                   href={`#${section.id}`}
-                  className="t focus-ring flex gap-3 rounded-sm py-1 text-sm text-ink-2 hover:text-ink"
+                  className="t focus-ring flex gap-3 rounded-sm py-1 text-sm text-ink-2 hover:text-ink pointer-coarse:py-3"
                 >
                   <span className="specimen-label pt-0.5 text-ink-3">
                     {String(i + 1).padStart(2, '0')}

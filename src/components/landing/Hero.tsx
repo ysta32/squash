@@ -21,7 +21,7 @@ export function Hero({ theme }: { theme: ResolvedTheme }) {
       <div
         className={cn(
           MK_CONTAINER,
-          'grid gap-y-14 pt-14 pb-16 sm:pt-20 lg:pb-24 xl:grid-cols-12 xl:gap-x-8 xl:pt-24 xl:pb-28',
+          'grid gap-y-14 pt-14 pb-16 sm:pt-20 lg:pb-24 xl:grid-cols-12 xl:items-center xl:gap-x-8 xl:pt-24 xl:pb-28',
         )}
       >
         <div className="relative z-10 xl:col-span-5">
@@ -31,7 +31,7 @@ export function Hero({ theme }: { theme: ResolvedTheme }) {
           >
             Bug reports your cofounder actually reads.
           </h1>
-          <p className="mt-6 max-w-[44ch] text-read text-pretty text-ink-2 sm:text-lg sm:leading-8">
+          <p className="mt-6 max-w-[44ch] text-read text-pretty text-ink-2 sm:text-lg sm:leading-8 2xl:mt-8 2xl:text-[1.2857rem] 2xl:leading-[2.1429rem]">
             A bug tracker for teams of 2–10. Paste a screenshot, say what broke, press Enter: it is
             on your teammate’s screen about a second later, and Claude Code can fix it from there.
           </p>
@@ -47,8 +47,9 @@ export function Hero({ theme }: { theme: ResolvedTheme }) {
             className="mt-6 text-ink-3"
           />
         </div>
-        {/* Bleeds off the right edge: the bug list stays readable, the detail pane runs out of frame. */}
-        <div className="xl:col-span-7 xl:col-start-6 xl:pt-2">
+        {/* Bleeds off the right edge: the bug list stays readable, the detail pane runs out of frame.
+            From 1280px the copy is centred on the shot so neither column leaves a dead block. */}
+        <div className="xl:col-span-7 xl:col-start-6">
           <div
             className="mk-rise w-[175%] sm:w-[130%] lg:w-[115%] xl:w-[64vw]"
             style={{ '--mk-delay': '520ms' } as CSSProperties}

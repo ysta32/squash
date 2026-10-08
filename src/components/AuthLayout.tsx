@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Bot } from 'lucide-react'
 import { Kbd, Logo, SpecimenLabel, buttonClass } from './ui'
 import { SkipLink } from './SkipLink'
+import { cn } from '../lib/utils'
 
 // The last sentence is set in text-2 so the line reads as context next to the form's title.
 const PITCH = (
@@ -86,6 +87,22 @@ function SpecimenShot({ sizes, eager = false }: { sizes: string; eager?: boolean
         </g>
       </svg>
     </div>
+  )
+}
+
+/** What the capture recorded alongside the screenshot (shown in the panel and the 768 card). */
+const CONTEXT = [
+  ['Page', 'lumen.app/settings/plans'],
+  ['Viewport', '1280 × 800'],
+  ['Console', '1 error · banner.js'],
+] as const
+
+/** The example is sample data, said plainly, as the home page says of its demo workspace. */
+function DemoNote({ className }: { className?: string }) {
+  return (
+    <p className={cn('specimen-label text-ink-3', className)}>
+      Example report · demo workspace, sample data
+    </p>
   )
 }
 
@@ -178,11 +195,7 @@ function SpecimenPanel() {
           <SpecimenShot sizes="(min-width: 1536px) 760px, 46vw" eager />
         </div>
         <dl className="mt-4 grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-8 border-t border-line px-5 py-3.5">
-          {[
-            ['Page', 'lumen.app/settings/plans'],
-            ['Viewport', '1280 × 800'],
-            ['Console', '1 error · banner.js'],
-          ].map(([term, value]) => (
+          {CONTEXT.map(([term, value]) => (
             <div key={term} className="min-w-0">
               <dt className="specimen-label text-ink-3">{term}</dt>
               <dd className="mt-0.5 truncate font-mono text-xs text-ink-2">{value}</dd>
@@ -190,27 +203,46 @@ function SpecimenPanel() {
           ))}
         </dl>
       </figure>
+      <DemoNote className="mt-4" />
     </AuthPanel>
   )
 }
 
-/** Under the form below 1024px: the same pitch and example bug, cropped to a card. */
+/**
+ * Under the form below 1024px: the same pitch and example bug, cropped to a card. From 768px it
+ * breaks out of the form's measure into a wider, two-column exhibit (label, title and captured
+ * context beside the marked-up shot), centred under the centred form.
+ */
 function SpecimenCard() {
   return (
-    <section aria-label="What a Squash bug report looks like" className="mt-14 lg:hidden">
+    <section
+      aria-label="What a Squash bug report looks like"
+      className="mt-14 md:mx-[calc((25.7143rem-44rem)/2)] md:mt-16 md:border-t md:border-line md:pt-10 lg:hidden"
+    >
       <p className="specimen-label text-ink-3">What your team files</p>
-      <p className="mt-3 text-lg font-semibold text-pretty text-ink">{PITCH}</p>
-      <figure className="mt-5 overflow-hidden rounded-lg border border-line bg-surface-2 shadow-elev-2">
-        <div className="px-4 pt-4 pb-3">
+      <p className="mt-3 text-lg font-semibold text-pretty text-ink md:max-w-[34ch] md:text-xl">
+        {PITCH}
+      </p>
+      <figure className="mt-5 overflow-hidden rounded-lg border border-line bg-surface-2 shadow-elev-2 md:mt-6 md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="px-4 pt-4 pb-3 md:flex md:flex-col md:p-5">
           <ExampleLabel />
           <figcaption className="mt-2.5 text-base font-semibold text-pretty text-ink">
             {TITLE}
           </figcaption>
+          <dl className="mt-auto hidden space-y-2.5 pt-5 md:block">
+            {CONTEXT.map(([term, value]) => (
+              <div key={term} className="min-w-0">
+                <dt className="specimen-label text-ink-3">{term}</dt>
+                <dd className="mt-0.5 truncate font-mono text-xs text-ink-2">{value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        <div className="px-4 pb-4">
-          <SpecimenShot sizes="(min-width: 640px) 360px, calc(100vw - 4rem)" />
+        <div className="px-4 pb-4 md:self-center md:py-5 md:pr-5 md:pl-0">
+          <SpecimenShot sizes="(min-width: 768px) 360px, (min-width: 640px) 360px, calc(100vw - 4rem)" />
         </div>
       </figure>
+      <DemoNote className="mt-3" />
     </section>
   )
 }
@@ -238,9 +270,10 @@ export function AuthLayout({
   return (
     <>
       <SkipLink />
-      <div className="grid min-h-dvh text-ink lg:grid-cols-[minmax(30rem,5fr)_minmax(0,7fr)] 2xl:grid-cols-[42rem_minmax(0,1fr)]">
-        {/* Below 1024px the form column is centred; from 1024px it sits left of the panel. */}
-        <div className="mx-auto flex w-full max-w-[29.7143rem] min-w-0 flex-col px-6 py-5 sm:px-0 sm:py-8 lg:mx-0 lg:max-w-none lg:px-16 lg:py-5">
+      <div className="public-ink grid min-h-dvh text-ink lg:grid-cols-[minmax(30rem,5fr)_minmax(0,7fr)] 2xl:grid-cols-[42rem_minmax(0,1fr)]">
+        {/* Below 1024px the form column is centred (logo, form and legal links share one left
+            edge); from 1024px it sits left of the panel. */}
+        <div className="mx-auto flex w-full max-w-[29.7143rem] min-w-0 flex-col px-6 py-5 sm:max-w-[25.7143rem] sm:px-0 sm:py-8 lg:mx-0 lg:max-w-none lg:px-16 lg:py-5">
           <Link
             to="/"
             aria-label="Squash home"
@@ -251,7 +284,7 @@ export function AuthLayout({
           <main
             id="main"
             tabIndex={-1}
-            className="w-full max-w-[25.7143rem] animate-in pt-12 pb-12 focus:outline-none sm:my-auto sm:py-16"
+            className="mx-auto w-full max-w-[25.7143rem] animate-in pt-12 pb-12 focus:outline-none sm:my-auto sm:py-16 lg:mx-0"
           >
             {eyebrow && <div className="specimen-label pb-4 text-ink-3">{eyebrow}</div>}
             <h1 className="text-2xl font-semibold text-balance">{title}</h1>
@@ -264,16 +297,21 @@ export function AuthLayout({
             )}
             {pitch && <SpecimenCard />}
           </main>
-          <nav aria-label="Legal" className="mt-auto flex items-center gap-4 text-xs text-ink-3">
+          {/* 44px targets each way: the padding widens the hit area, the negative margin keeps
+              the words aligned with the column. */}
+          <nav
+            aria-label="Legal"
+            className="-mx-2 mt-auto flex items-center gap-2 text-sm text-ink-3"
+          >
             <Link
               to="/terms"
-              className="t focus-ring inline-flex min-h-11 items-center rounded-sm hover:text-ink"
+              className="t focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm px-2 hover:text-ink"
             >
               Terms
             </Link>
             <Link
               to="/privacy"
-              className="t focus-ring inline-flex min-h-11 items-center rounded-sm hover:text-ink"
+              className="t focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm px-2 hover:text-ink"
             >
               Privacy
             </Link>

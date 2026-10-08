@@ -58,7 +58,11 @@ function DocsIndex() {
     <MarketingLayout>
       <PageHero
         eyebrow={['Docs', `${DOC_LINKS.length} pages`]}
-        title="Run, use and self-host Squash."
+        title={
+          <>
+            Run, use and <span className="whitespace-nowrap">self-host</span> Squash.
+          </>
+        }
       >
         <p>
           How the app works, from the first bug to Claude Code, and how to run your own copy on a
