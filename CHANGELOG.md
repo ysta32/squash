@@ -16,6 +16,8 @@ A full redesign, "Specimen": every screen rebuilt around the way a bug is actual
 - Settings is a numbered ledger that saves as you type (no Save buttons), with "Recently deleted" in its own section and an Invite button on the Members page. Sign-in and onboarding are split screens with a live product preview that follows each onboarding step.
 - One keyboard key style everywhere (one key per cap, ↵ for Enter). On touch screens, keyboard-only hints are hidden and instructions say "tap".
 - New marketing home page told in order (what it is, the problem, the product, real numbers computed from the repository, depth, get started) and a new 404 page.
+- A full public site sharing one nav and footer: Features, Pricing (free, MIT; hosted vs self-hosted), Changelog (built from this file, with an RSS feed at `/changelog.xml`), Docs (getting started, capture, markup, keyboard, Claude Code, self-hosting, migrations, security model), FAQ, About, Press kit and a Status page that checks the app, database and live updates from your browser.
+- Privacy and Terms rewritten to describe exactly what Squash stores, where, and who can see it.
 
 ### Added
 
