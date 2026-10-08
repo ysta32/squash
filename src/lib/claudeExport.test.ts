@@ -4,7 +4,9 @@ import {
   MAX_REGIONS_PER_SCREENSHOT,
   batchName,
   formatClaudePrompt,
+  getAutoSend,
   parseClaudeResult,
+  setAutoSend,
 } from './claudeExport'
 
 vi.mock('./supabase', () => ({ supabase: {} }))
@@ -230,6 +232,27 @@ describe('unattended bridge runs', () => {
     expect(bridged.prompt).toContain('runs unattended')
     const copied = formatClaudePrompt({ ...base, bugs: [bug()] })
     expect(copied.prompt).not.toContain('result.json')
+  })
+
+  it('asks bridge runs to commit and push once verified, never force-push', () => {
+    const bridged = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    expect(bridged.prompt).toContain('ship it without asking')
+    expect(bridged.prompt).toContain('`git push`')
+    expect(bridged.prompt).toContain('Never force-push')
+    expect(bridged.prompt).toContain('done, verified, committed and pushed')
+    expect(bridged.prompt.indexOf('git push')).toBeLessThan(bridged.prompt.indexOf('result.json'))
+    const copied = formatClaudePrompt({ ...base, bugs: [bug()] })
+    expect(copied.prompt).not.toContain('git push')
+  })
+
+  it('remembers auto-fix per workspace, off by default', () => {
+    localStorage.clear()
+    expect(getAutoSend('ws-1')).toBe(false)
+    setAutoSend('ws-1', true)
+    expect(getAutoSend('ws-1')).toBe(true)
+    expect(getAutoSend('ws-2')).toBe(false)
+    setAutoSend('ws-1', false)
+    expect(getAutoSend('ws-1')).toBe(false)
   })
 
   it('parses result files and drops malformed entries', () => {

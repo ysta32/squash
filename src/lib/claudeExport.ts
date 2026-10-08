@@ -84,6 +84,20 @@ export interface ClaudeResultItem {
   summary: string
 }
 
+/**
+ * Tells an unattended run to ship its work: commit it and push it, so a project that deploys from
+ * its git remote goes live without anyone touching the terminal.
+ */
+function shipInstructions(noun: string): string {
+  return [
+    `Once the work is verified (typecheck, lint, tests and a build where the project has them), ship it without asking:`,
+    '',
+    `1. Commit only the files you changed, with a message that names each ${noun} number (never commit \`.squash/\`, secrets or unrelated changes).`,
+    '2. Push the commit to the current branch on its remote (`git push`; if the branch has no upstream yet, `git push -u origin HEAD`). Never force-push. A project that deploys from its remote goes live from this push.',
+    `3. If a check fails or the push is rejected, fix the cause and try again; if you cannot, leave the ${noun} open and say why in its summary.`,
+  ].join('\n')
+}
+
 /** Tells an unattended Claude Code session how to report each bug back to Squash. */
 function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string): string {
   const example = JSON.stringify({
@@ -96,13 +110,15 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
   return [
     'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
     '',
+    shipInstructions(noun),
+    '',
     `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
     '',
     '```json',
     example,
     '```',
     '',
-    `Set "resolved" to true only when the work is done and verified: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. Write each summary as a short plain-language statement of what you did. The terminal closes on its own once you finish.`,
+    `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. Write each summary as a short plain-language statement of what you did. The terminal closes on its own once you finish.`,
   ].join('\n')
 }
 
@@ -350,6 +366,29 @@ export async function setBridgeFolder(
     { workspaceName, folder },
   )
   return res.folder
+}
+
+const AUTO_SEND_KEY = 'squash:claude-auto-send:'
+
+/**
+ * Whether items this user files in the workspace go straight to Claude Code. Per browser, since
+ * the helper and project folder live on this computer. Off by default and when storage is blocked.
+ */
+export function getAutoSend(workspaceId: string): boolean {
+  try {
+    return localStorage.getItem(AUTO_SEND_KEY + workspaceId) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setAutoSend(workspaceId: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(AUTO_SEND_KEY + workspaceId, '1')
+    else localStorage.removeItem(AUTO_SEND_KEY + workspaceId)
+  } catch {
+    // Storage blocked: the toggle lasts for this page only.
+  }
 }
 
 /** Folder name for one export batch, e.g. `20261006-153012-12-14`. */

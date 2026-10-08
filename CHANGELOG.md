@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Claude Code runs ship their work: once a fix or feature is verified, Claude commits it and pushes it to the current branch (never force-pushing), so a project that deploys from git goes live without touching the terminal. Reinstall the helper (v8) so those git commands run without a permission prompt.
+- Auto-fix new items (Settings → Claude Code): when on, each bug or feature request you file goes straight to Claude Code once its screenshots upload. Off by default, per browser.
+
 ## v2.0.1 — 2026-10-08
 
 Polish from the third design review of 2.0.

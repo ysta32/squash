@@ -54,7 +54,7 @@ import { useNotifications } from '../hooks/useNotifications'
 import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
-import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
+import { AUTO_RESOLVE_VERSION, getAutoSend } from '../lib/claudeExport'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
 import { NEXT_THEME, useTheme } from '../lib/theme'
@@ -62,6 +62,8 @@ import type { Bug, BugKind, BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 
 const HIGHLIGHT_MS = 3000
+/** Longest an auto-fixed item waits for its screenshots before it goes to Claude without them. */
+const AUTO_SEND_UPLOAD_WAIT_MS = 30_000
 
 /** Who made the latest assignment change on a bug, from its activity log. */
 async function lastAssigner(bugId: string, userId: string): Promise<string | null> {
@@ -441,6 +443,10 @@ export default function Workspace() {
     [bugs, hasNumberParam, navigate, listPath, bugPath],
   )
 
+  /** Items filed with auto-fix on, waiting for their number and uploads before going to Claude. */
+  const autoSendQueue = useRef(new Map<string, { files: number; at: number }>())
+  const [autoSendTick, setAutoSendTick] = useState(0)
+
   // A newly filed item opens right away: it is optimistic (no number yet), so it is held as the
   // pending selection and moves into the URL once the server assigns its number.
   const fileAndSelect = useCallback(
@@ -458,9 +464,39 @@ export default function Workspace() {
         if (newId !== null) setPendingId((p) => (p === newId ? null : p))
         throw err
       }
+      if (newId !== null && getAutoSend(workspaceId)) {
+        autoSendQueue.current.set(newId, { files: input.files.length, at: Date.now() })
+        setAutoSendTick((n) => n + 1)
+      }
     },
-    [fileBug, hasNumberParam, navigate, listPath],
+    [fileBug, hasNumberParam, navigate, listPath, workspaceId],
   )
+
+  // Auto-fix: an item this user just filed goes to Claude Code once it has its number and its
+  // screenshots have uploaded (or after a grace period, so a failed upload never blocks it).
+  const sendToClaude = claude.sendBugs
+  useEffect(() => {
+    const queue = autoSendQueue.current
+    if (queue.size === 0) return
+    const ready: BugWithMeta[] = []
+    for (const [id, entry] of queue) {
+      const bug = bugs.find((b) => b.id === id)
+      if (!bug) {
+        queue.delete(id)
+        continue
+      }
+      if (bug.optimistic || bug.number === 0) continue
+      const uploaded = bug.attachments.length >= entry.files
+      if (!uploaded && Date.now() - entry.at < AUTO_SEND_UPLOAD_WAIT_MS) continue
+      queue.delete(id)
+      ready.push(bug)
+    }
+    if (ready.length > 0) sendToClaude(ready)
+    // Re-check after the grace period even if no update arrives.
+    if (queue.size === 0) return
+    const timer = setTimeout(() => setAutoSendTick((n) => n + 1), AUTO_SEND_UPLOAD_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [bugs, autoSendTick, sendToClaude])
 
   const deselect = useCallback(() => {
     setPendingId(null)

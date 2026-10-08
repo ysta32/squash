@@ -5,8 +5,10 @@ import { ClaudeSetupDialog } from '../ClaudeSetupDialog'
 import {
   BRIDGE_VERSION,
   HARDENED_VERSION,
+  getAutoSend,
   getBridgeFolder,
   pingBridge,
+  setAutoSend,
   type BridgeStatus,
 } from '../../lib/claudeExport'
 import { cn } from '../../lib/utils'
@@ -31,6 +33,11 @@ export function ClaudeSettings({
 }) {
   const [check, setCheck] = useState<Check>({ state: 'checking' })
   const [setupOpen, setSetupOpen] = useState(false)
+  const [autoSend, setAutoSendState] = useState(() => getAutoSend(workspaceId))
+  const toggleAutoSend = () => {
+    setAutoSend(workspaceId, !autoSend)
+    setAutoSendState(!autoSend)
+  }
 
   // Pure probe: no state writes, so the mount effect only sets state from its callback.
   const probe = useCallback(async (): Promise<Check> => {
@@ -156,6 +163,21 @@ export function ClaudeSettings({
               {check.state === 'done' && check.folder ? 'Change' : 'Choose'}
             </Button>
           )}
+        </LedgerRow>
+        <LedgerRow
+          label="Auto-fix new items"
+          labelId="claude-auto-send-label"
+          description="Send each bug or feature request you file here straight to Claude Code. It implements it, commits, pushes and closes its terminal when done. Applies to this browser only."
+        >
+          <Button
+            variant={autoSend ? 'primary' : 'secondary'}
+            className={TOUCH}
+            aria-pressed={autoSend}
+            aria-labelledby="claude-auto-send-label"
+            onClick={toggleAutoSend}
+          >
+            {autoSend ? 'On' : 'Off'}
+          </Button>
         </LedgerRow>
         <LedgerRow
           label="Guide"

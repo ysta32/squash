@@ -13,6 +13,8 @@ vi.mock('../../lib/claudeExport', () => ({
   HARDENED_VERSION: 6,
   pingBridge: () => mocks.pingBridge(),
   getBridgeFolder: (id: string) => mocks.getBridgeFolder(id),
+  getAutoSend: () => false,
+  setAutoSend: () => {},
 }))
 
 // The real guide has its own tests; this stand-in shows the status it is handed.

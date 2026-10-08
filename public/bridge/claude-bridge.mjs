@@ -41,7 +41,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 7
+const VERSION = 8
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -63,9 +63,18 @@ const ORIGINS = new Set(
     .filter(Boolean),
 )
 const EXTRA_ARGS = (process.env.SQUASH_CLAUDE_ARGS ?? '').split(/\s+/).filter(Boolean)
-const CLAUDE_ARGS = EXTRA_ARGS.some((a) => a.startsWith('--permission-mode'))
-  ? EXTRA_ARGS
-  : ['--permission-mode', 'auto', ...EXTRA_ARGS]
+// Runs ship their work (commit and push), so those git commands never wait on a permission prompt
+// nobody is there to answer. Force-pushes stay blocked.
+const SHIP_TOOLS = [
+  '--allowedTools=Bash(git add:*),Bash(git commit:*),Bash(git push:*)',
+  '--disallowedTools=Bash(git push --force:*),Bash(git push -f:*)',
+]
+const CLAUDE_ARGS = [
+  ...(EXTRA_ARGS.some((a) => a.startsWith('--permission-mode'))
+    ? EXTRA_ARGS
+    : ['--permission-mode', 'auto', ...EXTRA_ARGS]),
+  ...SHIP_TOOLS,
+]
 const MAC = process.platform === 'darwin'
 const MAX_BODY = 1024 * 1024
 const MAX_IMAGE = 15 * 1024 * 1024
