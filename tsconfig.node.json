@@ -20,5 +20,11 @@
     "noUncheckedSideEffectImports": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "vite-plugin-seo.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vite-plugin-seo.ts",
+    "vite-plugin-facts.ts",
+    "vite-plugin-content.ts"
+  ]
 }

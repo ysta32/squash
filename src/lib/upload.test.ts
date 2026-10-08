@@ -78,4 +78,32 @@ describe('uploadAttachment', () => {
       uploadAttachment({ workspaceId: 'w', bugId: 'b', image: image('image/webp') }),
     ).rejects.toBe(err)
   })
+
+  it('stores vector annotations with the unmarked image when given', async () => {
+    const annotations = {
+      v: 1 as const,
+      shapes: [{ type: 'pin' as const, color: 'danger' as const, n: 1, x: 0.5, y: 0.5 }],
+    }
+    await uploadAttachment({
+      workspaceId: 'w',
+      bugId: 'b',
+      image: image('image/webp'),
+      annotations,
+    })
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ annotations }))
+  })
+
+  it('removes the object and surfaces a missing annotations column', async () => {
+    const err = { code: 'PGRST204', message: "Could not find the 'annotations' column" }
+    single.mockResolvedValue({ data: null, error: err })
+    await expect(
+      uploadAttachment({
+        workspaceId: 'w',
+        bugId: 'b',
+        image: image('image/webp'),
+        annotations: { v: 1, shapes: [] },
+      }),
+    ).rejects.toBe(err)
+    expect(removeFn).toHaveBeenCalledWith([upload.mock.calls[0][0]])
+  })
 })

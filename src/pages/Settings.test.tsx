@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Settings from './Settings'
+import { resetAutosaveLines } from '../components/settings/useAutosave'
 
 const mocks = vi.hoisted(() => {
   const profile = {
@@ -61,6 +62,7 @@ vi.mock('../lib/auth', () => ({
 }))
 vi.mock('../hooks/useWorkspaces', () => ({
   LAST_WORKSPACE_KEY: 'squash:lastWorkspace',
+  inviteUrl: (code: string) => `http://localhost/join/${code}`,
   useWorkspace: () => ({
     workspace: mocks.workspace,
     members: mocks.members,
@@ -108,6 +110,15 @@ function show(tab = '') {
     </MemoryRouter>,
   )
 }
+/** Opens the delete-account dialog and types the confirmation phrase. */
+function confirmAccountDeletion() {
+  fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
+  const dialog = screen.getByRole('dialog')
+  fireEvent.change(within(dialog).getByLabelText('Type “delete my account” to confirm'), {
+    target: { value: 'delete my account' },
+  })
+  return dialog
+}
 function deletionDialog() {
   fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
   return screen.getByRole('dialog')
@@ -115,6 +126,7 @@ function deletionDialog() {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  resetAutosaveLines()
   mocks.role = 'owner'
   mocks.update.mockReturnValue({ eq: mocks.eq })
   mocks.eq.mockResolvedValue({ error: null })
@@ -148,6 +160,8 @@ describe('Settings', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     show('workspace')
     fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    cleanup()
+    show('members')
     fireEvent.click(screen.getByRole('button', { name: 'Remove Grace' }))
     expect(confirm).toHaveBeenCalledTimes(2)
     expect(mocks.regenerateInviteCode).not.toHaveBeenCalled()
@@ -171,7 +185,7 @@ describe('Settings', () => {
         error: null,
       }
     })
-    show('workspace')
+    show('danger')
     const dialog = deletionDialog()
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'My workspace' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete workspace' }))
@@ -188,7 +202,7 @@ describe('Settings', () => {
     localStorage.setItem('squash:lastWorkspace', 'ws')
     mocks.list.mockResolvedValue({ data: [{ name: 'image.png', id: 'file' }], error: null })
     mocks.remove.mockResolvedValue({ error: { message: 'Remove failed' } })
-    show('workspace')
+    show('danger')
     const dialog = deletionDialog()
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'My workspace' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete workspace' }))
@@ -199,11 +213,9 @@ describe('Settings', () => {
 
   it('shows account deletion errors without signing out', async () => {
     mocks.rpc.mockResolvedValue({ error: { message: 'Account deletion unavailable' } })
-    show('account')
-    fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
-    fireEvent.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete account' }),
-    )
+    show('danger')
+    const dialog = confirmAccountDeletion()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Account deletion unavailable')
     expect(mocks.signOut).not.toHaveBeenCalled()
   })
@@ -211,30 +223,92 @@ describe('Settings', () => {
   it('renders tabs, defaults to profile, and switches panels', () => {
     show()
     const tabs = screen.getByRole('navigation', { name: 'Settings tabs' })
-    expect(within(tabs).getAllByRole('button')).toHaveLength(4)
+    expect(
+      within(tabs)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual([
+      '01Profile',
+      '02Workspace',
+      '03Members',
+      '04Appearance',
+      '05Notifications',
+      '06Claude Code',
+      '07Recently deleted',
+      '08Danger zone',
+    ])
+    expect(within(tabs).getByRole('link', { name: /Profile/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     expect(screen.getByLabelText('Display name')).toHaveValue('Ada')
-    fireEvent.click(within(tabs).getByRole('button', { name: 'workspace' }))
-    expect(screen.getByLabelText('Workspace name')).toHaveValue('My workspace')
-    fireEvent.click(within(tabs).getByRole('button', { name: 'account' }))
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    fireEvent.click(within(tabs).getByRole('link', { name: /Workspace/ }))
+    expect(screen.getByLabelText('Workspace name')).toHaveValue('My workspace')
+    expect(screen.queryByRole('heading', { name: 'Recently deleted' })).not.toBeInTheDocument()
+    fireEvent.click(within(tabs).getByRole('link', { name: /Members/ }))
+    expect(screen.getByText('Grace')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
+    expect(screen.getByRole('dialog', { name: 'Invite people' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Invite people' })).not.toBeInTheDocument()
+    fireEvent.click(within(tabs).getByRole('link', { name: /Recently deleted/ }))
+    expect(screen.getByRole('heading', { name: 'Recently deleted' })).toBeInTheDocument()
+    expect(screen.getByText('Nothing has been deleted.')).toBeInTheDocument()
+    fireEvent.click(within(tabs).getByRole('link', { name: /Danger zone/ }))
+    expect(screen.getByRole('button', { name: 'Delete workspace' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete account' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to workspace' })).toHaveAttribute(
       'href',
       '/app/ws',
     )
   })
 
+  it('deletes the account only after the confirmation phrase is typed', () => {
+    show('danger')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
+    const dialog = screen.getByRole('dialog')
+    const remove = within(dialog).getByRole('button', { name: 'Delete account' })
+    const input = within(dialog).getByLabelText('Type “delete my account” to confirm')
+    expect(remove).toBeDisabled()
+    fireEvent.click(remove)
+    fireEvent.change(input, { target: { value: 'delete my' } })
+    expect(remove).toBeDisabled()
+    fireEvent.change(input, { target: { value: 'Delete my account' } })
+    expect(remove).toBeEnabled()
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it('opens the danger zone for the retired account tab', () => {
+    show('account')
+    expect(screen.getByRole('heading', { name: 'Danger zone' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete account' })).toBeInTheDocument()
+  })
+
+  it('signs out from the profile tab and returns home', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await screen.findByText('Home')
+    expect(mocks.signOut).toHaveBeenCalledOnce()
+  })
+
   it('shows read-only workspace information to non-owners', () => {
     mocks.role = 'member'
     show('workspace')
     expect(screen.getByText('Only the owner can change workspace settings')).toBeInTheDocument()
+    const ownerOnly = /Delete workspace|Remove|Regenerate|Save/
+    expect(screen.queryByRole('button', { name: ownerOnly })).not.toBeInTheDocument()
+    cleanup()
+    show('members')
     expect(screen.getByText('Grace')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /Delete workspace|Remove|Regenerate|Save/ }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: ownerOnly })).not.toBeInTheDocument()
+    cleanup()
+    show('danger')
+    expect(screen.queryByRole('button', { name: ownerOnly })).not.toBeInTheDocument()
   })
 
   it('requires the exact workspace name before deletion', () => {
-    show('workspace')
+    show('danger')
     const dialog = deletionDialog()
     const remove = within(dialog).getByRole('button', { name: 'Delete workspace' })
     const input = within(dialog).getByLabelText('Type My workspace to confirm')
@@ -247,66 +321,148 @@ describe('Settings', () => {
     expect(remove).toBeEnabled()
   })
 
-  it('saves profile name and palette color and refreshes the profile', async () => {
-    show()
-    fireEvent.change(screen.getByLabelText('Display name'), {
-      target: { value: '  Ada Lovelace  ' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Avatar color #0f766e' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await screen.findByText('Profile saved.')
-    expect(mocks.update).toHaveBeenCalledWith({
-      display_name: 'Ada Lovelace',
-      avatar_color: '#0f766e',
-    })
-    expect(mocks.eq).toHaveBeenCalledWith('id', 'self')
-    expect(mocks.refreshProfile).toHaveBeenCalledOnce()
-  })
-
-  it('enables profile save only for changes and clears the saved state briefly after success', async () => {
+  it('autosaves the profile name on blur and a palette color on click, then refreshes', async () => {
     show()
     const name = screen.getByLabelText('Display name')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: '  Ada Lovelace  ' } })
+    fireEvent.blur(name)
+    await screen.findByText('Saved')
+    expect(mocks.update).toHaveBeenCalledWith({ display_name: 'Ada Lovelace' })
+    expect(name).toHaveValue('Ada Lovelace')
+    fireEvent.click(screen.getByRole('button', { name: 'Avatar color Moss' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ avatar_color: '#2e772a' }))
+    expect(screen.getByRole('button', { name: 'Avatar color Moss' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(mocks.eq).toHaveBeenCalledWith('id', 'self')
+    await waitFor(() => expect(mocks.refreshProfile).toHaveBeenCalledTimes(2))
+  })
+
+  it('saves the profile name only when it changed, once, and shows Saved briefly', async () => {
+    show()
+    const name = screen.getByLabelText('Display name')
+    fireEvent.blur(name)
     fireEvent.change(name, { target: { value: 'Ada changed' } })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
-    fireEvent.change(name, { target: { value: 'Ada' } })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.change(name, { target: { value: 'Ada ' } })
+    fireEvent.blur(name)
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(name).toHaveValue('Ada')
     fireEvent.change(name, { target: { value: 'Ada changed' } })
     vi.useFakeTimers()
     try {
-      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
-      expect(screen.getByRole('button', { name: 'Saved' })).toBeDisabled()
+      // Enter submits; leaving the field afterwards must not save the same name again.
+      await act(async () => fireEvent.submit(name.closest('form') as HTMLFormElement))
+      await act(async () => fireEvent.blur(name))
+      expect(mocks.update).toHaveBeenCalledOnce()
+      expect(mocks.update).toHaveBeenCalledWith({ display_name: 'Ada changed' })
+      expect(screen.getByText('Saved')).toBeInTheDocument()
       act(() => vi.advanceTimersByTime(2500))
-      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+      expect(screen.queryByText('Saved')).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('keeps a failed profile save dirty and available to retry', async () => {
-    mocks.eq.mockResolvedValue({ error: { message: 'Update failed' } })
+  it('keeps a failed profile save in the field and retries it on the next blur', async () => {
+    mocks.eq.mockResolvedValueOnce({ error: { message: 'Update failed' } })
     show()
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'New name' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const name = screen.getByLabelText('Display name')
+    fireEvent.change(name, { target: { value: 'New name' } })
+    fireEvent.blur(name)
     expect(await screen.findByRole('alert')).toHaveTextContent('Update failed')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(name).toHaveValue('New name')
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(mocks.refreshProfile).not.toHaveBeenCalled()
+    fireEvent.blur(name)
+    await screen.findByText('Saved')
+    expect(mocks.update).toHaveBeenCalledTimes(2)
+    expect(mocks.refreshProfile).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps saves in order across a tab switch: A, then B, then C after coming back', async () => {
+    const pending: Array<(result: { error: null }) => void> = []
+    mocks.eq.mockImplementation(() => new Promise((resolve) => pending.push(resolve)))
+    show()
+    const tabs = () => screen.getByRole('navigation', { name: 'Settings tabs' })
+    const type = (value: string) => {
+      const field = screen.getByLabelText('Display name')
+      fireEvent.change(field, { target: { value } })
+      fireEvent.blur(field)
+    }
+    type('Name A')
+    type('Name B')
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1))
+    // Leave the tab while A is in flight and B is queued, then come back and save C.
+    fireEvent.click(within(tabs()).getByRole('link', { name: /Workspace/ }))
+    expect(screen.queryByLabelText('Display name')).not.toBeInTheDocument()
+    fireEvent.click(within(tabs()).getByRole('link', { name: /Profile/ }))
+    type('Name C')
+    await act(async () => pending.shift()?.({ error: null }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(2))
+    expect(mocks.update).toHaveBeenLastCalledWith({ display_name: 'Name B' })
+    // C waits for B even though it was made by a fresh mount.
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mocks.update).toHaveBeenCalledTimes(2)
+    await act(async () => pending.shift()?.({ error: null }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(3))
+    expect(mocks.update).toHaveBeenLastCalledWith({ display_name: 'Name C' })
+    await act(async () => pending.shift()?.({ error: null }))
+    expect(mocks.update.mock.calls.map(([patch]) => patch)).toEqual([
+      { display_name: 'Name A' },
+      { display_name: 'Name B' },
+      { display_name: 'Name C' },
+    ])
+  })
+
+  it('still reports a failed save after Escape reverts the draft, and rolls the field back', async () => {
+    let finish: (result: { error: { message: string } }) => void = () => {}
+    mocks.eq.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    show()
+    const name = screen.getByLabelText('Display name')
+    fireEvent.change(name, { target: { value: 'New name' } })
+    fireEvent.blur(name)
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce())
+    fireEvent.change(name, { target: { value: 'Newer draft' } })
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(name).toHaveValue('New name')
+    expect(screen.getByText('Saving…')).toBeInTheDocument()
+    await act(async () => finish({ error: { message: 'Update failed' } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Update failed')
+    expect(name).toHaveValue('Ada')
     expect(mocks.refreshProfile).not.toHaveBeenCalled()
   })
 
-  it('enables workspace save only when dirty and resets it after saving', async () => {
+  it('refuses a blank profile name and reverts the field on Escape', () => {
+    show()
+    const name = screen.getByLabelText('Display name')
+    fireEvent.change(name, { target: { value: '   ' } })
+    fireEvent.blur(name)
+    expect(screen.getByRole('alert')).toHaveTextContent('Display name cannot be empty.')
+    expect(mocks.update).not.toHaveBeenCalled()
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(name).toHaveValue('Ada')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('autosaves the workspace name on blur or Enter, once per change', async () => {
     show('workspace')
     const name = screen.getByLabelText('Workspace name')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.blur(name)
+    expect(mocks.rename).not.toHaveBeenCalled()
     fireEvent.change(name, { target: { value: 'Team workspace' } })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
-    fireEvent.change(name, { target: { value: 'My workspace' } })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-    fireEvent.change(name, { target: { value: 'Team workspace' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByRole('button', { name: 'Saved' })).toBeDisabled()
+    fireEvent.blur(name)
+    await screen.findByText('Saved')
     expect(mocks.rename).toHaveBeenCalledWith('Team workspace')
+    fireEvent.blur(name)
+    expect(mocks.rename).toHaveBeenCalledOnce()
     fireEvent.change(name, { target: { value: 'Another workspace' } })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    fireEvent.submit(name.closest('form') as HTMLFormElement)
+    await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith('Another workspace'))
+    expect(mocks.rename).toHaveBeenCalledTimes(2)
   })
 
   it('offers a workspace picker link when no workspace is selected', () => {
@@ -328,7 +484,7 @@ describe('Settings', () => {
     expect(localStorage.getItem('squash:theme')).toBe('dark')
     expect(
       within(screen.getByRole('radiogroup', { name: 'Color scheme' })).getAllByRole('radio'),
-    ).toHaveLength(6)
+    ).toHaveLength(5)
   })
 
   it('recursively removes screenshots before deleting and clears last workspace', async () => {
@@ -340,7 +496,7 @@ describe('Settings', () => {
     mocks.deleteWorkspace.mockImplementation(async () => {
       expect(mocks.remove).toHaveBeenCalledWith(['ws/bug/image.png'])
     })
-    show('workspace')
+    show('danger')
     const dialog = deletionDialog()
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'My workspace' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete workspace' }))
@@ -351,7 +507,7 @@ describe('Settings', () => {
 
   it('does not delete the workspace if screenshot cleanup fails', async () => {
     mocks.list.mockResolvedValue({ data: null, error: { message: 'Storage unavailable' } })
-    show('workspace')
+    show('danger')
     const dialog = deletionDialog()
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'My workspace' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete workspace' }))
@@ -366,10 +522,8 @@ describe('Settings', () => {
       return { error: null }
     })
     show('account')
-    fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
-    fireEvent.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete account' }),
-    )
+    const dialog = confirmAccountDeletion()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }))
     await screen.findByText('Home')
     expect(mocks.ownedWorkspaces).toHaveBeenCalledWith('owner_id', 'self')
     expect(mocks.workspaceMembers).toHaveBeenCalledWith('workspace_id', ['ws'])
@@ -388,8 +542,7 @@ describe('Settings', () => {
       .mockResolvedValueOnce({ error: { message: 'transfer_ownership_required' } })
       .mockResolvedValue({ error: null })
     show('account')
-    fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = confirmAccountDeletion()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }))
     const select = await screen.findByRole('combobox', { name: 'New owner for My workspace' })
     expect(mocks.signOut).not.toHaveBeenCalled()
@@ -410,13 +563,13 @@ describe('Settings', () => {
   it('switches and remembers the color scheme from the appearance tab', () => {
     localStorage.clear()
     show('appearance')
-    const ocean = screen.getByRole('radio', { name: 'Color scheme Ocean' })
-    expect(screen.getByRole('radio', { name: 'Color scheme Violet' })).toBeChecked()
+    const ocean = screen.getByRole('radio', { name: 'Color scheme Cyanotype' })
+    expect(screen.getByRole('radio', { name: 'Color scheme Viridian' })).toBeChecked()
     fireEvent.click(ocean)
     expect(ocean).toBeChecked()
     expect(document.documentElement.dataset.scheme).toBe('ocean')
     expect(localStorage.getItem('squash:scheme')).toBe('ocean')
-    fireEvent.click(screen.getByRole('radio', { name: 'Color scheme Violet' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Color scheme Viridian' }))
     expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
   })
 })

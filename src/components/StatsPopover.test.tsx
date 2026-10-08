@@ -87,8 +87,10 @@ describe('dialog focus lifecycle', () => {
     const { rerender } = render(<ShortcutsSheet open={false} onClose={onClose} />)
     expect(document.activeElement).toBe(opener)
     rerender(<ShortcutsSheet open onClose={onClose} />)
+    // No editable field, so the panel itself takes focus (no ring on Close until the user tabs).
+    expect(document.activeElement).toBe(screen.getByRole('dialog'))
     const close = screen.getByRole('button', { name: 'Close' })
-    expect(document.activeElement).toBe(close)
+    close.focus()
     expect(fireEvent.keyDown(close, { key: 'Tab' })).toBe(false)
     expect(document.activeElement).toBe(close)
     expect(fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })).toBe(false)

@@ -129,4 +129,79 @@ describe('applyClaudeRun', () => {
     ).rejects.toThrow('permission denied')
     expect(sleep).not.toHaveBeenCalled()
   })
+
+  it('records the run’s git evidence for each bug it resolved, and only those', async () => {
+    const a = actions([bug(4), bug(5), bug(6, 'resolved')])
+    const recordFixRun = vi.fn(async () => null)
+    const sha = 'c'.repeat(40)
+    const msg = await applyClaudeRun(
+      {
+        batch: '20261007-120000-4-5',
+        exitCode: 0,
+        result: {
+          bugs: [
+            { number: 4, resolved: true, summary: 'Fixed the crash.' },
+            { number: 5, resolved: false, summary: 'Needs a decision.' },
+            { number: 6, resolved: true, summary: 'Already done.' },
+          ],
+        },
+        git: {
+          startSha: 'd'.repeat(40),
+          commitSha: sha,
+          branch: 'fix/bug-4',
+          prUrl: 'https://github.com/o/r/pull/3',
+          filesChanged: 2,
+          additions: 5,
+          deletions: 1,
+          startedAt: '2026-10-07T12:00:00.000Z',
+        },
+      },
+      { ...a, recordFixRun },
+    )
+    expect(recordFixRun).toHaveBeenCalledTimes(1)
+    expect(recordFixRun).toHaveBeenCalledWith({
+      bugId: 'b4',
+      runId: '20261007-120000-4-5',
+      status: 'succeeded',
+      summary: 'Fixed the crash.',
+      report: expect.objectContaining({ commitSha: sha, branch: 'fix/bug-4', filesChanged: 2 }),
+    })
+    expect(msg).toBe('Claude Code resolved #4 and left #5 open with a comment.')
+  })
+
+  it('records a run from an older helper without evidence', async () => {
+    const a = actions([bug(4)])
+    const recordFixRun = vi.fn(async () => null)
+    await applyClaudeRun(
+      { batch: 'x', exitCode: 0, result: { bugs: [{ number: 4, resolved: true, summary: 'ok' }] } },
+      { ...a, recordFixRun },
+    )
+    expect(recordFixRun).toHaveBeenCalledWith(
+      expect.objectContaining({ bugId: 'b4', report: null }),
+    )
+  })
+
+  it('still resolves every bug when recording the proof fails, and says so', async () => {
+    const a = actions([bug(4), bug(5)])
+    const recordFixRun = vi.fn(async () => {
+      throw new Error('fix_run_limit')
+    })
+    const msg = await applyClaudeRun(
+      {
+        batch: 'x',
+        exitCode: 0,
+        result: {
+          bugs: [
+            { number: 4, resolved: true, summary: 'a' },
+            { number: 5, resolved: true, summary: 'b' },
+          ],
+        },
+      },
+      { ...a, recordFixRun },
+    )
+    expect(a.resolveBug).toHaveBeenCalledTimes(2)
+    expect(msg).toBe(
+      'Claude Code resolved #4, #5. Could not save the proof of fix for #4, #5 (fix_run_limit).',
+    )
+  })
 })

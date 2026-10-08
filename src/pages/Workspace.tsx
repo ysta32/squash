@@ -5,20 +5,44 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
-import { BugDetail } from '../components/BugDetail'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import {
+  ArrowLeft,
+  Bug as BugIcon,
+  CircleCheck,
+  CircleDot,
+  Layers,
+  Lightbulb,
+  Lock,
+  MousePointerClick,
+  Search,
+  SearchX,
+  SquarePen,
+  Trash2,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react'
+import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
 import { BugList } from '../components/BugList'
 import { CaptureBar } from '../components/CaptureBar'
 import { Header } from '../components/Header'
 import { InviteDialog } from '../components/InviteDialog'
-import { ReconnectingPill } from '../components/ReconnectingPill'
+import { ConnectionStatus } from '../components/ConnectionStatus'
+import { HINT_ROW, StatePanel } from '../components/EmptyState'
+import { Onboarding } from '../components/GettingStarted'
+import { isFirstItemView, onboardingSteps } from '../lib/onboarding'
+import { PaneSplitter } from '../components/PaneSplitter'
+import { useListWidth } from '../lib/listWidth'
+import { Skeleton } from '../components/Skeleton'
+import { Button, ButtonLink, Kbd } from '../components/ui'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
-import { countBugs, filterBugs, sortBugs, useBugs } from '../hooks/useBugs'
+import { countBugs, filterBugs, hasActiveFilters, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { CommandPalette, type Command } from '../components/CommandPalette'
@@ -54,9 +78,31 @@ async function lastAssigner(bugId: string, userId: string): Promise<string | nul
   return data?.actor_id ?? null
 }
 
+/**
+ * List and detail sit side by side from 1024px (Tailwind `lg`); below that the workspace is one
+ * pane at a time (list → detail), so nothing is squeezed at tablet widths.
+ */
 function isDesktop(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches
+  return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches
 }
+
+function subscribeDesktop(onChange: () => void): () => void {
+  if (typeof window.matchMedia !== 'function') return () => {}
+  const query = window.matchMedia('(min-width: 1024px)')
+  query.addEventListener('change', onChange)
+  return () => query.removeEventListener('change', onChange)
+}
+
+/** isDesktop() as state, for what renders differently side by side (follows window resizes). */
+function useDesktop(): boolean {
+  return useSyncExternalStore(subscribeDesktop, isDesktop, () => false)
+}
+
+/**
+ * The bug detail column (BugDetail's article): 760px of content between 48px gutters, centred in
+ * the detail pane. Detail-pane empty states use it too, so they sit where a bug would.
+ */
+const DETAIL_COLUMN = 'mx-auto w-full max-w-[856px]'
 
 export default function Workspace() {
   const { workspaceId = '', number: numberParam } = useParams<{
@@ -159,6 +205,54 @@ export default function Workspace() {
     [assignBug],
   )
 
+  function toastUndo(message: string, undo: () => Promise<void>) {
+    toast(message, {
+      tone: 'success',
+      action: {
+        label: 'Undo',
+        onAction: () => {
+          void undo().catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'Could not undo the change.', {
+              tone: 'error',
+            })
+          })
+        },
+      },
+    })
+  }
+
+  async function resolveWithUndo(id: string, note: string | null) {
+    const before = bugs.find((bug) => bug.id === id)
+    await resolveBug(id, note)
+    if (before && before.status === 'open')
+      toastUndo(`Resolved #${before.number}`, () => reopenBug(id, before.resolution_note))
+  }
+
+  async function reopenWithUndo(id: string, note: string | null) {
+    const before = bugs.find((bug) => bug.id === id)
+    await reopenBug(id, note)
+    if (before && before.status === 'resolved')
+      toastUndo(`Reopened #${before.number}`, () => resolveBug(id, before.resolution_note))
+  }
+
+  async function assignWithUndo(id: string, userId: string | null) {
+    const before = bugs.find((bug) => bug.id === id)
+    await assign(id, userId)
+    if (before && before.assignee_id !== userId)
+      toastUndo(`${userId ? 'Assigned' : 'Unassigned'} #${before.number}`, () =>
+        assign(id, before.assignee_id),
+      )
+  }
+
+  async function updateWithUndo(id: string, patch: Parameters<typeof updateBug>[1]) {
+    const before = bugs.find((bug) => bug.id === id)
+    await updateBug(id, patch)
+    if (before && patch.severity !== undefined && patch.severity !== before.severity)
+      toastUndo(`Changed severity of #${before.number}`, () =>
+        updateBug(id, { severity: before.severity }),
+      )
+  }
+
   // Replaced per workspace (and on unmount) so pending assigner lookups go quiet.
   const announceLive = useRef({ current: true })
   useEffect(() => {
@@ -237,6 +331,8 @@ export default function Workspace() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+  const [listWidth, setListWidth, resetListWidth] = useListWidth()
+  const desktop = useDesktop()
   const captureRef = useRef<HTMLTextAreaElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -351,9 +447,18 @@ export default function Workspace() {
     if (hasNumberParam) navigate(listPath)
   }, [hasNumberParam, navigate, listPath])
 
-  const deleteAndDeselect = useCallback(
+  const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
+  const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
+
+  /** A bug whose list row takes focus once it is selected (after deleting the one before it). */
+  const focusRowOf = useRef<string | null>(null)
+  // After a delete the user keeps their place: the next bug in the list opens (or the previous
+  // one when the deleted bug was last) and its row takes focus. Nothing left: the empty state.
+  const deleteAndAdvance = useCallback(
     async (id: string) => {
       const bug = bugs.find((b) => b.id === id)
+      const at = visible.findIndex((b) => b.id === id)
+      const neighbour = at === -1 ? undefined : (visible[at + 1] ?? visible[at - 1])
       await deleteBug(id)
       setPickedIds((prev) => {
         if (!prev.has(id)) return prev
@@ -361,14 +466,33 @@ export default function Workspace() {
         next.delete(id)
         return next
       })
-      if (bug) toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
-      deselect()
+      // No Undo: a delete is final (the row and its screenshots are gone; the deletion log in
+      // Settings only records it). The icon matches the other confirmation toasts.
+      if (bug)
+        toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`, {
+          icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
+        })
+      if (neighbour) {
+        focusRowOf.current = neighbour.id
+        select(neighbour.id, { replace: true })
+      } else {
+        deselect()
+      }
     },
-    [bugs, deleteBug, toast, deselect],
+    [bugs, visible, deleteBug, toast, select, deselect],
   )
+  useEffect(() => {
+    const id = focusRowOf.current
+    if (id === null || selected?.id !== id) return
+    focusRowOf.current = null
+    // The list is hidden behind the detail on phones; focus the page there instead.
+    const row = document.querySelector<HTMLElement>(
+      '#bug-list-pane [role="option"][aria-selected="true"]',
+    )
+    if (row && isDesktop()) row.focus()
+    else document.getElementById('main')?.focus()
+  }, [selected?.id])
 
-  const sorted = useMemo(() => sortBugs(bugs, filters.sort), [bugs, filters.sort])
-  const visible = useMemo(() => filterBugs(sorted, filters), [sorted, filters])
   const effectivePickedIds = new Set(
     visible.filter((bug) => pickedIds.has(bug.id)).map((bug) => bug.id),
   )
@@ -489,10 +613,10 @@ export default function Workspace() {
     opts,
   )
   const unassign = (bug: Bug) => {
-    assign(bug.id, null).then(
-      () => toast(`Unassigned #${bug.number}`),
-      (err: unknown) =>
-        toast(err instanceof Error ? err.message : 'Could not change the assignee.'),
+    void assignWithUndo(bug.id, null).catch((err: unknown) =>
+      toast(err instanceof Error ? err.message : 'Could not change the assignee.', {
+        tone: 'error',
+      }),
     )
   }
   const toggleSelfAssign = (bug: Bug) => {
@@ -500,10 +624,10 @@ export default function Workspace() {
       unassign(bug)
       return
     }
-    assign(bug.id, selfId).then(
-      () => toast(`Assigned #${bug.number} to you`),
-      (err: unknown) =>
-        toast(err instanceof Error ? err.message : 'Could not change the assignee.'),
+    void assignWithUndo(bug.id, selfId).catch((err: unknown) =>
+      toast(err instanceof Error ? err.message : 'Could not change the assignee.', {
+        tone: 'error',
+      }),
     )
   }
   useShortcut(
@@ -551,12 +675,29 @@ export default function Workspace() {
     opts,
   )
 
+  const applyFilters = (next: typeof filters) => {
+    // Switching between Bugs and Features starts fresh: no picks, nothing open.
+    if (next.kind !== filters.kind) {
+      clearPicked()
+      setPendingId(null)
+      if (hasNumberParam) {
+        navigate({
+          pathname: basePath,
+          search: writeFilters(new URLSearchParams(search), next).toString(),
+        })
+        return
+      }
+    }
+    setFilters(next)
+  }
+
   const commands: Command[] = [
     {
       id: 'new',
       label: filters.kind === 'feature' ? 'New feature request' : 'New bug',
       group: 'Actions',
       hint: 'N',
+      icon: SquarePen,
       keywords: ['file', 'capture', 'report'],
       run: () => focusInList(captureRef),
     },
@@ -565,6 +706,7 @@ export default function Workspace() {
       label: 'Search',
       group: 'Actions',
       hint: '/',
+      icon: Search,
       keywords: ['find', 'filter'],
       run: () => focusInList(searchRef),
     },
@@ -598,11 +740,77 @@ export default function Workspace() {
             id: 'filter-assigned-me',
             label: 'Show bugs assigned to me',
             group: 'Actions',
+            icon: UserRound,
             keywords: ['assignee', 'mine', 'filter'],
             run: () => setFilters((f) => ({ ...f, assignee: selfId })),
           },
         ]
       : []),
+    ...(
+      [
+        {
+          id: 'nav-bugs',
+          label: 'Show bugs',
+          icon: BugIcon,
+          next: { kind: 'bug' as const },
+          words: ['kind'],
+        },
+        {
+          id: 'nav-features',
+          label: 'Show feature requests',
+          icon: Lightbulb,
+          next: { kind: 'feature' as const },
+          words: ['kind', 'ideas'],
+        },
+        {
+          id: 'nav-open',
+          label: 'Show open',
+          icon: CircleDot,
+          next: { tab: 'open' as const },
+          words: ['status'],
+        },
+        {
+          id: 'nav-resolved',
+          label: 'Show resolved',
+          icon: CircleCheck,
+          next: { tab: 'resolved' as const },
+          words: ['status', 'closed', 'done'],
+        },
+        {
+          id: 'nav-all',
+          label: 'Show all',
+          icon: Layers,
+          next: { tab: 'all' as const },
+          words: ['status'],
+        },
+      ] satisfies {
+        id: string
+        label: string
+        icon: LucideIcon
+        next: Partial<typeof filters>
+        words: string[]
+      }[]
+    ).map(({ id, label, icon, next, words }): Command => ({
+      id,
+      label,
+      icon,
+      group: 'Navigate',
+      keywords: ['filter', 'tab', ...words],
+      run: () => {
+        const nextFilters = { ...filters, ...next }
+        if (showDetail && !isDesktop()) {
+          // On phones the open bug hides the list; go back to it, carrying the new filters.
+          if (nextFilters.kind !== filters.kind) clearPicked()
+          setPendingId(null)
+          navigate({
+            pathname: basePath,
+            search: writeFilters(new URLSearchParams(search), nextFilters).toString(),
+          })
+          return
+        }
+        applyFilters(nextFilters)
+      },
+    })),
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,
       label: `Export visible bugs as ${format === 'csv' ? 'CSV' : 'Markdown'}`,
@@ -622,6 +830,7 @@ export default function Workspace() {
       .map((b): Command => ({
         id: `bug-${b.id}`,
         label: `#${b.number} ${b.title}`,
+        accession: `#${b.number}`,
         group: b.kind === 'feature' ? 'Features' : 'Bugs',
         keywords: [String(b.number)],
         run: () => select(b.id),
@@ -650,6 +859,13 @@ export default function Workspace() {
       run: () => setInviteOpen(true),
     },
     {
+      id: 'claude-setup',
+      label: 'Set up Claude Code',
+      group: 'Workspace',
+      keywords: ['claude', 'bridge', 'helper', 'connect'],
+      run: claude.openSetup,
+    },
+    {
       id: 'claude-guide',
       label: 'Claude Code guide',
       group: 'Help',
@@ -669,92 +885,151 @@ export default function Workspace() {
       group: 'Help',
       hint: '?',
       keywords: ['keys', 'help'],
+      keyboardOnly: true,
       run: () => setShortcutsOpen(true),
     },
   ]
 
   if (ws.notFound) {
     return (
-      <main
-        id="main"
-        tabIndex={-1}
-        className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-fg"
-      >
-        <p className="text-sm">You&apos;re not a member of this workspace</p>
-        <Link to="/app" className="text-sm text-accent underline-offset-4 hover:underline">
-          Go to your workspaces
-        </Link>
+      <main id="main" tabIndex={-1} className="min-h-screen bg-bg text-ink">
+        <div className="mx-auto max-w-[40rem] pt-[18vh]">
+          <StatePanel
+            icon={Lock}
+            title="You're not a member of this workspace"
+            body="Ask a teammate for an invite link, or open one of your own workspaces."
+            action={
+              <ButtonLink to="/app" variant="secondary" size="sm">
+                Go to your workspaces
+              </ButtonLink>
+            }
+          />
+        </div>
       </main>
     )
   }
 
   if (!ws.workspace) {
     return (
-      <div role="status" aria-label="Loading workspace" className="min-h-screen bg-bg">
+      <div role="status" aria-label="Loading workspace" className="paper-grain flex h-dvh flex-col">
         <span className="sr-only">Loading…</span>
-        <div className="h-12 border-b border-border" />
-        <div className="mx-auto mt-4 max-w-3xl space-y-3 px-4">
-          <div className="h-20 animate-pulse rounded-lg bg-bg-subtle" />
-          <div className="h-10 animate-pulse rounded-lg bg-bg-subtle" />
+        <div className="h-[3.4286rem] shrink-0 border-b border-line" />
+        <div className="h-[4rem] shrink-0 border-b border-line" />
+        <div
+          className="min-h-0 flex-1 bg-surface-1 lg:w-(--list-w) lg:border-r lg:border-line"
+          style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+        >
+          <div className="h-[6.2857rem] border-b border-line" />
+          <Skeleton />
         </div>
       </div>
     )
   }
 
   const workspace = ws.workspace
+  const firstItem = isFirstItemView({
+    loading,
+    error: error ?? null,
+    total: bugs.length,
+    kindTotal: counts.all,
+    visible: visible.length,
+    filtered: hasActiveFilters(filters),
+    tab: filters.tab,
+  })
 
   let detail: ReactNode
-  if (selected || !hasNumberParam) {
+  if (selected) {
     detail = (
       <BugDetail
         bug={selected}
         members={ws.members}
         selfId={selfId}
-        onUpdate={updateBug}
-        onResolve={resolveBug}
-        onReopen={reopenBug}
-        onAssign={assign}
+        onUpdate={updateWithUndo}
+        onResolve={resolveWithUndo}
+        onReopen={reopenWithUndo}
+        onAssign={assignWithUndo}
         assignRequest={assignRequest}
-        onDelete={deleteAndDeselect}
+        onDelete={deleteAndAdvance}
         onBack={deselect}
         resolveRequest={resolveRequest}
         reopenRequest={reopenRequest}
         onToast={toast}
-        onRetryUploads={selected ? () => void retryUploads(selected.id) : undefined}
+        onRetryUploads={() => void retryUploads(selected.id)}
         onSend={(bug) => claude.sendBugs([bug])}
         onCopy={(bug) => claude.copyBugs([bug])}
-        claudeRun={selected && !selected.optimistic ? claude.runs.get(selected.number) : undefined}
+        claudeRun={!selected.optimistic ? claude.runs.get(selected.number) : undefined}
+      />
+    )
+  } else if (!hasNumberParam && loading) {
+    // The list is still loading: the detail pane holds the shape of a bug, not a prompt to pick one.
+    detail = <BugDetailSkeleton />
+  } else if (!hasNumberParam && firstItem && desktop) {
+    // Nothing filed yet: the onboarding is the screen's focal point here, not in the narrow list.
+    detail = (
+      <div className={DETAIL_COLUMN}>
+        <Onboarding
+          variant="pane"
+          workspaceId={workspaceId}
+          kind={filters.kind}
+          tab={filters.tab}
+          steps={onboardingSteps(bugs, ws.members.length, claude.connected)}
+          onInvite={() => setInviteOpen(true)}
+          onClaudeSetup={claude.openSetup}
+        />
+      </div>
+    )
+  } else if (!hasNumberParam && visible.length === 0) {
+    // Nothing to pick (a filter matched nothing, an empty tab, a load error): the list says why.
+    detail = null
+  } else if (!hasNumberParam) {
+    const one = filters.kind === 'feature' ? 'feature request' : 'bug'
+    detail = (
+      <StatePanel
+        className={DETAIL_COLUMN}
+        inset="deep"
+        icon={MousePointerClick}
+        title={`No ${one} open`}
+        body={`Pick a ${one} from the list to read it, mark it up or send it to Claude Code.`}
+        hints={
+          <ul aria-label="Shortcuts">
+            <li className={HINT_ROW}>
+              <span className="flex gap-1">
+                <Kbd>J</Kbd>
+                <Kbd>K</Kbd>
+              </span>
+              Move through the list
+            </li>
+            <li className={HINT_ROW}>
+              <Kbd>N</Kbd> File a new {one}
+            </li>
+            <li className={HINT_ROW}>
+              <Kbd>?</Kbd> All shortcuts
+            </li>
+          </ul>
+        }
       />
     )
   } else if (notFound) {
     detail = (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-        <p className="text-sm font-medium text-fg">Bug #{numberParam} not found</p>
-        <p className="text-sm text-muted">
-          It may have been deleted, or the link is from another workspace.
-        </p>
-        <button
-          type="button"
-          onClick={deselect}
-          className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-md text-sm text-accent hover:underline"
-        >
-          <ArrowLeft size={14} aria-hidden="true" /> Back to list
-        </button>
-      </div>
+      <StatePanel
+        className={DETAIL_COLUMN}
+        inset="deep"
+        icon={SearchX}
+        title={`Bug #${numberParam} not found`}
+        body="It may have been deleted, or the link is from another workspace."
+        action={
+          <Button variant="secondary" size="sm" onClick={deselect}>
+            <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" /> Back to list
+          </Button>
+        }
+      />
     )
   } else {
-    detail = (
-      <div role="status" aria-label="Loading bug" className="max-w-3xl space-y-4 p-6">
-        <div className="h-4 w-24 animate-pulse rounded bg-bg-subtle" />
-        <div className="h-7 w-2/3 animate-pulse rounded-md bg-bg-subtle" />
-        <div className="h-4 w-1/3 animate-pulse rounded bg-bg-subtle" />
-        <div className="h-28 animate-pulse rounded-lg bg-bg-subtle" />
-      </div>
-    )
+    detail = <BugDetailSkeleton />
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-bg text-fg">
+    <div className="paper-grain flex h-dvh flex-col text-ink">
       <a
         href="#main"
         onClick={() => document.getElementById('main')?.focus()}
@@ -772,16 +1047,26 @@ export default function Workspace() {
         onShowShortcuts={() => setShortcutsOpen(true)}
         role={ws.role}
       />
-      <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
+      <ConnectionStatus />
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col"
+        style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+      >
         <h1 className="sr-only">{workspace.name}</h1>
         <section
           aria-label="File a bug"
           className={cn(
-            'sticky top-0 z-10 border-b border-border bg-bg p-3',
-            showDetail && 'hidden md:block',
+            'relative z-20 shrink-0 border-b border-line px-3 py-2.5 sm:px-4',
+            showDetail && 'hidden lg:block',
           )}
         >
-          <div className="mx-auto max-w-5xl">
+          {/* Spans the list and the detail column (DESIGN.md "App shell"); the bar styles itself.
+              From 1440px, where the detail column is centred in a wide pane, the bar ends at the
+              column's text edge, (pane width + list + 760px column + 1px rule) / 2, instead of
+              running the full window width over empty paper. */}
+          <div className="min-[1440px]:max-w-[calc((100%+var(--list-w)+761px)/2)]">
             <CaptureBar
               workspaceId={workspaceId}
               onSubmit={fileAndSelect}
@@ -791,13 +1076,8 @@ export default function Workspace() {
             />
           </div>
         </section>
-        <div className="min-h-0 flex-1 md:grid md:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)]">
-          <div
-            className={cn(
-              'h-full min-h-0 md:block md:border-r md:border-border',
-              showDetail && 'hidden',
-            )}
-          >
+        <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[var(--list-w)_1px_minmax(0,1fr)]">
+          <div id="bug-list-pane" className={cn('h-full min-h-0 lg:block', showDetail && 'hidden')}>
             <BugList
               bugs={sorted}
               workspaceName={ws.workspace?.name}
@@ -807,21 +1087,7 @@ export default function Workspace() {
               counts={counts}
               openByKind={openByKind}
               filters={filters}
-              onFilters={(next) => {
-                // Switching between Bugs and Features starts fresh: no picks, nothing open.
-                if (next.kind !== filters.kind) {
-                  clearPicked()
-                  setPendingId(null)
-                  if (hasNumberParam) {
-                    navigate({
-                      pathname: basePath,
-                      search: writeFilters(new URLSearchParams(search), next).toString(),
-                    })
-                    return
-                  }
-                }
-                setFilters(next)
-              }}
+              onFilters={applyFilters}
               selectedId={selected?.id ?? null}
               onSelect={select}
               members={ws.members}
@@ -841,11 +1107,19 @@ export default function Workspace() {
               onClaudeSetup={claude.openSetup}
               claudeConnected={claude.connected}
               claudeRuns={claude.runs}
+              onboardingInDetail={desktop && !showDetail}
             />
           </div>
+          <PaneSplitter
+            width={listWidth}
+            onWidth={setListWidth}
+            onReset={resetListWidth}
+            controls="bug-list-pane"
+            className="hidden lg:block"
+          />
           <div
             className={cn(
-              'h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto md:block',
+              'h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] lg:block',
               !showDetail && 'hidden',
             )}
           >
@@ -875,7 +1149,6 @@ export default function Workspace() {
         pending={claude.pending}
         onSendPending={() => claude.sendBugs(claude.pending)}
       />
-      <ReconnectingPill />
     </div>
   )
 }

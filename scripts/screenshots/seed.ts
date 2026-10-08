@@ -1,5 +1,6 @@
 // Demo data for README screenshots: a small team building "Lumen", a fictional analytics app.
 import type { ClaudeRun } from '../../src/lib/claudeExport'
+import type { FixRun } from '../../src/lib/fixRuns'
 import type { Bug, BugAttachment, BugEvent, Comment, Profile, Workspace } from '../../src/lib/types'
 
 const now = Date.now()
@@ -32,18 +33,19 @@ export const profiles: Profile[] = [
   },
 ]
 
+// Invite codes follow gen_invite_code (0001_init.sql): 8 of A-Z and 2-9 without I, O, 0, 1.
 export const workspaces: Workspace[] = [
   {
     id: WORKSPACE_ID,
     name: 'Lumen',
-    invite_code: 'k3x9-lumen',
+    invite_code: 'K3X9LMNP',
     owner_id: ME,
     created_at: ago(60 * 24 * 40),
   },
   {
     id: 'ws-side',
     name: 'Side project',
-    invite_code: 'p2q8-side',
+    invite_code: 'P2Q8SDHW',
     owner_id: ME,
     created_at: ago(60 * 24 * 10),
   },
@@ -68,6 +70,12 @@ const seeds: Seed[] = [
     severity: 'critical',
     filed_by: 'u-jordan',
     assignee_id: ME,
+    context: {
+      url: 'https://app.lumen.example/checkout?plan=growth',
+      viewport: { w: 390, h: 844, dpr: 3 },
+      browser: 'Safari 18',
+      os: 'iOS',
+    },
     minutes: 6,
   },
   {
@@ -198,6 +206,7 @@ export const bugs: Bug[] = [...seeds, ...featureSeeds].map((s) => ({
   title: s.title,
   description: s.description ?? '',
   transcript: s.transcript ?? null,
+  context: s.context ?? null,
   severity: s.severity,
   status: s.status ?? 'open',
   kind: s.kind ?? 'bug',
@@ -217,6 +226,7 @@ const attachment = (
   i: number,
   width: number,
   height: number,
+  annotations?: BugAttachment['annotations'],
 ): BugAttachment => ({
   id: `att-${bug}-${i}`,
   bug_id: `bug-${bug}`,
@@ -225,13 +235,42 @@ const attachment = (
   height,
   size_bytes: 180_000,
   created_at: ago(5),
+  ...(annotations ? { annotations, uploaded_by: 'u-jordan' } : {}),
 })
 
+/** Live markup layers on the desktop checkout shot: a box and two numbered pins. */
+const checkoutMarkup = {
+  v: 1,
+  shapes: [
+    { type: 'box', color: 'danger', x: 0.59, y: 0.515, w: 0.335, h: 0.12 },
+    {
+      type: 'pin',
+      color: 'danger',
+      n: 1,
+      x: 0.59,
+      y: 0.515,
+      note: 'Cookie banner covers "Pay now" on iPhone',
+    },
+    { type: 'arrow', color: 'danger', x1: 0.5, y1: 0.8, x2: 0.62, y2: 0.66 },
+    {
+      type: 'pin',
+      color: 'danger',
+      n: 2,
+      x: 0.4,
+      y: 0.93,
+      note: 'Banner has no close button, only "Accept all"',
+    },
+  ],
+}
+
 export const bug_attachments: BugAttachment[] = [
-  attachment(24, 'checkout-desktop.png', 0, 1600, 1000),
+  attachment(24, 'checkout-desktop.png', 0, 1600, 1000, checkoutMarkup),
   attachment(24, 'checkout-mobile.png', 1, 780, 1400),
   attachment(23, 'chart-labels.png', 0, 2400, 1120),
   attachment(20, 'tooltip-dark.png', 0, 1600, 1000),
+  attachment(18, 'avatar-blurry.png', 0, 1600, 1000),
+  // The "after" screenshot Claude Code's helper attached to the fix run below.
+  attachment(18, 'avatar-sharp.png', 1, 1600, 1000),
 ]
 
 export const comments: Comment[] = [
@@ -239,7 +278,7 @@ export const comments: Comment[] = [
     id: 'c-1',
     bug_id: 'bug-24',
     author_id: ME,
-    body: 'Reproduced on iPhone 15 and the Pixel 8 too. The banner is position: fixed with z-index 9999.',
+    body: 'Reproduced on iPhone 15 and the Pixel 8 too. The banner is `position: fixed` with `z-index: 9999`.',
     created_at: ago(4),
   },
   {
@@ -349,6 +388,70 @@ export const claudeRuns: ClaudeRun[] = [
     ],
     stepCount: 14,
   },
+]
+
+const fixRun = (over: Partial<FixRun> & Pick<FixRun, 'id' | 'bug_id' | 'run_id'>): FixRun => ({
+  workspace_id: WORKSPACE_ID,
+  status: 'succeeded',
+  branch: null,
+  commit_sha: null,
+  pr_url: null,
+  files_changed: null,
+  additions: null,
+  deletions: null,
+  summary: null,
+  after_attachment_id: null,
+  created_by: ME,
+  started_at: ago(5),
+  finished_at: ago(1),
+  ...over,
+})
+
+/** Proof of fix: the runs the helper recorded (0008_fix_runs.sql), newest first per bug. */
+export const fix_runs: FixRun[] = [
+  fixRun({
+    id: 'fix-24-1',
+    bug_id: 'bug-24',
+    run_id: 'run-1',
+    status: 'running',
+    branch: 'fix/cookie-banner-offset',
+    started_at: ago(2.4),
+    finished_at: null,
+  }),
+  fixRun({
+    id: 'fix-18-3',
+    bug_id: 'bug-18',
+    run_id: 'squash-18-c',
+    branch: 'fix/avatar-srcset',
+    commit_sha: 'e3f9a12c4b7d08e1f2a3b4c5d6e7f8091a2b3c4d',
+    pr_url: 'https://github.com/lumen-dev/lumen/pull/412',
+    files_changed: 2,
+    additions: 14,
+    deletions: 3,
+    summary:
+      'The settings avatar requested the 64px thumbnail and stretched it to 128px on 2x screens. Added a srcset with the 128px variant and a test that checks the rendered image source at devicePixelRatio 2.',
+    after_attachment_id: 'att-18-1',
+    started_at: ago(60 * 21),
+    finished_at: ago(60 * 20.5),
+  }),
+  fixRun({
+    id: 'fix-18-2',
+    bug_id: 'bug-18',
+    run_id: 'squash-18-b',
+    status: 'failed',
+    branch: 'fix/avatar-srcset',
+    started_at: ago(60 * 22),
+    finished_at: ago(60 * 21.8),
+  }),
+  fixRun({
+    id: 'fix-18-1',
+    bug_id: 'bug-18',
+    run_id: 'squash-18-a',
+    status: 'cancelled',
+    branch: 'main',
+    started_at: ago(60 * 23),
+    finished_at: ago(60 * 22.9),
+  }),
 ]
 
 /** Per-person totals for the stats popover (the workspace_stats RPC). */

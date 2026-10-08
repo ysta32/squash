@@ -61,16 +61,44 @@ describe('AuthCallback', () => {
   it('shows the provider error from the query and does not redirect even with a session', () => {
     auth.session = {}
     show('/auth/callback?error_description=Access+denied')
-    expect(screen.getByRole('alert')).toHaveTextContent('Access denied')
+    expect(screen.getByRole('heading', { name: 'Could not sign you in' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('nothing was changed')
+    // The provider's wording stays available as a quiet reason line, never in the headline copy.
+    expect(screen.getByText('Reason: Access denied')).toBeInTheDocument()
     expect(screen.queryByTestId('where')).not.toBeInTheDocument()
   })
 
   it('reads errors from the hash fragment and falls back to the error code', () => {
     show('/auth/callback#error_description=Link+expired')
-    expect(screen.getByRole('alert')).toHaveTextContent('Link expired')
+    expect(screen.getByRole('heading', { name: 'Could not sign you in' })).toBeInTheDocument()
+    expect(screen.getByText('Reason: Link expired')).toBeInTheDocument()
     cleanup()
     show('/auth/callback?error=server_error')
-    expect(screen.getByRole('alert')).toHaveTextContent('server_error')
+    expect(screen.getByRole('heading', { name: 'Could not sign you in' })).toBeInTheDocument()
+    // A bare code is shown once, in the mono eyebrow, not repeated as a reason.
+    expect(screen.getByText('server_error')).toBeInTheDocument()
+    expect(screen.queryByText(/^Reason:/)).not.toBeInTheDocument()
+    cleanup()
+    show('/auth/callback?error=access_denied&error_description=Access+denied')
+    expect(screen.getByText('access_denied')).toBeInTheDocument()
+    expect(screen.queryByText(/^Reason:/)).not.toBeInTheDocument()
+  })
+
+  it('designs the expired-link state from the otp_expired code', () => {
+    show(
+      '/auth/callback#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired',
+    )
+    expect(screen.getByRole('heading', { name: 'This link has expired' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Sign-in links work once, and only for a limited time.',
+    )
+    // Authored copy only: the raw description would repeat the headline.
+    expect(screen.queryByText(/Email link is invalid/)).not.toBeInTheDocument()
+    expect(screen.getByText('otp_expired')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Get a new link' })).toHaveAttribute(
+      'href',
+      '/signin?next=%2Fapp',
+    )
   })
 
   it('the back link preserves only a safe next target', () => {
@@ -96,6 +124,9 @@ describe('AuthCallback', () => {
     act(() => {
       vi.advanceTimersByTime(1)
     })
-    expect(screen.getByRole('alert')).toHaveTextContent('Sign-in link is invalid or has expired.')
+    expect(screen.getByRole('heading', { name: 'This link has expired' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Sign-in links work once, and only for a limited time.',
+    )
   })
 })

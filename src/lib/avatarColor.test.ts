@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   AVATAR_COLORS,
   AVATAR_MIN_CONTRAST,
+  AVATAR_PALETTE,
+  avatarDarkColor,
+  avatarPaletteColor,
   contrastRatio,
-  readableAvatarColor,
 } from './avatarColor'
 
 describe('contrastRatio', () => {
@@ -26,6 +28,15 @@ describe('AVATAR_COLORS', () => {
   it('has no duplicates', () => {
     expect(new Set(AVATAR_COLORS).size).toBe(AVATAR_COLORS.length)
   })
+
+  it('is a curated set of 8 with no blue or purple hues', () => {
+    expect(AVATAR_COLORS).toHaveLength(8)
+    expect(new Set(AVATAR_PALETTE.map((entry) => entry.name)).size).toBe(8)
+    for (const color of AVATAR_COLORS) {
+      const h = hue(color)
+      expect(h < 190 || h > 300, `${color} hue ${h}`).toBe(true)
+    }
+  })
 })
 
 // HSL hue in degrees; 0 for grays.
@@ -38,22 +49,59 @@ function hue(hex: string): number {
   return (h * 60 + 360) % 360
 }
 
-describe('readableAvatarColor', () => {
-  it('keeps colors that already pass', () => {
-    for (const color of AVATAR_COLORS) expect(readableAvatarColor(color)).toBe(color)
-  })
-
-  it.each(['#0891b2', '#6366f1', '#f59e0b', '#84cc16', '#ffffff', '#ff0000'])(
-    'darkens %s until it reaches 4.5:1 without changing its hue',
-    (color) => {
-      const result = readableAvatarColor(color)
-      expect(result).toMatch(/^#[0-9a-f]{6}$/)
-      expect(contrastRatio(result, '#ffffff')).toBeGreaterThanOrEqual(AVATAR_MIN_CONTRAST)
-      expect(Math.abs(hue(result) - hue(color))).toBeLessThan(3)
+describe('darkroom avatar inks', () => {
+  const DARK_PAGE = '#141412'
+  it.each(AVATAR_PALETTE.map((entry) => [entry.name, entry.value, entry.dark]))(
+    '%s lifts for dark mode and keeps white initials at 4.5:1',
+    (_name, light, dark) => {
+      expect(contrastRatio(dark, '#ffffff')).toBeGreaterThanOrEqual(AVATAR_MIN_CONTRAST)
+      // Stands off the darkroom page better than the light ink, at least 3:1 (non-text contrast).
+      expect(contrastRatio(dark, DARK_PAGE)).toBeGreaterThan(contrastRatio(light, DARK_PAGE))
+      expect(contrastRatio(dark, DARK_PAGE)).toBeGreaterThanOrEqual(3)
+      expect(avatarDarkColor(light)).toBe(dark)
+      expect(avatarDarkColor(light.toUpperCase())).toBe(dark)
     },
   )
 
+  it('falls back to the first ink for an unknown color', () => {
+    expect(avatarDarkColor('#123456')).toBe(AVATAR_PALETTE[0].dark)
+  })
+})
+
+describe('avatarPaletteColor', () => {
+  it('keeps palette colors, in any case', () => {
+    for (const color of AVATAR_COLORS) {
+      expect(avatarPaletteColor(color)).toBe(color)
+      expect(avatarPaletteColor(color.toUpperCase())).toBe(color)
+    }
+  })
+
+  it.each(['#0891b2', '#6366f1', '#7c3aed', '#2563eb', '#f59e0b', '#84cc16', '#ff0000'])(
+    'maps %s onto the palette color with the nearest hue, which passes 4.5:1',
+    (color) => {
+      const result = avatarPaletteColor(color)
+      expect(AVATAR_COLORS).toContain(result)
+      expect(contrastRatio(result, '#ffffff')).toBeGreaterThanOrEqual(AVATAR_MIN_CONTRAST)
+      const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b))
+      const nearest = Math.min(
+        ...AVATAR_COLORS.filter((c) => c !== '#57534b').map((c) => distance(hue(c), hue(color))),
+      )
+      expect(distance(hue(result), hue(color))).toBe(nearest)
+    },
+  )
+
+  it('keeps reds red and moves blues and purples onto warm inks', () => {
+    expect(avatarPaletteColor('#ef4444')).toBe('#b42318')
+    expect(avatarPaletteColor('#7c3aed')).toBe('#b4235a')
+    expect(avatarPaletteColor('#2563eb')).toBe('#0d6b57')
+  })
+
+  it('maps greys to Graphite', () => {
+    expect(avatarPaletteColor('#ffffff')).toBe('#57534b')
+    expect(avatarPaletteColor('#6b7280')).toBe('#57534b')
+  })
+
   it('falls back to the first palette color for invalid input', () => {
-    expect(readableAvatarColor('not-a-color')).toBe(AVATAR_COLORS[0])
+    expect(avatarPaletteColor('not-a-color')).toBe(AVATAR_COLORS[0])
   })
 })

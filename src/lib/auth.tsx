@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { authCallbackUrl } from './authRedirect'
 import { supabase } from './supabase'
+import { bumpSessionEpoch } from './sessionEpoch'
 import type { Profile } from './types'
 
 export interface AuthContextValue {
@@ -42,7 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true
     const applySession = (next: Session | null) => {
-      userIdRef.current = next?.user.id ?? null
+      const nextUserId = next?.user.id ?? null
+      if (nextUserId !== userIdRef.current) bumpSessionEpoch()
+      userIdRef.current = nextUserId
       setSession(next)
       setSessionReady(true)
     }

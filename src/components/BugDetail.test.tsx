@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import type { FixRun } from '../lib/fixRuns'
 import type { BugEvent, BugWithMeta, Comment, WorkspaceMember } from '../lib/types'
 import { BugDetail } from './BugDetail'
 
@@ -13,6 +14,18 @@ vi.mock('../hooks/useBug', () => ({
 }))
 vi.mock('../hooks/useSignedUrl', () => ({
   useSignedUrl: (path: string | null) => (path ? `https://cdn.test/${path}` : null),
+}))
+// Fix runs have their own tests (FixRecord.test.tsx); by default the server has none.
+const fixRuns = vi.hoisted(() => ({
+  runs: [] as FixRun[],
+  available: false,
+  bugIds: [] as (string | null)[],
+}))
+vi.mock('../hooks/useFixRuns', () => ({
+  useFixRuns: (bugId: string | null) => {
+    fixRuns.bugIds.push(bugId)
+    return { runs: fixRuns.runs, loading: false, available: fixRuns.available, error: null }
+  },
 }))
 
 const NOW = new Date().toISOString()
@@ -81,6 +94,21 @@ function attachment(id: string) {
   }
 }
 
+/** Opens the … menu and returns the named item (or null when `optional` and it is absent). */
+function menuItem(name: string, optional = false): HTMLElement | null {
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  const menu = screen.getByRole('menu', { name: 'More actions' })
+  return optional
+    ? within(menu).queryByRole('menuitem', { name })
+    : within(menu).getByRole('menuitem', { name })
+}
+
+function openMenuItem(name: string) {
+  const item = menuItem(name)
+  if (!item) throw new Error(`no menu item ${name}`)
+  fireEvent.click(item)
+}
+
 function setup(bug: BugWithMeta | null, extra: Partial<Parameters<typeof BugDetail>[0]> = {}) {
   const handlers = {
     onUpdate: vi.fn(),
@@ -126,6 +154,9 @@ describe('BugDetail', () => {
     thread.comments = []
     thread.events = []
     addComment.mockReset()
+    fixRuns.runs = []
+    fixRuns.available = false
+    fixRuns.bugIds = []
   })
   afterEach(cleanup)
 
@@ -138,7 +169,7 @@ describe('BugDetail', () => {
     })
     const onDelete = vi.fn<(id: string) => Promise<void>>().mockResolvedValue()
     setup(makeBug(), { onDelete })
-    fireEvent.click(screen.getByRole('button', { name: 'Delete bug' }))
+    openMenuItem('Delete bug')
     const dialog = screen.getByRole('dialog', { name: 'Delete bug #42?' })
     expect(dialog).toHaveTextContent('Login button broken')
 
@@ -146,7 +177,7 @@ describe('BugDetail', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(onDelete).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete bug' }))
+    openMenuItem('Delete bug')
     await act(async () => {
       fireEvent.click(
         within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
@@ -166,7 +197,7 @@ describe('BugDetail', () => {
       .fn<(id: string) => Promise<void>>()
       .mockRejectedValue(new Error('Could not delete the bug. Try again.'))
     setup(makeBug({ kind: 'feature' }), { onDelete })
-    fireEvent.click(screen.getByRole('button', { name: 'Delete feature' }))
+    openMenuItem('Delete feature')
     const dialog = screen.getByRole('dialog', { name: 'Delete feature #42?' })
     await act(async () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Delete feature' }))
@@ -176,24 +207,24 @@ describe('BugDetail', () => {
 
   it('disables delete for an optimistic bug and hides it without a handler', () => {
     setup(makeBug({ number: 0, optimistic: true }), { onDelete: vi.fn() })
-    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeDisabled()
+    expect(menuItem('Delete bug')).toBeDisabled()
     cleanup()
     setup(makeBug())
-    expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
+    expect(menuItem('Delete bug', true)).toBeNull()
   })
 
   it('offers delete only to the filer and the workspace owner', () => {
     // Filer who is not the owner (u2 filed it).
     setup(makeBug({ filed_by: 'u2' }), { onDelete: vi.fn(), selfId: 'u2' })
-    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeEnabled()
+    expect(menuItem('Delete bug')).toBeEnabled()
     cleanup()
     // Workspace owner (u1) on someone else's bug.
     setup(makeBug({ filed_by: 'u2' }), { onDelete: vi.fn(), selfId: 'u1' })
-    expect(screen.getByRole('button', { name: 'Delete bug' })).toBeEnabled()
+    expect(menuItem('Delete bug')).toBeEnabled()
     cleanup()
     // Ordinary member (u2) on a bug they did not file.
     setup(makeBug({ filed_by: 'u1' }), { onDelete: vi.fn(), selfId: 'u2' })
-    expect(screen.queryByRole('button', { name: 'Delete bug' })).not.toBeInTheDocument()
+    expect(menuItem('Delete bug', true)).toBeNull()
   })
 
   it('shows a placeholder when no bug is selected', () => {
@@ -206,8 +237,8 @@ describe('BugDetail', () => {
     expect((screen.getByLabelText('Title') as HTMLTextAreaElement).value).toBe(
       'Login button broken',
     )
-    expect(screen.getByText('#42')).toBeTruthy()
-    expect(screen.getByText(/Filed by/).textContent).toMatch(/Filed by Ada Lovelace · just now/)
+    expect(screen.getByText('No. 042')).toBeTruthy()
+    expect(screen.getByText(/Coll\./).closest('p')?.textContent).toMatch(/^Coll\. Ada Lovelace · /)
   })
 
   it('shows Claude progress only when a run is passed', () => {
@@ -236,7 +267,7 @@ describe('BugDetail', () => {
 
   it('shows "#…" for optimistic bugs', () => {
     setup(makeBug({ number: 0, optimistic: true }))
-    expect(screen.getByText('#…')).toBeTruthy()
+    expect(screen.getByText('No. …')).toBeTruthy()
   })
 
   it('opens the resolve popover and confirms with a note', async () => {
@@ -252,10 +283,22 @@ describe('BugDetail', () => {
     expect(screen.queryByRole('dialog', { name: 'Resolve bug' })).toBeNull()
   })
 
+  it('keeps one filled Resolve on screen: the trigger reads as pressed while the popover is open', () => {
+    setup(makeBug())
+    const trigger = screen.getByRole('button', { name: 'Resolve', expanded: false })
+    expect(trigger).toHaveClass('bg-accent')
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Resolve bug' })
+    expect(screen.getByRole('button', { name: 'Resolve', expanded: true })).not.toHaveClass(
+      'bg-accent',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Resolve' })).toHaveClass('bg-accent')
+  })
+
   it('confirms with Cmd+Enter and resolves without note', async () => {
     const { onResolve } = setup(makeBug())
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
     expect(onResolve).toHaveBeenLastCalledWith('b1', null)
 
@@ -289,7 +332,7 @@ describe('BugDetail', () => {
     )
     expect(screen.getByText('“Fixed it”')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Reopen without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
     expect(onReopen).toHaveBeenCalledWith('b1', null)
   })
@@ -360,6 +403,150 @@ describe('BugDetail', () => {
     expect(onUpdate).toHaveBeenCalledTimes(2)
     // Draft cleared: the input shows the prop title again (parent hasn't updated it in this test).
     expect(input.value).toBe('Login button broken')
+  })
+
+  it('offers Retry inline when an action fails, and retries that action', async () => {
+    const onResolve = vi
+      .fn<(id: string, note: string | null) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Could not resolve #42.'))
+      .mockResolvedValueOnce()
+    setup(makeBug(), { onResolve })
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
+    await act(async () => {})
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Could not resolve #42.')
+    await act(async () => {
+      fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    })
+    expect(onResolve).toHaveBeenCalledTimes(2)
+    expect(onResolve).toHaveBeenLastCalledWith('b1', null)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('keeps Send to Claude Code and the Claude copy prompt reachable', () => {
+    const onSend = vi.fn()
+    const onCopy = vi.fn()
+    setup(makeBug(), { onSend, onCopy })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Claude Code' }))
+    expect(onSend).toHaveBeenCalledTimes(1)
+    fireEvent.click(menuItem('Copy prompt for Claude Code')!)
+    expect(onCopy).toHaveBeenCalledTimes(1)
+    // Send is always a visible button (icon-only on phones), never hidden in the menu.
+    expect(menuItem('Send to Claude Code', true)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send to Claude Code' })).toBeEnabled()
+  })
+
+  it('quotes the resolution note once: in the header, not again on the timeline', () => {
+    thread.events = [
+      {
+        id: 'e1',
+        bug_id: 'b1',
+        actor_id: 'u2',
+        type: 'resolved',
+        note: 'Fixed it',
+        created_at: NOW,
+      },
+    ]
+    setup(
+      makeBug({
+        status: 'resolved',
+        resolved_by: 'u2',
+        resolved_at: NOW,
+        resolution_note: 'Fixed it',
+      }),
+    )
+    expect(screen.getByText('“Fixed it”')).toBeTruthy()
+    expect(screen.queryByText('Fixed it')).toBeNull()
+    const timeline = screen.getByRole('list', { name: 'Timeline' })
+    expect(within(timeline).getByText(/resolved/)).toBeTruthy()
+  })
+
+  it('captions the open screenshot with its size and file name', () => {
+    setup(makeBug({ attachments: [attachment('a1')] }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open screenshot 1' }))
+    const viewer = screen.getByRole('dialog', { name: 'Screenshot viewer' })
+    expect(viewer).toHaveTextContent('Fig. 1 / 1 · 10×10 · a1.webp')
+  })
+
+  it('shows live markup layers on thumbnails, in the viewer and as a pin checklist', () => {
+    const annotations = {
+      v: 1,
+      shapes: [
+        { type: 'box', color: 'danger', x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+        { type: 'pin', color: 'danger', n: 1, x: 0.5, y: 0.5, note: 'Banner overlaps Pay now' },
+      ],
+    }
+    setup(
+      makeBug({
+        attachments: [attachment('a1'), { ...attachment('a2'), annotations }],
+      }),
+    )
+    const thumbs = screen.getAllByRole('button', { name: /^Open screenshot/ })
+    expect(within(thumbs[0]).queryByTestId('annotation-overlay')).toBeNull()
+    const overlay = within(thumbs[1]).getByTestId('annotation-overlay')
+    // The thumb is framed on its marks: image and overlay share one positioned box.
+    expect(overlay).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet')
+    expect(overlay.querySelector('[data-pin="1"]')).not.toBeNull()
+    const framed = overlay.parentElement as HTMLElement
+    expect(framed.querySelector('img')).not.toBeNull()
+    expect(framed.style.left).toBe('0%')
+    expect(framed.style.top).toBe('0%')
+    expect(framed.style.width).toBe('100%')
+    expect(parseFloat(framed.style.height)).toBeCloseTo(133.333, 2)
+
+    const checklist = screen.getByRole('list', { name: 'Pinned issues' })
+    expect(checklist).toHaveTextContent('Pin 1: Banner overlaps Pay now')
+    expect(screen.getByText('Fig. 2 · Pins')).toBeInTheDocument()
+    expect(screen.queryByText('Fig. 1 · Pins')).toBeNull()
+
+    fireEvent.click(thumbs[1])
+    const viewer = screen.getByRole('dialog', { name: 'Screenshot viewer' })
+    expect(within(viewer).getByTestId('annotation-overlay')).toHaveAttribute(
+      'preserveAspectRatio',
+      'xMidYMid meet',
+    )
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(within(viewer).queryByTestId('annotation-overlay')).toBeNull()
+  })
+
+  it('asks for no fix runs while the bug is still being filed', () => {
+    setup(makeBug({ number: 0, optimistic: true }))
+    expect(fixRuns.bugIds.length).toBeGreaterThan(0)
+    expect(fixRuns.bugIds.every((id) => id === null)).toBe(true)
+  })
+
+  it('labels a fix run’s after screenshot in the strip and the viewer', () => {
+    fixRuns.available = true
+    fixRuns.runs = [
+      {
+        id: 'r1',
+        bug_id: 'b1',
+        workspace_id: 'w1',
+        run_id: 'run-1',
+        status: 'succeeded',
+        branch: 'fix/login',
+        commit_sha: 'e3f9a12c4b',
+        pr_url: null,
+        files_changed: 1,
+        additions: 2,
+        deletions: 1,
+        summary: null,
+        after_attachment_id: 'a2',
+        created_by: 'u1',
+        started_at: NOW,
+        finished_at: NOW,
+      },
+    ]
+    setup(makeBug({ attachments: [attachment('a1'), attachment('a2')] }))
+    expect(fixRuns.bugIds).toContain('b1')
+    expect(screen.getByRole('button', { name: 'Open screenshot 1' })).toBeInTheDocument()
+    const after = screen.getByRole('button', { name: 'Open screenshot 2, after fix e3f9a12' })
+    expect(after.closest('figure')).toHaveTextContent('Fig. 2 · After fix e3f9a12')
+    expect(screen.getByRole('region', { name: 'Fix record' })).toBeInTheDocument()
+    fireEvent.click(after)
+    const viewer = screen.getByRole('dialog', { name: 'Screenshot viewer' })
+    expect(viewer).toHaveTextContent('After fix e3f9a12 · 10×10 · a2.webp')
   })
 
   it('keeps the description draft when the save fails', async () => {

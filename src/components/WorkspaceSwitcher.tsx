@@ -5,9 +5,9 @@ import type { Workspace } from '../lib/types'
 import { setLastWorkspace } from '../hooks/useWorkspaces'
 import { useDismiss } from '../hooks/useDismiss'
 import { cn } from '../lib/utils'
+import { menuRowClass, popoverClass } from './dialogStyles'
 
-const ITEM =
-  't focus-ring flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-bg-subtle focus-visible:bg-bg-subtle'
+const ITEM = menuRowClass
 
 export interface WorkspaceSwitcherProps {
   workspace: Workspace
@@ -45,24 +45,24 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
         aria-expanded={open}
         title="Switch workspace"
         className={cn(
-          't focus-ring flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-fg hover:bg-bg-subtle',
-          open && 'bg-bg-subtle',
+          't focus-ring flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-ink hover:bg-surface-3 pointer-coarse:h-[3.1429rem]',
+          open && 'bg-surface-3',
         )}
       >
         <span className="max-w-[9rem] truncate sm:max-w-[14rem]">{workspace.name}</span>
-        <ChevronsUpDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted" />
+        <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
       </button>
       {open && (
         <div
           role="menu"
           onKeyDown={onMenuKey}
           aria-label="Workspaces"
-          className="t absolute left-0 top-full z-30 mt-1 w-60 max-w-[calc(100vw-1.5rem)] rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated starting:-translate-y-1 starting:opacity-0"
+          className={cn(
+            popoverClass,
+            'absolute top-full left-0 z-30 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] p-1',
+          )}
         >
-          <div
-            role="none"
-            className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase"
-          >
+          <div role="none" className="specimen-label px-2 pt-2 pb-1.5">
             Workspaces
           </div>
           {workspaces.map((w) => (
@@ -72,22 +72,22 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
               role="menuitem"
               onClick={() => select(w.id)}
               aria-current={w.id === workspace.id ? 'true' : undefined}
-              className={cn(ITEM, 'text-fg', w.id === workspace.id && 'font-medium')}
+              className={cn(ITEM, w.id === workspace.id && 'font-medium')}
             >
               <span className="min-w-0 flex-1 truncate">{w.name}</span>
               {w.id === workspace.id && (
-                <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />
+                <Check aria-hidden="true" className="size-4 shrink-0 text-accent" />
               )}
             </button>
           ))}
-          <div role="separator" className="-mx-1 my-1 border-t border-border" />
+          <div role="separator" className="-mx-1 my-1 border-t border-line" />
           <Link
             to="/app?new=1"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className={cn(ITEM, 'text-muted hover:text-fg')}
+            className={cn(ITEM, 'text-ink-2 hover:text-ink')}
           >
-            <Plus aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <Plus aria-hidden="true" className="size-4 shrink-0" />
             Create or join…
           </Link>
         </div>

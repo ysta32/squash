@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+## v2.0.0 — 2026-10-07
+
+A full redesign, "Specimen": every screen rebuilt around the way a bug is actually examined. Plus markup that stays editable after filing, and proof that a fix landed.
+
+### Changed
+
+- New look across the whole app. IBM Plex Sans and Mono replace Inter; warm paper (light) and darkroom (dark) themes with a single viridian accent; hairline ledgers instead of cards; a subtle paper grain. Every bug opens on a mono "specimen label" (number, severity, who filed it, where and when).
+- The bug list is a ledger: severity as tally ticks, a compact status menu, an assignee column that shows an empty dashed circle when nobody is assigned (it no longer falls back to the person who filed it), and a resizable list pane (480px default on wide screens).
+- The detail pane follows the state of the workspace: a skeleton while loading, nothing when a filter matches nothing, and the getting-started guide when the workspace is empty.
+- The capture bar grows in place instead of covering the list, shows larger removable screenshot thumbnails, moves a pasted link into a chip instead of leaving it twice, and collapses to one row on phones.
+- Every dialog shares one layout (label, title, close button, actions) and opens with focus on its first field. Destructive confirmations use one filled red button. Overlays blur what is behind them.
+- Settings is a numbered ledger that saves as you type (no Save buttons), with "Recently deleted" in its own section and an Invite button on the Members page. Sign-in and onboarding are split screens with a live product preview that follows each onboarding step.
+- One keyboard key style everywhere (one key per cap, ↵ for Enter). On touch screens, keyboard-only hints are hidden and instructions say "tap".
+- New marketing home page told in order (what it is, the problem, the product, real numbers computed from the repository, depth, get started) and a new 404 page.
+- A full public site sharing one nav and footer: Features, Pricing (free, MIT; hosted vs self-hosted), Changelog (built from this file, with an RSS feed at `/changelog.xml`), Docs (getting started, capture, markup, keyboard, Claude Code, self-hosting, migrations, security model), FAQ, About, Press kit and a Status page that checks the app, database and live updates from your browser.
+- Privacy and Terms rewritten to describe exactly what Squash stores, where, and who can see it.
+
+### Added
+
+- **Markup that stays live.** Boxes, arrows, highlights and numbered pins drawn on a screenshot are stored as editable layers, drawn over thumbnails and the full-size viewer, and listed as a "Pins" checklist. Claude Code receives the pinned regions with their notes.
+- **Proof of fix.** When the Claude Code helper (v7) fixes a bug, Squash records the run: commit, diff size, pull request link, and an "after" screenshot. The bug shows a fix record with a before/after slider. Runs that made no commit are recorded honestly as such.
+- On phones: a bottom sheet for resolving, a full-width screenshot viewer with tap to zoom, and 44px touch targets throughout (48px list rows).
+
+### Fixed
+
+- Many accessibility fixes: WCAG 1.4.13 tooltips (hoverable, dismissable with Esc), focus returns to the control that opened a dialog, live-region announcements for attachment errors, and AA contrast on every status and severity colour in both themes.
+- Offline: the presence indicator hides instead of showing stale "online" teammates.
+- Toasts sit above the list footer instead of covering "Send to Claude Code".
+
+### Performance
+
+- About 7 kB less JavaScript (gzip) from build-time trimming of unused library code. The CI size check now measures the real production bundle, including the Supabase client.
+
+**Needs migrations `0008_fix_runs.sql` and `0009_attachment_annotations.sql`** (after `0001`–`0007`; see MAINTAINER.md → Applying migrations to production). Until `0008` runs, fix records are simply not shown; until `0009` runs, markup is flattened into the screenshot as before, with a pin legend.
+
 ## v1.7.0 — 2026-10-07
 
 Context on every bug, editable comments, a deletion log you can read, and a Claude Code helper that only talks to your own storage.

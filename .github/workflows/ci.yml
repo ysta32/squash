@@ -28,4 +28,8 @@ jobs:
       - run: npm run test
       - run: npm run test:db
       - run: npm run build
+        env:
+          # Non-secret placeholders so the size gate measures the real bundle (Supabase client included).
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
       - run: npm run size

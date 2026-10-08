@@ -1,11 +1,12 @@
 import { memo, useEffect, useRef } from 'react'
-import { Bot, CircleCheck, Image as ImageIcon, SquareCheck } from 'lucide-react'
+import { CircleCheck, Eye, Image as ImageIcon, Sparkle, SquareCheck } from 'lucide-react'
 import type { PresenceUser } from '../hooks/usePresence'
 import type { ClaudeRunState } from '../lib/claudeExport'
-import { SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/types'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn, relativeTime } from '../lib/utils'
 import { Avatar } from './Avatar'
+import { SeverityTicks } from './SeverityTicks'
+import { ROW_BOX } from './Skeleton'
 
 export interface BugRowProps {
   bug: BugWithMeta
@@ -51,19 +52,39 @@ export const BugRow = memo(function BugRow({
   const attachmentCount = savedCount + pendingCount
   const uploadFailed = bug.pending?.some((upload) => upload.error !== undefined) ?? false
   const num = bug.optimistic ? '…' : String(bug.number)
-  const filer = members.find((member) => member.user_id === bug.filed_by)?.profile ?? null
   const resolver = members.find((member) => member.user_id === bug.resolved_by)?.profile ?? null
   const assignee = bug.assignee_id
     ? (members.find((member) => member.user_id === bug.assignee_id)?.profile ?? null)
     : null
   const claudeActive =
     claudeState === 'starting' || claudeState === 'working' || claudeState === 'waiting'
-  const shownViewers = viewers.slice(0, MAX_VIEWERS)
-  const extraViewers = viewers.length - shownViewers.length
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [selected])
+
+  // Arrival (DESIGN.md section 8): a realtime row lights up in the accent tint and fades out over
+  // 600ms. Opacity only, on its own layer; under reduced motion it holds still for 2s, then goes.
+  const flashRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const flash = flashRef.current
+    if (!highlighted || !flash || typeof flash.animate !== 'function') return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const animation = flash.animate(
+      reduce
+        ? [{ opacity: 1 }, { opacity: 1, offset: 0.999 }, { opacity: 0 }]
+        : [{ opacity: 1 }, { opacity: 0 }],
+      { duration: reduce ? 2000 : ARRIVAL_MS, easing: 'linear', fill: 'forwards' },
+    )
+    return () => animation.cancel()
+  }, [highlighted])
+
+  const resolved = bug.status === 'resolved'
+  const viewerNames = viewers.map(
+    (viewer) =>
+      members.find((member) => member.user_id === viewer.user_id)?.profile.display_name ??
+      'Unknown user',
+  )
 
   return (
     <button
@@ -72,47 +93,69 @@ export const BugRow = memo(function BugRow({
       role="option"
       aria-selected={selected}
       aria-label={`#${num} ${bug.title}`}
+      data-highlighted={highlighted || undefined}
+      data-picked={picked || undefined}
+      data-status={bug.status}
       onClick={(e) => {
         if (onTogglePick && (e.metaKey || e.ctrlKey || e.shiftKey)) onTogglePick(bug.id)
         else onSelect(bug.id)
       }}
       className={cn(
-        't focus-ring relative flex h-11 w-full items-center gap-2.5 rounded-md pl-3 pr-2.5 text-left',
-        highlighted || picked ? 'bg-accent/10' : selected ? 'bg-accent/8' : 'hover:bg-bg-subtle',
-        bug.status === 'resolved' && 'opacity-60',
+        ROW_BOX,
+        'focus-ring-inset relative isolate w-full cursor-default text-left',
+        selected
+          ? 'bg-accent-tint shadow-[inset_2px_0_0_var(--accent)]'
+          : picked
+            ? 'bg-accent-tint/60 hover:bg-accent-tint'
+            : 'hover:bg-surface-3',
       )}
     >
-      {selected && (
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent"
-        />
-      )}
-      <span className="flex w-3 shrink-0 items-center justify-center">
-        {picked ? (
-          <SquareCheck size={14} aria-label="Picked" className="text-accent" />
-        ) : (
-          <span
-            className={cn('h-2 w-2 rounded-full', SEVERITY_COLOR[bug.severity])}
-            title={`${SEVERITY_LABEL[bug.severity]} severity`}
-          />
+      <span
+        ref={flashRef}
+        aria-hidden="true"
+        className={cn(
+          'pointer-events-none absolute inset-0 -z-10 bg-accent-tint opacity-0',
+          highlighted && 'opacity-100',
         )}
+      />
+      {picked ? (
+        <span className="flex size-[16px] shrink-0 items-center justify-center text-accent">
+          <SquareCheck size={14} strokeWidth={1.75} aria-label="Picked" />
+        </span>
+      ) : (
+        <SeverityTicks severity={bug.severity} />
+      )}
+      <span className="w-[4ch] shrink-0 text-right font-mono text-xs font-medium text-ink-3 tabular-nums">
+        #{num}
       </span>
-      <span className="min-w-9 shrink-0 font-mono text-xs tabular-nums text-muted">#{num}</span>
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg" title={bug.title}>
-        {bug.title}
+      <span className="flex min-w-0 flex-1">
+        <span
+          className={cn(
+            'relative max-w-full truncate text-base font-medium',
+            resolved ? 'text-ink-3' : 'text-ink',
+            // Resolve: a 1px strike drawn left to right (transform only).
+            'after:pointer-events-none after:absolute after:inset-x-0 after:top-1/2 after:h-px after:origin-left after:bg-current after:transition-transform after:duration-[220ms] after:ease-(--ease-out)',
+            resolved ? 'after:scale-x-100' : 'after:scale-x-0',
+          )}
+          title={bug.title}
+        >
+          {bug.title}
+        </span>
       </span>
-      <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
+      {/* Meta column, always in this order: Claude status, screenshots, viewers, resolved; then
+          the time and the person pinned right. Sized to its content so titles take the rest. */}
+      <span className="flex shrink-0 items-center gap-2.5 text-ink-3">
         {claudeActive && (
           <span
             className={cn(
-              'inline-flex animate-pulse motion-reduce:animate-none',
+              'inline-flex',
               claudeState === 'waiting' ? 'text-warning' : 'text-accent',
             )}
             title={claudeState === 'waiting' ? 'Claude needs you in Terminal' : 'Claude is working'}
           >
-            <Bot
+            <Sparkle
               size={14}
+              strokeWidth={1.75}
               aria-label={claudeState === 'waiting' ? 'Claude needs you' : 'Claude is working'}
             />
           </span>
@@ -120,7 +163,7 @@ export const BugRow = memo(function BugRow({
         {attachmentCount > 0 && (
           <span
             className={cn(
-              'hidden items-center gap-0.5 tabular-nums sm:inline-flex',
+              'hidden items-center gap-1 font-mono text-xs tabular-nums sm:inline-flex',
               uploadFailed && 'text-danger',
             )}
             title={
@@ -132,50 +175,44 @@ export const BugRow = memo(function BugRow({
             }
           >
             <ImageIcon
-              size={13}
-              strokeWidth={1.75}
+              size={14}
+              strokeWidth={1.5}
               aria-label={`${attachmentCount} screenshot${attachmentCount === 1 ? '' : 's'}`}
             />
             {attachmentCount > 1 && <span aria-hidden="true">{attachmentCount}</span>}
           </span>
         )}
-        {bug.status === 'resolved' && (
+        {viewers.length > 0 && (
+          // Teammates with this bug open right now, named in the tooltip. Part of the meta column;
+          // dropped below `sm` so narrow titles keep their room.
           <span
-            className="inline-flex text-success"
+            className="hidden items-center gap-0.5 text-ink-2 sm:inline-flex"
+            aria-label="Currently viewing"
+            title={viewerTitle(viewerNames)}
+          >
+            <Eye size={14} strokeWidth={1.5} aria-hidden="true" />
+            {viewers.length > 1 && (
+              <span aria-hidden="true" className="font-mono text-label tabular-nums">
+                {viewers.length}
+              </span>
+            )}
+          </span>
+        )}
+        {resolved && (
+          <span
+            className="inline-flex text-status-resolved"
             title={`Resolved by ${resolver?.display_name ?? 'Unknown user'}`}
           >
-            <CircleCheck size={13} strokeWidth={1.75} aria-label="Resolved" />
+            <CircleCheck size={14} strokeWidth={1.5} aria-label="Resolved" />
           </span>
         )}
         <time
           dateTime={bug.created_at}
           title={new Date(bug.created_at).toLocaleString()}
-          className="w-12 truncate text-right tabular-nums"
+          className="shrink-0 text-right font-mono text-xs whitespace-nowrap tabular-nums"
         >
           {relativeTime(bug.created_at)}
         </time>
-        {viewers.length > 0 && (
-          <span className="inline-flex items-center -space-x-1.5" aria-label="Currently viewing">
-            {shownViewers.map((viewer) => {
-              const profile =
-                members.find((member) => member.user_id === viewer.user_id)?.profile ?? null
-              return (
-                <span
-                  key={viewer.user_id}
-                  className="inline-flex rounded-full"
-                  title={`${profile?.display_name ?? 'Unknown user'} is viewing`}
-                >
-                  <Avatar profile={profile} size="xs" ring />
-                </span>
-              )
-            })}
-            {extraViewers > 0 && (
-              <span className="relative inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-bg-subtle px-1 text-[10px] font-medium tabular-nums text-muted ring-2 ring-bg">
-                +{extraViewers}
-              </span>
-            )}
-          </span>
-        )}
         {bug.assignee_id ? (
           <span
             className="inline-flex"
@@ -184,13 +221,23 @@ export const BugRow = memo(function BugRow({
             <Avatar profile={assignee} size="xs" />
           </span>
         ) : (
-          <span className="inline-flex" title={`Filed by ${filer?.display_name ?? 'Unknown user'}`}>
-            <Avatar profile={filer} size="xs" />
-          </span>
+          // The person slot only ever means the assignee: unassigned is an empty dashed disc of
+          // the same size, never the filer standing in (one person, one meaning, one colour).
+          <span
+            role="img"
+            aria-label="Unassigned"
+            title="Unassigned"
+            className="inline-flex size-[20px] shrink-0 rounded-full border border-dashed border-line-input"
+          />
         )}
       </span>
     </button>
   )
 }, areEqual)
 
-const MAX_VIEWERS = 3
+const ARRIVAL_MS = 600
+
+function viewerTitle(names: string[]): string {
+  if (names.length === 1) return `${names[0]} is viewing`
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are viewing`
+}

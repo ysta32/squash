@@ -1,25 +1,61 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Check, Copy, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, ChevronRight, Copy, RefreshCw } from 'lucide-react'
 import {
   BRIDGE_URL,
   BRIDGE_VERSION,
   PROGRESS_VERSION,
   AUTO_RESOLVE_VERSION,
   HARDENED_VERSION,
+  PROOF_VERSION,
   installCommand,
   pingBridge,
   type BridgeStatus,
 } from '../lib/claudeExport'
 import { cn } from '../lib/utils'
-import { Badge, Button, Input, Kbd, Logo, proseLinkClass } from '../components/ui'
+import type { DocHeading } from '../components/marketing/content-types'
+import { DocsLayout } from '../components/marketing/DocsLayout'
+import { usePageTitle } from '../components/marketing/usePageTitle'
+import { Button, Kbd, proseLinkClass } from '../components/ui'
 
 const POLL_MS = 2000
 
-/** A terminal command with a copy button. */
+/** Section outline for the docs layout (ids on the h2s below). */
+const GUIDE_HEADINGS: DocHeading[] = [
+  { id: 'how-it-works', text: 'How it works', level: 2 },
+  { id: 'install', text: 'Install or update', level: 2 },
+  { id: 'progress', text: 'Following Claude’s progress', level: 2 },
+  { id: 'troubleshooting', text: 'Troubleshooting', level: 2 },
+  { id: 'uninstall', text: 'Uninstall', level: 2 },
+]
+
+/**
+ * A terminal command with a copy button. Long commands scroll sideways inside the block (never
+ * wrap, so they paste exactly), with a fade on whichever edge has more command beyond it.
+ */
 export function CommandBlock({ command, label }: { command: string; label: string }) {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const scroller = useRef<HTMLPreElement>(null)
+  const [edges, setEdges] = useState({ start: false, end: false })
+
+  const measure = useCallback(() => {
+    const node = scroller.current
+    if (!node) return
+    const max = node.scrollWidth - node.clientWidth
+    setEdges({ start: node.scrollLeft > 1, end: max - node.scrollLeft > 1 })
+  }, [])
+
+  useLayoutEffect(() => {
+    measure()
+    const node = scroller.current
+    if (!node || typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [measure, command])
 
   useEffect(() => {
     if (!copied) return
@@ -40,18 +76,35 @@ export function CommandBlock({ command, label }: { command: string; label: strin
 
   return (
     <div role="group" aria-label={`${label} block`} className="mt-3">
-      <div className="flex gap-2">
-        <Input
-          readOnly
-          value={command}
+      <div className="flex min-w-0 items-stretch overflow-hidden rounded-md border border-line-2 bg-surface-1">
+        <pre
+          ref={scroller}
+          // Focusable so keyboard users can scroll a long command.
+          tabIndex={0}
           aria-label={label}
-          onFocus={(e) => e.currentTarget.select()}
-          className="min-w-0 flex-1 font-mono text-xs"
-        />
-        <Button type="button" onClick={() => void copy()} variant="primary">
-          {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+          onScroll={measure}
+          data-fade-start={edges.start || undefined}
+          data-fade-end={edges.end || undefined}
+          className={cn(
+            'focus-ring-inset min-w-0 flex-1 overflow-x-auto px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre text-ink [scrollbar-width:thin]',
+            '[--fade-l:black] [--fade-r:black] data-fade-end:[--fade-r:transparent] data-fade-start:[--fade-l:transparent]',
+            '[mask-image:linear-gradient(to_right,var(--fade-l),black_24px,black_calc(100%-24px),var(--fade-r))]',
+          )}
+        >
+          <code>{command}</code>
+        </pre>
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className="t focus-ring-inset flex min-h-11 shrink-0 items-center gap-1.5 border-l border-line px-3 text-sm font-medium text-ink hover:bg-surface-3 sm:min-h-9"
+        >
+          {copied ? (
+            <Check className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+          ) : (
+            <Copy className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+          )}
           <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
-        </Button>
+        </button>
       </div>
       {error && (
         <p role="alert" className="mt-2 text-sm text-danger">
@@ -117,10 +170,15 @@ function HelperCheck() {
                       'bg-warning',
                       `Helper v${status.version} is running. Run the command below to update it: the new helper pins screenshot downloads to this app’s Supabase storage host and limits how many Claude runs start at once.`,
                     ]
-                  : [
-                      'bg-success',
-                      `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
-                    ]
+                  : status.version < PROOF_VERSION
+                    ? [
+                        'bg-warning',
+                        `Helper v${status.version} is running. Run the command below to update it so each fix Claude finishes records its commit, branch, pull request and diff on the bug.`,
+                      ]
+                    : [
+                        'bg-success',
+                        `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
+                      ]
 
   return (
     <div className="mt-6 rounded-xl border border-border p-4">
@@ -149,8 +207,8 @@ function HelperCheck() {
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
     <li className="flex gap-4">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
-        {n}
+      <span className="w-6 shrink-0 pt-px font-mono text-xs leading-6 text-accent nums">
+        {String(n).padStart(2, '0')}
       </span>
       <div className="min-w-0 flex-1">
         <h3 className="font-medium">{title}</h3>
@@ -160,27 +218,38 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   )
 }
 
-const code = 'rounded bg-bg-subtle px-1 py-0.5 font-mono text-xs text-fg'
+/** Inline code: one line (a command never breaks mid-word), except `codeLong` for long paths. */
+const codeBase = 'rounded-sm border border-line bg-surface-1 px-1 py-px font-mono text-xs text-ink'
+const code = `${codeBase} whitespace-nowrap`
+const codeLong = `${codeBase} break-all`
+
+/** One troubleshooting row: a full-width summary with a chevron that turns when it opens. */
+function Disclosure({ title, children }: { title: ReactNode; children: ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="t focus-ring-inset -mx-4 flex min-h-12 cursor-pointer list-none items-center gap-3 px-4 py-2.5 font-medium text-ink select-none hover:bg-surface-3/60 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">{title}</span>
+        <ChevronRight
+          className="t size-4 shrink-0 text-ink-3 group-open:rotate-90"
+          strokeWidth={1.5}
+          absoluteStrokeWidth
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="pb-4 text-ink-2">{children}</div>
+    </details>
+  )
+}
 
 export default function ClaudeGuide() {
+  usePageTitle('Claude Code helper')
   const origin = window.location.origin
   const command = installCommand(origin)
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <header className="border-b border-border">
-        <nav aria-label="Main navigation" className="mx-auto flex h-14 max-w-2xl items-center px-6">
-          <Link to="/" aria-label="Squash home" className="focus-ring rounded-md">
-            <Logo />
-          </Link>
-        </nav>
-      </header>
-      <main className="mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14">
-        <Badge tone="accent" className="mb-4 text-xs">
-          Claude Code
-        </Badge>
-        <h1 className="text-3xl font-semibold tracking-tight">Claude Code helper</h1>
-        <p className="mt-4 leading-7 text-muted">
+    <DocsLayout current="claude" headings={GUIDE_HEADINGS}>
+      <div className="text-base leading-7">
+        <p className="max-w-[68ch] text-read text-ink-2">
           The helper is a small program on your computer that lets Squash open Claude Code on a bug,
           with its screenshots, in your project folder. While Claude works, the helper reports back
           so the bug in Squash shows what Claude is doing: its current step, its plan, and its
@@ -188,7 +257,9 @@ export default function ClaudeGuide() {
         </p>
 
         <section className="mt-8 rounded-xl border border-border bg-bg-subtle p-5">
-          <h2 className="text-lg font-semibold">How it works</h2>
+          <h2 id="how-it-works" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            How it works
+          </h2>
           <p className="mt-2 text-sm leading-7 text-muted">
             Squash sends the bugs you select, their comments, and screenshot links to a local helper
             at <code className={code}>127.0.0.1:4317</code>. It accepts requests from configured
@@ -206,7 +277,9 @@ export default function ClaudeGuide() {
         <HelperCheck />
 
         <section className="mt-10">
-          <h2 className="text-lg font-semibold">Install or update</h2>
+          <h2 id="install" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Install or update
+          </h2>
           <p className="mt-2 text-sm leading-6 text-muted">
             The same command installs the helper and updates an existing one. If you installed it
             before live progress arrived, run it again.
@@ -270,12 +343,14 @@ export default function ClaudeGuide() {
         </section>
 
         <section className="mt-10 space-y-3">
-          <h2 className="text-lg font-semibold">Following Claude’s progress</h2>
+          <h2 id="progress" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Following Claude’s progress
+          </h2>
           <p className="text-sm leading-6 text-muted">
             Keep the bug open in Squash. A <span className="text-fg">Claude progress</span> panel
             under the title updates every couple of seconds with:
           </p>
-          <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-muted">
+          <ul className="space-y-1 text-sm leading-6 text-muted [&>li]:relative [&>li]:pl-5 [&>li]:before:absolute [&>li]:before:left-0 [&>li]:before:font-mono [&>li]:before:text-ink-3 [&>li]:before:content-['–']">
             <li>
               Whether Claude is <span className="text-fg">working</span>,{' '}
               <span className="text-fg">needs you in Terminal</span> (to approve something or answer
@@ -293,78 +368,54 @@ export default function ClaudeGuide() {
         </section>
 
         <section className="mt-10 space-y-3">
-          <h2 className="text-lg font-semibold">Troubleshooting</h2>
-          <div className="divide-y divide-border rounded-xl border border-border px-4 text-sm leading-7">
-            <details className="py-3">
-              <summary className="focus-ring cursor-pointer rounded-md font-medium">
-                No progress panel on the bug
-              </summary>
-              <div className="mt-2 text-muted">
-                Use the check at the top of this page. If it says the helper can send bugs but needs
-                an update, run the install command again, then send the bug again.
-              </div>
-            </details>
-            <details className="py-3">
-              <summary className="focus-ring cursor-pointer rounded-md font-medium">
-                “The bridge did not start”
-              </summary>
-              <div className="mt-2 text-muted">
-                Look at the log with <code className={code}>cat ~/.squash/bridge.log</code>. “Port
-                4317 is busy” usually means a helper is already running: use the check at the top of
-                this page to see which version.
-              </div>
-            </details>
-            <details className="py-3">
-              <summary className="focus-ring cursor-pointer rounded-md font-medium">
-                “Claude Code is not on your PATH”
-              </summary>
-              <div className="mt-2 text-muted">
-                Install Claude Code, open a new Terminal window, and run the install command again.
-              </div>
-            </details>
-            <details className="py-3">
-              <summary className="focus-ring cursor-pointer rounded-md font-medium">
-                “Screenshot URLs must be https links to Supabase storage”
-              </summary>
-              <div className="mt-2 text-muted">
-                The installer pins screenshot downloads to this app’s Supabase host. Download paths
-                must start with <code className={code}>/storage/v1/object/</code>. Older installs
-                without a pinned host allow any Supabase project; run the install command again to
-                update them. To allow another storage host, start the helper with{' '}
-                <code className={cn(code, 'break-all')}>
-                  SQUASH_DOWNLOAD_HOSTS=files.example.com
-                </code>{' '}
-                (a comma-separated list of exact host names).
-              </div>
-            </details>
-            <details className="py-3">
-              <summary className="focus-ring cursor-pointer rounded-md font-medium">
-                Check the helper by hand
-              </summary>
-              <div className="mt-2 text-muted">
-                Run{' '}
-                <code className={cn(code, 'break-all')}>
-                  curl -H "Origin: {origin}" {BRIDGE_URL}/health
-                </code>
-                . A working helper answers with its version, which should be {HARDENED_VERSION} or
-                higher.
-              </div>
-            </details>
-            <details className="py-3">
-              <summary className="focus-ring cursor-pointer rounded-md font-medium">Linux</summary>
-              <div className="mt-2 text-muted">
-                The same command works, but the helper runs in that terminal instead of at login, so
-                leave it open. Claude runs in the background and its output goes to{' '}
-                <code className={code}>claude.log</code> in the project’s{' '}
-                <code className={code}>.squash/bugs</code> folder. Progress shows in Squash as
-                usual.
-              </div>
-            </details>
+          <h2
+            id="troubleshooting"
+            className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]"
+          >
+            Troubleshooting
+          </h2>
+          <div className="divide-y divide-line rounded-xl border border-line px-4 text-sm leading-7">
+            <Disclosure title="No progress panel on the bug">
+              Use the check at the top of this page. If it says the helper can send bugs but needs
+              an update, run the install command again, then send the bug again.
+            </Disclosure>
+            <Disclosure title="“The bridge did not start”">
+              Look at the log with <code className={code}>cat ~/.squash/bridge.log</code>. “Port
+              4317 is busy” usually means a helper is already running: use the check at the top of
+              this page to see which version.
+            </Disclosure>
+            <Disclosure title="“Claude Code is not on your PATH”">
+              Install Claude Code, open a new Terminal window, and run the install command again.
+            </Disclosure>
+            <Disclosure title="“Screenshot URLs must be https links to Supabase storage”">
+              The installer pins screenshot downloads to this app’s Supabase host. Download paths
+              must start with <code className={code}>/storage/v1/object/</code>. Older installs
+              without a pinned host allow any Supabase project; run the install command again to
+              update them. To allow another storage host, start the helper with{' '}
+              <code className={codeLong}>SQUASH_DOWNLOAD_HOSTS=files.example.com</code> (a
+              comma-separated list of exact host names).
+            </Disclosure>
+            <Disclosure title="Check the helper by hand">
+              Run{' '}
+              <code className={codeLong}>
+                curl -H "Origin: {origin}" {BRIDGE_URL}/health
+              </code>
+              . A working helper answers with its version, which should be {HARDENED_VERSION} or
+              higher.
+            </Disclosure>
+            <Disclosure title="Linux">
+              The same command works, but the helper runs in that terminal instead of at login, so
+              leave it open. Claude runs in the background and its output goes to{' '}
+              <code className={code}>claude.log</code> in the project’s{' '}
+              <code className={code}>.squash/bugs</code> folder. Progress shows in Squash as usual.
+            </Disclosure>
           </div>
         </section>
 
         <section className="mt-10 space-y-3">
-          <h2 className="text-lg font-semibold">Uninstall</h2>
+          <h2 id="uninstall" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Uninstall
+          </h2>
           <p className="text-sm leading-6 text-muted">
             This stops the helper and removes it. Your folder choices stay in{' '}
             <code className={code}>~/.squash/bridge.json</code>.
@@ -374,23 +425,7 @@ export default function ClaudeGuide() {
             label="Uninstall command"
           />
         </section>
-      </main>
-      <footer className="mx-auto flex max-w-2xl flex-wrap items-center gap-5 border-t border-border px-6 py-6 text-sm text-muted">
-        <Link to="/" className="focus-ring rounded-md hover:text-fg">
-          Squash
-        </Link>
-        <nav aria-label="Footer" className="flex flex-wrap gap-5">
-          <Link to="/claude" className="focus-ring rounded-md hover:text-fg">
-            Claude Code guide
-          </Link>
-          <Link to="/privacy" className="focus-ring rounded-md hover:text-fg">
-            Privacy
-          </Link>
-          <Link to="/terms" className="focus-ring rounded-md hover:text-fg">
-            Terms
-          </Link>
-        </nav>
-      </footer>
-    </div>
+      </div>
+    </DocsLayout>
   )
 }

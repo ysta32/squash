@@ -52,6 +52,28 @@ describe('AssigneePicker', () => {
     expect(document.activeElement).toBe(screen.getByRole('listbox'))
   })
 
+  it('drops the menu below by default and opens it upwards with side="above" align="start"', () => {
+    const menu = () => screen.getByRole('listbox').parentElement
+    render(<AssigneePicker members={members} value={null} onChange={vi.fn()} selfId="ada" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee: Unassigned' }))
+    expect(menu()).toHaveClass('top-full', 'right-0')
+    expect(menu()).not.toHaveClass('bottom-full')
+    cleanup()
+    render(
+      <AssigneePicker
+        members={members}
+        value={null}
+        onChange={vi.fn()}
+        selfId="ada"
+        side="above"
+        align="start"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee: Unassigned' }))
+    expect(menu()).toHaveClass('bottom-full', 'left-0')
+    expect(menu()).not.toHaveClass('top-full')
+  })
+
   it('selects with the arrow keys and Enter, then returns focus to the trigger', () => {
     const onChange = vi.fn()
     render(<AssigneePicker members={members} value={null} onChange={onChange} selfId="ada" />)

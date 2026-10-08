@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { applyStoredTheme, useTheme } from './theme'
+import { DEFAULT_SCHEME, applyStoredTheme, toColorScheme, useTheme } from './theme'
 
 function mockMatchMedia(matches: boolean) {
   vi.stubGlobal(
@@ -56,17 +56,26 @@ describe('applyStoredTheme', () => {
     localStorage.setItem('squash:theme', 'dark')
     applyStoredTheme()
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    expect(meta?.content).toBe('#1b1b20')
+    expect(meta?.content).toBe('#141412')
   })
 
   it('applies a stored color scheme', () => {
     mockMatchMedia(false)
     localStorage.setItem('squash:theme', 'dark')
-    localStorage.setItem('squash:scheme', 'forest')
+    localStorage.setItem('squash:scheme', 'ocean')
     applyStoredTheme()
-    expect(document.documentElement.dataset.scheme).toBe('forest')
+    expect(document.documentElement.dataset.scheme).toBe('ocean')
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    expect(meta?.content).toBe('#151c19')
+    expect(meta?.content).toBe('#141412')
+  })
+
+  it.each(['violet', 'forest'])('maps the retired %s scheme to the default', (legacy) => {
+    mockMatchMedia(false)
+    document.documentElement.setAttribute('data-scheme', 'ocean')
+    localStorage.setItem('squash:scheme', legacy)
+    applyStoredTheme()
+    expect(document.documentElement.hasAttribute('data-scheme')).toBe(false)
+    expect(toColorScheme(legacy)).toBe(DEFAULT_SCHEME)
   })
 
   it('ignores an unknown scheme and uses the default', () => {

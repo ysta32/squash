@@ -1,41 +1,124 @@
 import { useEffect, useEffectEvent, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { drawShapes, strokeWidthFor, type Point, type Shape, type Tool } from '../lib/annotate'
-import { Button, Kbd } from './ui'
+import { X } from 'lucide-react'
+import {
+  MAX_NOTE_LENGTH,
+  MAX_SHAPES,
+  drawAnnotations,
+  flatten,
+  nextPinNumber,
+  parseShape,
+  renumberPins,
+  serializeAnnotations,
+  type Annotations,
+  type MarkupColor,
+  type MarkupShape,
+  type ShapeType,
+} from '../lib/annotations'
+import { Button, Kbd, Keys, MOD_KEY } from './ui'
 
 interface AnnotateDialogProps {
+  /** The unmarked image. */
   file: File
-  /** May reject with a user-facing Error; the dialog then stays open with the marks intact. */
-  onSave: (file: File) => void | Promise<void>
+  /** Editable layers from an earlier session on the same image. */
+  initialShapes?: readonly MarkupShape[]
+  /**
+   * Receives the flattened render and the vector layers (no shapes: every mark was removed, and
+   * the file is the unmarked original). May reject with a user-facing Error; the dialog then
+   * stays open with the marks intact.
+   */
+  onSave: (file: File, annotations: Annotations) => void | Promise<void>
   onClose: () => void
 }
 
-const tools: { tool: Tool; label: string; key: string }[] = [
+const tools: { tool: ShapeType; label: string; key: string }[] = [
   { tool: 'arrow', label: 'Arrow', key: 'A' },
   { tool: 'box', label: 'Box', key: 'B' },
   { tool: 'pen', label: 'Pen', key: 'P' },
+  { tool: 'pin', label: 'Pin', key: 'N' },
 ]
-const colors = [
-  { label: 'Danger', value: 'var(--danger)' },
-  { label: 'Warning', value: 'var(--warning)' },
-  { label: 'Success', value: 'var(--success)' },
-  { label: 'Contrast', value: 'var(--fg)' },
+const colors: { label: string; value: MarkupColor }[] = [
+  { label: 'Danger', value: 'danger' },
+  { label: 'Warning', value: 'warning' },
+  { label: 'Success', value: 'success' },
+  { label: 'Contrast', value: 'fg' },
 ]
+const NO_SHAPES: readonly MarkupShape[] = []
 
-export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
+function isTextField(target: EventTarget | null): target is HTMLInputElement {
+  return target instanceof HTMLInputElement && target.type === 'text'
+}
+
+/** "Pin 2", "Box 1", ... per layer, in drawing order. */
+function layerLabels(shapes: readonly MarkupShape[]): string[] {
+  const counts = { arrow: 0, box: 0, pen: 0 }
+  const names = { arrow: 'Arrow', box: 'Box', pen: 'Drawing' }
+  return shapes.map((shape) =>
+    shape.type === 'pin' ? `Pin ${shape.n}` : `${names[shape.type]} ${++counts[shape.type]}`,
+  )
+}
+
+/** A drag in progress, in normalized coordinates. Committed through parseShape. */
+function draftFrom(tool: ShapeType, color: MarkupColor, x: number, y: number): MarkupShape {
+  switch (tool) {
+    case 'arrow':
+      return { type: 'arrow', color, x1: x, y1: y, x2: x, y2: y }
+    case 'box':
+      return { type: 'box', color, x, y, w: 0, h: 0 }
+    case 'pen':
+      return { type: 'pen', color, points: [[x, y]] }
+    case 'pin':
+      return { type: 'pin', color, n: 1, x, y }
+  }
+}
+
+function extendDraft(shape: MarkupShape, x: number, y: number): MarkupShape {
+  switch (shape.type) {
+    case 'arrow':
+      return { ...shape, x2: x, y2: y }
+    case 'box':
+      return { ...shape, w: x - shape.x, h: y - shape.y }
+    case 'pen':
+      return { ...shape, points: [...shape.points, [x, y]] }
+    case 'pin':
+      return shape
+  }
+}
+
+function hasExtent(shape: MarkupShape): boolean {
+  switch (shape.type) {
+    case 'arrow':
+      return shape.x1 !== shape.x2 || shape.y1 !== shape.y2
+    case 'box':
+      return shape.w !== 0 || shape.h !== 0
+    case 'pen':
+      return shape.points.some(([x, y]) => x !== shape.points[0][0] || y !== shape.points[0][1])
+    case 'pin':
+      return true
+  }
+}
+
+export function AnnotateDialog({
+  file,
+  initialShapes = NO_SHAPES,
+  onSave,
+  onClose,
+}: AnnotateDialogProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
-  const [tool, setTool] = useState<Tool>('arrow')
-  const [color, setColor] = useState(colors[0].value)
-  const [shapes, setShapes] = useState<Shape[]>([])
-  const [draft, setDraft] = useState<Shape | null>(null)
+  const [tool, setTool] = useState<ShapeType>('arrow')
+  const [color, setColor] = useState<MarkupColor>(colors[0].value)
+  const [shapes, setShapes] = useState<MarkupShape[]>(() => [...initialShapes])
+  const [draft, setDraft] = useState<MarkupShape | null>(null)
   const [discard, setDiscard] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{ pointerId: number; shape: Shape } | null>(null)
+  const dragRef = useRef<{ pointerId: number; shape: MarkupShape } | null>(null)
   const savingRef = useRef(false)
   const mountedRef = useRef(false)
+  /** A just-placed pin whose note field should take focus once it renders. */
+  const focusPinRef = useRef<number | null>(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -59,8 +142,20 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
     if (!ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(image, 0, 0)
-    drawShapes(ctx, draft ? [...shapes, draft] : shapes)
+    drawAnnotations(ctx, draft ? [...shapes, draft] : shapes, canvas.width, canvas.height)
   }, [image, shapes, draft])
+
+  // A new pin's note field takes focus so its checklist line can be typed straight away.
+  useEffect(() => {
+    const pin = focusPinRef.current
+    if (pin === null) return
+    focusPinRef.current = null
+    dialogRef.current?.querySelector<HTMLInputElement>(`input[data-pin="${pin}"]`)?.focus()
+  }, [shapes])
+
+  const dirty = JSON.stringify(shapes) !== JSON.stringify(initialShapes)
+  const canSave = dirty && (shapes.length > 0 || initialShapes.length > 0)
+  const labels = layerLabels(shapes)
 
   function requestClose() {
     if (savingRef.current) return
@@ -70,28 +165,44 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
       canvasRef.current?.releasePointerCapture(pointerId)
       return
     }
-    if (shapes.length > 0) setDiscard(true)
+    if (dirty) setDiscard(true)
     else onClose()
+  }
+
+  function removeLayer(index: number) {
+    if (savingRef.current || dragRef.current) return
+    setShapes((previous) => renumberPins(previous.filter((_, i) => i !== index)))
+  }
+
+  function setNote(index: number, note: string) {
+    setShapes((previous) =>
+      previous.map((shape, i) =>
+        i === index && shape.type === 'pin'
+          ? { ...shape, note: note.slice(0, MAX_NOTE_LENGTH) }
+          : shape,
+      ),
+    )
   }
 
   function undo() {
     if (savingRef.current || dragRef.current) return
-    setShapes((previous) => previous.slice(0, -1))
+    setShapes((previous) => renumberPins(previous.slice(0, -1)))
   }
 
   async function save() {
-    if (!image || shapes.length === 0 || dragRef.current || savingRef.current) return
+    if (!image || !canSave || dragRef.current || savingRef.current) return
     savingRef.current = true
     setSaving(true)
     setError(null)
     try {
-      const canvas = document.createElement('canvas')
-      canvas.width = image.naturalWidth
-      canvas.height = image.naturalHeight
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Could not create the marked-up image.')
-      ctx.drawImage(image, 0, 0)
-      drawShapes(ctx, shapes)
+      const annotations = serializeAnnotations(shapes)
+      if (annotations.shapes.length === 0) {
+        // Every mark was removed: hand back the unmarked original.
+        await onSave(file, annotations)
+        if (mountedRef.current) onClose()
+        return
+      }
+      const canvas = flatten(document.createElement('canvas'), image, annotations.shapes)
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob((result) => {
           if (result) resolve(result)
@@ -100,7 +211,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
       })
       if (!mountedRef.current) return
       const base = file.name.replace(/\.[^.]+$/, '') || 'image'
-      await onSave(new File([blob], `${base}-marked.png`, { type: 'image/png' }))
+      await onSave(new File([blob], `${base}-marked.png`, { type: 'image/png' }), annotations)
       if (!mountedRef.current) return
       onClose()
     } catch (err) {
@@ -116,7 +227,9 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
     if (event.isComposing) return
     if (event.key === 'Tab') {
       const buttons = Array.from(
-        dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [],
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input[type="text"]:not(:disabled)',
+        ) ?? [],
       )
       event.preventDefault()
       event.stopPropagation()
@@ -124,7 +237,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
         dialogRef.current?.focus()
         return
       }
-      const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+      const index = buttons.indexOf(document.activeElement as HTMLElement)
       buttons[
         index < 0
           ? event.shiftKey
@@ -134,14 +247,19 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
       ].focus()
       return
     }
+    const typing = isTextField(event.target)
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
-      requestClose()
+      // Leaving a pin note returns to the tools instead of closing the editor.
+      if (typing) dialogRef.current?.focus()
+      else requestClose()
       return
     }
     if (discard || savingRef.current) return
     const mod = event.metaKey || event.ctrlKey
+    // Typing a note: letters, undo and plain Enter belong to the text field.
+    if (typing && !(mod && event.key === 'Enter')) return
     if (mod && event.key.toLowerCase() === 'z' && !event.shiftKey) {
       event.preventDefault()
       event.stopPropagation()
@@ -180,24 +298,20 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
       ?.focus()
   }, [discard])
 
-  function pointAt(event: PointerEvent<HTMLCanvasElement>): Point {
-    const canvas = event.currentTarget
-    const bounds = canvas.getBoundingClientRect()
-    return {
-      x: ((event.clientX - bounds.left) * canvas.width) / bounds.width,
-      y: ((event.clientY - bounds.top) * canvas.height) / bounds.height,
-    }
+  /** The pointer position normalized to the image (0..1), clamped to its edges. */
+  function pointAt(event: PointerEvent<HTMLCanvasElement>): [number, number] {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const clamp = (value: number) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0)
+    return [
+      clamp((event.clientX - bounds.left) / bounds.width),
+      clamp((event.clientY - bounds.top) / bounds.height),
+    ]
   }
 
   function extendDrag(event: PointerEvent<HTMLCanvasElement>) {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
-    const point = pointAt(event)
-    drag.shape = {
-      ...drag.shape,
-      points:
-        drag.shape.tool === 'pen' ? [...drag.shape.points, point] : [drag.shape.points[0], point],
-    }
+    drag.shape = extendDraft(drag.shape, ...pointAt(event))
     setDraft(drag.shape)
   }
 
@@ -207,14 +321,14 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
+    <div className="fixed inset-0 z-50 flex animate-fade items-center justify-center dialog-scrim p-3">
       <div
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
         aria-modal="true"
         aria-label={`Mark up ${file.name}`}
-        className="flex max-h-full max-w-full flex-col gap-3 overflow-auto rounded-xl border border-border bg-bg-elevated p-3 text-fg shadow-elevated"
+        className="flex max-h-full max-w-full animate-dialog flex-col gap-3 overflow-auto rounded-xl border border-line bg-surface-2 p-3 text-ink shadow-elev-3"
       >
         <div
           className="flex flex-wrap items-center gap-2"
@@ -242,9 +356,12 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
               aria-pressed={color === entry.value}
               disabled={saving || discard}
               onClick={() => setColor(entry.value)}
-              className="focus-ring flex h-7 w-7 items-center justify-center rounded-full border border-border aria-pressed:border-accent aria-pressed:ring-2 aria-pressed:ring-accent"
+              className="focus-ring flex h-7 w-7 items-center justify-center rounded-full border border-line-2 aria-pressed:border-ink aria-pressed:ring-2 aria-pressed:ring-ink pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]"
             >
-              <span className="h-4 w-4 rounded-full" style={{ backgroundColor: entry.value }} />
+              <span
+                className="h-4 w-4 rounded-full"
+                style={{ backgroundColor: `var(--${entry.value})` }}
+              />
             </button>
           ))}
           <Button
@@ -252,7 +369,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
             onClick={undo}
             disabled={!shapes.length || !!draft || saving || discard}
           >
-            Undo <Kbd>⌘/Ctrl Z</Kbd>
+            Undo <Keys keys={[MOD_KEY, 'Z']} className="pointer-coarse:hidden" />
           </Button>
           <Button
             size="sm"
@@ -268,18 +385,25 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
           aria-label="Image annotation canvas"
           width={image?.naturalWidth ?? 0}
           height={image?.naturalHeight ?? 0}
-          className="max-h-[80vh] max-w-[90vw] shrink-0 self-center object-contain"
+          className="max-h-[80vh] max-w-[90vw] shrink-0 self-center rounded-lg object-contain shadow-elev-3"
           style={{ width: 'auto', height: 'auto', touchAction: 'none', cursor: 'crosshair' }}
           onPointerDown={(event) => {
             if (!image || saving || discard || dragRef.current || event.button !== 0) return
             event.preventDefault()
-            event.currentTarget.setPointerCapture(event.pointerId)
-            const shape: Shape = {
-              tool,
-              color,
-              width: strokeWidthFor(image.naturalWidth),
-              points: [pointAt(event)],
+            if (shapes.length >= MAX_SHAPES) {
+              setError(`Up to ${MAX_SHAPES} marks per image. Remove one to add another.`)
+              return
             }
+            const [x, y] = pointAt(event)
+            if (tool === 'pin') {
+              // A pin is placed with one click; its number is the next free one.
+              const n = nextPinNumber(shapes)
+              setShapes((previous) => [...previous, { type: 'pin', color, n, x, y }])
+              focusPinRef.current = n
+              return
+            }
+            event.currentTarget.setPointerCapture(event.pointerId)
+            const shape = draftFrom(tool, color, x, y)
             dragRef.current = { pointerId: event.pointerId, shape }
             setDraft(shape)
           }}
@@ -288,12 +412,8 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
             if (dragRef.current?.pointerId !== event.pointerId) return
             extendDrag(event)
             const shape = dragRef.current.shape
-            if (
-              shape.points.some(
-                (point) => point.x !== shape.points[0].x || point.y !== shape.points[0].y,
-              )
-            )
-              setShapes((previous) => [...previous, shape])
+            const committed = hasExtent(shape) ? parseShape(shape) : null
+            if (committed) setShapes((previous) => [...previous, committed])
             cancelDrag()
             event.currentTarget.releasePointerCapture(event.pointerId)
           }}
@@ -304,6 +424,45 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
             if (dragRef.current?.pointerId === event.pointerId) cancelDrag()
           }}
         />
+        {shapes.length > 0 && (
+          <ol aria-label="Layers" className="flex max-h-40 flex-col gap-1 overflow-auto text-sm">
+            {shapes.map((shape, index) => (
+              <li key={index} className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: `var(--${shape.color})` }}
+                />
+                <span className="shrink-0 font-mono text-xs text-muted">{labels[index]}</span>
+                {shape.type === 'pin' ? (
+                  <input
+                    type="text"
+                    data-pin={shape.n}
+                    value={shape.note ?? ''}
+                    maxLength={MAX_NOTE_LENGTH}
+                    placeholder="What is wrong here?"
+                    aria-label={`Note for pin ${shape.n}`}
+                    disabled={saving || discard}
+                    onChange={(event) => setNote(index, event.target.value)}
+                    className="focus-ring h-7 min-w-0 flex-1 rounded-md border border-border bg-bg px-2 text-sm text-fg placeholder:text-muted"
+                  />
+                ) : (
+                  <span className="flex-1" />
+                )}
+                <button
+                  type="button"
+                  aria-label={`Remove ${labels[index]}`}
+                  title={`Remove ${labels[index]}`}
+                  disabled={saving || discard || !!draft}
+                  onClick={() => removeLayer(index)}
+                  className="focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg"
+                >
+                  <X size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
         {error && (
           <p role="alert" className="text-sm text-danger">
             {error}
@@ -312,7 +471,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
         {discard ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <p className="mr-auto text-sm">Discard changes?</p>
-            <Button variant="danger" onClick={onClose}>
+            <Button variant="destructive" onClick={onClose}>
               Discard
             </Button>
             <Button data-keep-editing onClick={() => setDiscard(false)}>
@@ -327,7 +486,7 @@ export function AnnotateDialog({ file, onSave, onClose }: AnnotateDialogProps) {
             <Button
               variant="primary"
               onClick={() => void save()}
-              disabled={!image || !shapes.length || !!draft || saving}
+              disabled={!image || !canSave || !!draft || saving}
             >
               {saving ? 'Saving…' : 'Use marked-up image'}
             </Button>

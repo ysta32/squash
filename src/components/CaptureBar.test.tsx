@@ -38,7 +38,9 @@ function setup(onSubmit = vi.fn().mockResolvedValue(undefined), onToast = vi.fn(
   return {
     onSubmit,
     onToast,
-    box: screen.getByPlaceholderText('Paste a screenshot or describe a bug') as HTMLTextAreaElement,
+    box: screen.getByPlaceholderText(
+      'Paste a screenshot or describe the bug',
+    ) as HTMLTextAreaElement,
   }
 }
 
@@ -72,6 +74,51 @@ describe('CaptureBar', () => {
       expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
     },
   )
+
+  it('moves a pasted URL out of the text into the chip, and files it as context', async () => {
+    const { box, onSubmit } = setup()
+    fireEvent.change(box, { target: { value: 'Broken on https://example.com/checkout today' } })
+    expect(box.value).toBe('Broken on today')
+    expect(
+      screen.getByRole('button', { name: 'Remove URL https://example.com/checkout' }),
+    ).toBeInTheDocument()
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      description: 'Broken on today',
+      context: { url: 'https://example.com/checkout' },
+    })
+    expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
+  })
+
+  it('waits for a typed URL to end before lifting it out of the text', () => {
+    const { box } = setup()
+    // One keystroke at a time; jsdom leaves the caret at the end of the new value.
+    const type = (text: string) => {
+      for (const ch of text) fireEvent.change(box, { target: { value: box.value + ch } })
+    }
+    type('see https://ex.com/a')
+    expect(box.value).toBe('see https://ex.com/a')
+    expect(screen.queryByRole('button', { name: /Remove URL/ })).not.toBeInTheDocument()
+    type(' ')
+    expect(box.value).toBe('see ')
+    expect(screen.getByRole('button', { name: 'Remove URL https://ex.com/a' })).toBeInTheDocument()
+  })
+
+  it('files a URL on its own, and restores the chip when filing fails', async () => {
+    const { box, onSubmit, onToast } = setup(vi.fn().mockRejectedValue(new Error('offline')))
+    fireEvent.change(box, { target: { value: 'https://example.com/checkout' } })
+    expect(box.value).toBe('')
+    const send = screen.getByRole('button', { name: 'File bug' })
+    expect(send).not.toHaveAttribute('aria-disabled')
+    fireEvent.click(send)
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('offline'))
+    expect(onSubmit.mock.calls[0][0].description).toBe('https://example.com/checkout')
+    expect(
+      screen.getByRole('button', { name: 'Remove URL https://example.com/checkout' }),
+    ).toBeInTheDocument()
+    expect(box.value).toBe('')
+  })
 
   beforeEach(() => {
     speechState.supported = true
@@ -124,7 +171,7 @@ describe('CaptureBar', () => {
   it('files a feature request when the Features tab is showing', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(<CaptureBar workspaceId="w1" onSubmit={onSubmit} kind="feature" />)
-    const box = screen.getByPlaceholderText('Paste a screenshot or describe a feature')
+    const box = screen.getByPlaceholderText('Paste a screenshot or describe the feature')
     fireEvent.change(box, { target: { value: 'Dark mode' } })
     fireEvent.click(screen.getByRole('button', { name: 'File feature request' }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'feature' }))
@@ -229,9 +276,9 @@ describe('CaptureBar', () => {
   it('severity control shows the label, picks from its menu, and resets after filing', async () => {
     const { onSubmit, box } = setup()
     const send = screen.getByRole('button', { name: 'File bug' })
-    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('aria-disabled', 'true')
     fireEvent.change(box, { target: { value: 'x' } })
-    expect(send).toBeEnabled()
+    expect(send).not.toHaveAttribute('aria-disabled')
     fireEvent.click(screen.getByRole('button', { name: 'Severity: Medium' }))
     fireEvent.click(screen.getByRole('option', { name: /High/ }))
     expect(screen.getByRole('button', { name: 'Severity: High' })).toBeInTheDocument()
@@ -248,10 +295,73 @@ describe('CaptureBar', () => {
     const big = new File(['b'], 'big.png', { type: 'image/png' })
     Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
     fireEvent.change(input, { target: { files: [ok, big] } })
-    expect(onToast).toHaveBeenCalledWith('Image too large (max 5MB)')
+    // The size error shows inline at the bar, not as a toast.
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Screenshot not added: the file is over 5 MB. Try a smaller crop.',
+    )
+    expect(onToast).not.toHaveBeenCalled()
+    expect(screen.getByAltText('a.png')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Remove a.png'))
     expect(screen.queryByLabelText('Remove a.png')).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('keeps an empty live region mounted before any error', () => {
+    setup()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('clears the attach error on dismiss and on the next keystroke', () => {
+    const { box } = setup()
+    const big = new File(['b'], 'big.png', { type: 'image/png' })
+    Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
+    const input = screen.getByTestId('file-input')
+    fireEvent.change(input, { target: { files: [big] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }))
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    fireEvent.change(input, { target: { files: [big] } })
+    expect(screen.getByRole('status')).toHaveTextContent('over 5 MB')
+    fireEvent.change(box, { target: { value: 'x' } })
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+
+  it('falls back to a toast for attach errors while the bar is hidden', () => {
+    const original = HTMLElement.prototype.checkVisibility
+    HTMLElement.prototype.checkVisibility = () => false
+    try {
+      const { onToast } = setup()
+      const big = new File(['b'], 'big.png', { type: 'image/png' })
+      Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [big] } })
+      expect(onToast).toHaveBeenCalledWith(
+        'Screenshot not added: the file is over 5 MB. Try a smaller crop.',
+      )
+    } finally {
+      HTMLElement.prototype.checkVisibility = original
+    }
+  })
+
+  it('an idle File button files nothing', () => {
+    const { onSubmit } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'File bug' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('shows a fixed-width Filing… state while the submit is in flight', async () => {
+    let finish!: () => void
+    const { box, onSubmit } = setup()
+    onSubmit.mockImplementation(() => new Promise<void>((r) => (finish = r)))
+    fireEvent.change(box, { target: { value: 'pending' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    const send = screen.getByRole('button', { name: 'File bug' })
+    await waitFor(() => expect(send).toHaveAttribute('aria-busy', 'true'))
+    expect(within(send).getByText('Filing…')).not.toHaveClass('invisible')
+    expect(within(send).getByText('File')).toHaveClass('invisible')
+    await act(async () => finish())
+    expect(send).not.toHaveAttribute('aria-busy')
+    expect(within(send).getByText('Filing…')).toHaveClass('invisible')
   })
 
   it('hides the mic and shows an info hint when speech is unsupported', () => {
@@ -370,6 +480,178 @@ describe('CaptureBar', () => {
       expect(files[0].type).toBe(scenario === 'png' ? 'image/png' : 'image/jpeg')
       expect(files[0].size).toBeLessThanOrEqual(MAX_ORIGINAL_BYTES)
       expect(files[1]).toBe(second)
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
+  it('keeps live markup layers on the chip, re-edits them and files them with the original', async () => {
+    let loaded: HTMLImageElement | undefined
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          loaded = document.createElement('img')
+          Object.defineProperties(loaded, {
+            naturalWidth: { value: 100 },
+            naturalHeight: { value: 100 },
+          })
+          return loaded
+        }
+      },
+    )
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    const ctx = new Proxy({}, { get: () => vi.fn() })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    )
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) =>
+      callback(new Blob(['marked'], { type })),
+    )
+    try {
+      const { box, onSubmit } = setup()
+      const first = new File(['first'], 'first.png', { type: 'image/png' })
+      const second = new File(['second'], 'second.png', { type: 'image/png' })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first, second] } })
+      fireEvent.change(box, { target: { value: 'Pinned screenshot' } })
+
+      const openEditor = (name: string) => {
+        fireEvent.click(screen.getByRole('button', { name: `Mark up ${name}` }))
+        if (!loaded) throw new Error('Expected editor image')
+        fireEvent.load(loaded)
+        const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
+        canvas.setPointerCapture = vi.fn()
+        canvas.releasePointerCapture = vi.fn()
+        vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 100,
+          right: 100,
+          bottom: 100,
+          toJSON: () => ({}),
+        })
+        return canvas
+      }
+
+      let canvas = openEditor('first.png')
+      fireEvent.keyDown(window, { key: 'n' })
+      fireEvent.pointerDown(canvas, { clientX: 25, clientY: 50, button: 0 })
+      fireEvent.change(screen.getByLabelText('Note for pin 1'), {
+        target: { value: 'Banner overlaps Pay now' },
+      })
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+      )
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      // Reopening edits the layers over the unmarked original.
+      canvas = openEditor('first-marked.png')
+      expect(screen.getByRole('dialog', { name: 'Mark up first.png' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Note for pin 1')).toHaveValue('Banner overlaps Pay now')
+      fireEvent.keyDown(window, { key: 'n' })
+      fireEvent.pointerDown(canvas, { clientX: 75, clientY: 75, button: 0 })
+      await act(async () =>
+        fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+      )
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+      const input = onSubmit.mock.calls[0][0]
+      expect(input.files[0].name).toBe('first-marked.png')
+      expect(input.files[1]).toBe(second)
+      expect(input.markup).toEqual([
+        {
+          original: first,
+          annotations: {
+            v: 1,
+            shapes: [
+              {
+                type: 'pin',
+                color: 'danger',
+                n: 1,
+                x: 0.25,
+                y: 0.5,
+                note: 'Banner overlaps Pay now',
+              },
+              { type: 'pin', color: 'danger', n: 2, x: 0.75, y: 0.75 },
+            ],
+          },
+        },
+        null,
+      ])
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('restores the unmarked original when every layer is removed', async () => {
+    let loaded: HTMLImageElement | undefined
+    vi.stubGlobal(
+      'Image',
+      class {
+        constructor() {
+          loaded = document.createElement('img')
+          Object.defineProperties(loaded, {
+            naturalWidth: { value: 100 },
+            naturalHeight: { value: 100 },
+          })
+          return loaded
+        }
+      },
+    )
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    const ctx = new Proxy({}, { get: () => vi.fn() })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    )
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) =>
+      callback(new Blob(['marked'], { type })),
+    )
+    try {
+      const { box, onSubmit } = setup()
+      const first = new File(['first'], 'first.png', { type: 'image/png' })
+      fireEvent.change(screen.getByTestId('file-input'), { target: { files: [first] } })
+      fireEvent.change(box, { target: { value: 'Changed my mind' } })
+      for (const name of ['first.png', 'first-marked.png']) {
+        fireEvent.click(screen.getByRole('button', { name: `Mark up ${name}` }))
+        if (!loaded) throw new Error('Expected editor image')
+        fireEvent.load(loaded)
+        const canvas = screen.getByLabelText('Image annotation canvas') as HTMLCanvasElement
+        canvas.setPointerCapture = vi.fn()
+        canvas.releasePointerCapture = vi.fn()
+        vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 100,
+          right: 100,
+          bottom: 100,
+          toJSON: () => ({}),
+        })
+        if (name === 'first.png') {
+          fireEvent.keyDown(window, { key: 'b' })
+          fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, button: 0 })
+          fireEvent.pointerUp(canvas, { clientX: 40, clientY: 40 })
+        } else {
+          fireEvent.click(screen.getByRole('button', { name: 'Remove Box 1' }))
+        }
+        await act(async () =>
+          fireEvent.click(screen.getByRole('button', { name: 'Use marked-up image' })),
+        )
+      }
+      expect(screen.getByRole('button', { name: 'Mark up first.png' })).toBeInTheDocument()
+      await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+      expect(onSubmit.mock.calls[0][0].files).toEqual([first])
+      expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('markup')
     } finally {
       cleanup()
       vi.restoreAllMocks()

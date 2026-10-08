@@ -1,9 +1,9 @@
 // Runs the real app with src/lib/supabase.ts swapped for an in-memory mock (see mock-supabase.ts).
 // Used by capture.mjs; start it alone with:
 //   npx vite --config scripts/screenshots/vite.config.ts
-import { createReadStream, existsSync } from 'node:fs'
+import { createReadStream, existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defineConfig, mergeConfig, type Plugin } from 'vite'
+import { defineConfig, mergeConfig, searchForWorkspaceRoot, type Plugin } from 'vite'
 import base from '../../vite.config'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
@@ -44,6 +44,12 @@ export default mergeConfig(
       'import.meta.env.VITE_GITHUB_URL': JSON.stringify('https://github.com/ysta32/squash'),
       'import.meta.env.VITE_SITE_URL': JSON.stringify('http://localhost:5174'),
     },
-    server: { port: 5174, strictPort: true },
+    server: {
+      port: 5174,
+      strictPort: true,
+      // Self-hosted fonts load from node_modules, which may be a symlink outside the root
+      // (git worktrees share one install).
+      fs: { allow: [searchForWorkspaceRoot(root), realpathSync(`${root}/node_modules`)] },
+    },
   }),
 )

@@ -85,6 +85,17 @@ describe('CommandPalette', () => {
     expect(input).not.toHaveAttribute('aria-activedescendant')
   })
 
+  it('sets accession numbers in their own column in place of the icon', () => {
+    const cmds: Command[] = [
+      { id: 'b', label: '#24 Checkout hidden', accession: '#24', group: 'Bugs', run: vi.fn() },
+    ]
+    openPalette(cmds)
+    const option = screen.getByRole('option', { name: '#24 Checkout hidden' })
+    expect(within(option).getByText('#24')).toHaveClass('font-mono')
+    expect(within(option).getByText('Checkout hidden')).toBeInTheDocument()
+    expect(option.querySelector('svg')).toBeNull()
+  })
+
   it('ranks prefix matches above substring above subsequence matches', () => {
     const cmds: Command[] = [
       { id: 'a', label: 'Abc sequence', group: 'G', run: vi.fn() },
@@ -175,5 +186,38 @@ describe('CommandPalette', () => {
     } finally {
       target.remove()
     }
+  })
+})
+
+describe('CommandPalette on touch screens', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('hides key hints and keyboard-only commands under a coarse pointer', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q === '(pointer: coarse)',
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    const commands: Command[] = [
+      ...makeCommands(),
+      { id: 'keys', label: 'Keyboard shortcuts', group: 'Help', keyboardOnly: true, run: vi.fn() },
+    ]
+    render(<CommandPalette open onClose={() => {}} commands={commands} />)
+    expect(screen.getByRole('option', { name: /New bug/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Keyboard shortcuts/ })).toBeNull()
+    expect(screen.getByRole('dialog').querySelector('kbd')).toBeNull()
+  })
+
+  it('keeps them with a fine pointer', () => {
+    const commands: Command[] = [
+      ...makeCommands(),
+      { id: 'keys', label: 'Keyboard shortcuts', group: 'Help', keyboardOnly: true, run: vi.fn() },
+    ]
+    render(<CommandPalette open onClose={() => {}} commands={commands} />)
+    expect(screen.getByRole('option', { name: /Keyboard shortcuts/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /New bug/ }).querySelector('kbd')).toHaveTextContent(
+      'N',
+    )
   })
 })

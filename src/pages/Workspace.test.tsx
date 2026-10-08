@@ -14,6 +14,7 @@ const NOW = new Date().toISOString()
 
 const mocks = vi.hoisted(() => ({
   bugs: [] as BugWithMeta[],
+  loading: false,
   notFound: false,
   error: null as string | null,
   reload: vi.fn(),
@@ -22,6 +23,10 @@ const mocks = vi.hoisted(() => ({
   getBugByNumber: vi.fn(),
   fileBug: vi.fn(),
   assignBug: vi.fn(),
+  resolveBug: vi.fn(),
+  reopenBug: vi.fn(),
+  updateBug: vi.fn(),
+  deleteBug: vi.fn(),
   assigner: null as string | null,
   /** Overrides the assigner lookup's response while set. */
   lookup: null as Promise<unknown> | null,
@@ -98,21 +103,23 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
   const actual = await importOriginal<typeof UseBugsModule>()
   return {
     filterBugs: actual.filterBugs,
+    hasActiveFilters: actual.hasActiveFilters,
     sortBugs: actual.sortBugs,
     countBugs: actual.countBugs,
     useBugs: (_ws: string, opts?: { onRemoteInsert?: (bug: Bug) => void }) => {
       mocks.onRemoteInsert = opts?.onRemoteInsert ?? null
       return {
         bugs: mocks.bugs,
-        loading: false,
+        loading: mocks.loading,
         error: mocks.error,
         reload: mocks.reload,
         counts: { open: mocks.bugs.length, resolved: 0, all: mocks.bugs.length },
         fileBug: mocks.fileBug,
-        updateBug: vi.fn(),
-        resolveBug: vi.fn(),
-        reopenBug: vi.fn(),
+        updateBug: mocks.updateBug,
+        resolveBug: mocks.resolveBug,
+        reopenBug: mocks.reopenBug,
         assignBug: mocks.assignBug,
+        deleteBug: mocks.deleteBug,
         retryUploads: vi.fn(),
         getBugByNumber: mocks.getBugByNumber,
       }
@@ -132,6 +139,10 @@ vi.mock('../hooks/useBug', () => ({
   useBug: () => ({ comments: [], events: [], addComment: vi.fn(), loading: false }),
 }))
 vi.mock('../hooks/useSignedUrl', () => ({ useSignedUrl: () => null }))
+// Fix runs have their own tests (FixRecord.test.tsx); here the server has none.
+vi.mock('../hooks/useFixRuns', () => ({
+  useFixRuns: () => ({ runs: [], loading: false, available: false, error: null }),
+}))
 vi.mock('../hooks/usePresence', () => ({
   usePresence: () => ({ online: [], viewers: () => [] }),
 }))
@@ -196,7 +207,12 @@ function makeBug(n: number, over: Partial<BugWithMeta> = {}): BugWithMeta {
 
 function LocationProbe() {
   const location = useLocation()
-  return <output data-testid="path">{location.pathname}</output>
+  return (
+    <>
+      <output data-testid="path">{location.pathname}</output>
+      <output data-testid="search">{location.search}</output>
+    </>
+  )
 }
 
 /** Stand-in for a Header menu: an open popover dismissed by Esc through useDismiss. */
@@ -233,12 +249,19 @@ beforeEach(() => {
   // jsdom has no layout; BugRow scrolls the selected row into view.
   Element.prototype.scrollIntoView = vi.fn()
   mocks.bugs = [makeBug(3), makeBug(2), makeBug(1)]
+  mocks.loading = false
   mocks.notFound = false
   mocks.error = null
   mocks.onRemoteInsert = null
   mocks.assigner = null
   mocks.lookup = null
+  mocks.resolveBug.mockResolvedValue(undefined)
+  mocks.reopenBug.mockResolvedValue(undefined)
+  mocks.updateBug.mockResolvedValue(undefined)
   mocks.assignBug.mockResolvedValue(undefined)
+  mocks.deleteBug.mockImplementation(async (id: string) => {
+    mocks.bugs = mocks.bugs.filter((b) => b.id !== id)
+  })
   mocks.getBugByNumber.mockResolvedValue(null)
 })
 afterEach(() => {
@@ -247,30 +270,82 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+/** Picks a status from the list's "Open ⌄" status menu. */
+function pickStatus(label: 'Open' | 'Resolved' | 'All') {
+  fireEvent.click(screen.getByRole('button', { name: /^Status: / }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: new RegExp(`^${label}`) }))
+}
+
 describe('Workspace', () => {
+  it('undoes a severity change without touching other fields', async () => {
+    show('/app/ws/bug/2')
+    fireEvent.click(screen.getByRole('button', { name: 'Severity: Medium' }))
+    fireEvent.click(screen.getByRole('option', { name: /Critical/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(mocks.updateBug).toHaveBeenNthCalledWith(1, 'b2', { severity: 'critical' })
+    expect(mocks.updateBug).toHaveBeenNthCalledWith(2, 'b2', { severity: 'medium' })
+  })
+
+  it('does not offer Undo when resolving fails', async () => {
+    mocks.resolveBug.mockRejectedValueOnce(new Error('Resolve denied'))
+    show('/app/ws/bug/2')
+    press('r')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
+    await act(async () => {})
+    expect(mocks.resolveBug).toHaveBeenCalledExactlyOnceWith('b2', null)
+    expect(screen.getAllByText('Resolve denied').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+  })
+
+  it('undoes a keyboard resolve even after navigating to another bug', async () => {
+    mocks.bugs = [makeBug(2, { resolution_note: 'Previous reopen' }), makeBug(1)]
+    show('/app/ws/bug/2')
+    press('r')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
+    await screen.findByText('Resolved #2')
+    expect(mocks.resolveBug).toHaveBeenCalledWith('b2', null)
+    press('j')
+    fireEvent.keyDown(document.body, {
+      key: 'z',
+      ...(isMac ? { metaKey: true } : { ctrlKey: true }),
+    })
+    expect(mocks.reopenBug).toHaveBeenCalledExactlyOnceWith('b2', 'Previous reopen')
+    expect(screen.queryByText('Resolved #2')).not.toBeInTheDocument()
+  })
+
+  it('undoes reopen using resolve with the previous resolution note', async () => {
+    mocks.bugs = [makeBug(2, { status: 'resolved', resolution_note: 'Original fix' })]
+    show('/app/ws/bug/2')
+    press('o')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(mocks.resolveBug).toHaveBeenCalledExactlyOnceWith('b2', 'Original fix')
+  })
+
+  it('restores the previous assignee and reports an undo failure as an error toast', async () => {
+    mocks.bugs = [makeBug(2, { assignee_id: 'u2' })]
+    show('/app/ws/bug/2')
+    press('i')
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+    mocks.assignBug.mockRejectedValueOnce(new Error('Undo denied'))
+    fireEvent.click(undo)
+    expect(mocks.assignBug).toHaveBeenLastCalledWith('b2', 'u2')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Undo denied')
+  })
+
   it.each(['tab', 'query'])('prunes bulk picks hidden by a %s change', (change) => {
     show('/app/ws')
     fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
     expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
 
-    if (change === 'tab')
-      fireEvent.click(
-        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
-          name: /^Resolved/,
-        }),
-      )
+    if (change === 'tab') pickStatus('Resolved')
     else
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
         target: { value: 'number 3' },
       })
     expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
 
-    if (change === 'tab')
-      fireEvent.click(
-        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
-          name: /^Open/,
-        }),
-      )
+    if (change === 'tab') pickStatus('Open')
     else
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
         target: { value: '' },
@@ -305,6 +380,61 @@ describe('Workspace', () => {
       expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
     },
   )
+
+  it.each([
+    { from: 2, to: 1, why: 'the next bug' },
+    { from: 1, to: 2, why: 'the previous bug when the deleted one was last' },
+  ])('after deleting #$from opens $why and focuses its row', async ({ from, to }) => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.open = true
+      },
+    })
+    const matchMedia = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(min-width: 1024px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      const view = show(`/app/ws/bug/${from}`)
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bug' }))
+      await act(async () => {
+        fireEvent.click(
+          within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
+        )
+      })
+      view.rerender(tree(`/app/ws/bug/${from}`))
+      expect(mocks.deleteBug).toHaveBeenCalledExactlyOnceWith(`b${from}`)
+      expect(path()).toBe(`/app/ws/bug/${to}`)
+      expect(screen.getByText(`Deleted #${from}`)).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: `#${to} Bug number ${to}` })).toHaveFocus()
+    } finally {
+      window.matchMedia = matchMedia
+    }
+  })
+
+  it('returns to the empty state after deleting the only bug', async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: function (this: HTMLDialogElement) {
+        this.open = true
+      },
+    })
+    mocks.bugs = [makeBug(1)]
+    show('/app/ws/bug/1')
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bug' }))
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete bug' }),
+      )
+    })
+    expect(path()).toBe('/app/ws')
+  })
 
   it('places a skip link before the header and focuses the main landmark', () => {
     const { container } = show('/app/ws')
@@ -515,6 +645,19 @@ describe('Workspace', () => {
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
   })
 
+  it('palette Navigate commands on a phone bug detail return to the filtered list', () => {
+    show('/app/ws/bug/2')
+    const mod = isMac ? { metaKey: true } : { ctrlKey: true }
+    fireEvent.keyDown(document.body, { key: 'k', ...mod })
+    const input = within(screen.getByRole('dialog', { name: 'Command palette' })).getByRole(
+      'combobox',
+    )
+    fireEvent.change(input, { target: { value: 'Show resolved' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(path()).toBe('/app/ws')
+    expect(screen.getByTestId('search').textContent).toContain('status=resolved')
+  })
+
   it('Mod+K opens the command palette, even from the capture box, and commands run', () => {
     show('/app/ws')
     const capture = screen.getByLabelText('Capture')
@@ -549,10 +692,10 @@ describe('Workspace', () => {
     act(() => mocks.onRemoteInsert?.(remote))
     expect(screen.getByText('Grace filed #4')).toBeInTheDocument()
     const row = screen.getByRole('option', { name: '#4 Bug number 4' })
-    expect(row).toHaveClass('bg-accent/10')
-    act(() => vi.advanceTimersByTime(4000))
+    expect(row).toHaveAttribute('data-highlighted', 'true')
+    act(() => vi.advanceTimersByTime(5000))
     expect(screen.queryByText('Grace filed #4')).toBeNull()
-    expect(row).not.toHaveClass('bg-accent/10')
+    expect(row).not.toHaveAttribute('data-highlighted')
   })
 
   it('I assigns the selected bug to me, and unassigns it when it is already mine', () => {
@@ -666,5 +809,56 @@ describe('Workspace', () => {
     mocks.notFound = true
     show('/app/ws')
     expect(screen.getByText("You're not a member of this workspace")).toBeInTheDocument()
+  })
+})
+
+describe('Workspace detail pane with nothing open (desktop)', () => {
+  const original = window.matchMedia
+  beforeEach(() => {
+    localStorage.clear()
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(min-width: 1024px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+  })
+  afterEach(() => {
+    window.matchMedia = original
+  })
+
+  const detailPane = () =>
+    document.getElementById('bug-list-pane')!.nextElementSibling!.nextElementSibling as HTMLElement
+
+  it('shows the bug skeleton while the list loads, not a prompt to pick a bug', () => {
+    mocks.loading = true
+    mocks.bugs = []
+    show('/app/ws')
+    expect(within(detailPane()).getByRole('status', { name: 'Loading bug' })).toBeInTheDocument()
+    expect(screen.queryByText('No bug open')).not.toBeInTheDocument()
+  })
+
+  it('leaves the pane blank when a filter matches nothing', () => {
+    show('/app/ws?q=zzz-no-such-bug')
+    expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
+    expect(detailPane()).toBeEmptyDOMElement()
+  })
+
+  it('puts the onboarding in the detail pane of an empty workspace, once', () => {
+    mocks.bugs = []
+    show('/app/ws')
+    const pane = detailPane()
+    expect(within(pane).getByRole('list', { name: 'Getting started' })).toBeInTheDocument()
+    expect(within(pane).getByRole('list', { name: 'How to file' })).toBeInTheDocument()
+    expect(screen.getAllByText(/File your first bug/)).toHaveLength(1)
+    expect(screen.queryByText('No bug open')).not.toBeInTheDocument()
+    const list = screen.getByRole('region', { name: 'Bug list' })
+    expect(within(list).queryByRole('list', { name: 'Getting started' })).not.toBeInTheDocument()
+    expect(within(list).getByText('No bugs yet.')).toBeInTheDocument()
+  })
+
+  it('still invites picking a bug when there are bugs to pick', () => {
+    show('/app/ws')
+    expect(within(detailPane()).getByText('No bug open')).toBeInTheDocument()
   })
 })

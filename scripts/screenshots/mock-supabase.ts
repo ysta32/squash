@@ -13,6 +13,7 @@ const db: Record<string, Row[]> = {
   bug_attachments: [...seed.bug_attachments],
   comments: [...seed.comments],
   bug_events: [...seed.bug_events],
+  fix_runs: [...seed.fix_runs],
 }
 
 const byId = (table: string, id: unknown) => db[table].find((r) => r.id === id) ?? null
@@ -148,7 +149,12 @@ class Query implements PromiseLike<{ data: unknown; error: null; count?: number 
     onfulfilled?: ((value: { data: unknown; error: null }) => A | PromiseLike<A>) | null,
     onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
   ): PromiseLike<A | B> {
-    return Promise.resolve({ data: this.run(), error: null }).then(onfulfilled, onrejected)
+    const delay = this.table === 'bugs' && this.op === 'select' ? bugsDelayMs : 0
+    const result =
+      delay > 0
+        ? new Promise<void>((done) => setTimeout(done, delay)).then(() => this.run())
+        : Promise.resolve(this.run())
+    return result.then((data) => ({ data, error: null })).then(onfulfilled, onrejected)
   }
 }
 
@@ -207,11 +213,52 @@ const signed = (path: string) => uploads.get(path) ?? `/__shots/${path.split('/'
 const signedOut = localStorage.getItem('squash:demo-signed-out') === '1'
 const current = signedOut ? null : session
 
+/** Shots of the loading state hold the bug list fetch this long (ms) so skeletons stay up. */
+const bugsDelayMs = Number(localStorage.getItem('squash:demo-delay-bugs') ?? 0) || 0
+
 const ok = <T>(data: T) => Promise.resolve({ data, error: null })
 
 export const supabase = {
   from: (table: string) => new Query(table),
-  rpc: (name: string) => ok(name === 'workspace_stats' ? seed.workspaceStats : null),
+  rpc: (name: string, args?: { p_code?: string; p_name?: string }) => {
+    if (name === 'workspace_stats') return ok(seed.workspaceStats)
+    if (name === 'create_workspace') {
+      // Like the SQL function: a new workspace owned by the caller, with a fresh invite code.
+      const created_at = new Date().toISOString()
+      const ws = {
+        id: `ws-new-${db.workspaces.length}`,
+        name: (args?.p_name ?? '').trim(),
+        invite_code: 'Q7RT4WXZ',
+        owner_id: seed.ME,
+        created_at,
+      }
+      db.workspaces.push(ws)
+      db.workspace_members.push({
+        workspace_id: ws.id,
+        user_id: seed.ME,
+        role: 'owner',
+        joined_at: created_at,
+      })
+      return ok(ws)
+    }
+    if (name === 'workspace_preview') {
+      // Same normalisation as the SQL function: drop whitespace, compare upper-case.
+      const code = (args?.p_code ?? '').replace(/\s/g, '').toUpperCase()
+      const ws = seed.workspaces.find((w) => w.invite_code === code)
+      return ok(
+        ws
+          ? [
+              {
+                id: ws.id,
+                name: ws.name,
+                member_count: seed.workspace_members.filter((m) => m.workspace_id === ws.id).length,
+              },
+            ]
+          : [],
+      )
+    }
+    return ok(null)
+  },
   channel: (topic: string) => new Channel(topic),
   getChannels: () => [],
   removeChannel: () => Promise.resolve('ok'),
@@ -232,6 +279,7 @@ export const supabase = {
         uploads.set(path, URL.createObjectURL(blob))
         return ok({ path })
       },
+      list: () => ok([]),
       remove: () => ok([]),
     }),
   },

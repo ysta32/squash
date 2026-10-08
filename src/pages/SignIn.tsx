@@ -1,11 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { safeNext } from '../lib/authRedirect'
 import { AuthLayout } from '../components/AuthLayout'
 import { ArrowLeft } from 'lucide-react'
-import { Button, Field, Input } from '../components/ui'
+import { Button, Field, Input, proseLinkClass } from '../components/ui'
+import { cn } from '../lib/utils'
+
+/** Loose shape check: something@domain.tld with no spaces. The server has the final say. */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** The inline message for a typed address, or null when it is worth sending. */
+function emailProblem(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return 'Enter your email address.'
+  if (!EMAIL_SHAPE.test(trimmed)) return 'Enter a full email address, like you@company.com.'
+  return null
+}
 
 function GoogleIcon() {
   return (
@@ -41,6 +53,8 @@ export default function SignIn() {
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [googleBusy, setGoogleBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resent, setResent] = useState(false)
+  const emailRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!loading && session) navigate(next, { replace: true })
@@ -66,8 +80,15 @@ export default function SignIn() {
 
   async function handleMagicLink(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (sending) return
     const trimmed = email.trim()
-    if (!trimmed) return
+    // The button stays enabled; an empty or malformed address is explained inline instead.
+    const problem = emailProblem(trimmed)
+    if (problem) {
+      setError(problem)
+      emailRef.current?.focus()
+      return
+    }
     setError(null)
     setSending(true)
     try {
@@ -80,27 +101,67 @@ export default function SignIn() {
     }
   }
 
+  async function resend() {
+    if (!sentTo) return
+    setError(null)
+    setResent(false)
+    setSending(true)
+    try {
+      await signInWithMagicLink(sentTo, next)
+      setResent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send magic link')
+    } finally {
+      setSending(false)
+    }
+  }
+
   if (sentTo) {
     return (
       <AuthLayout
+        eyebrow="Sign in · link sent"
         title="Check your email"
         description={
           <>
-            We sent a sign-in link to <strong className="font-semibold text-fg">{sentTo}</strong>.
-            Open it on this device to finish signing in. It can take a minute to arrive, so check
-            your spam folder if you do not see it.
+            We sent a sign-in link to <strong className="font-medium text-ink">{sentTo}</strong>.
+            Open it on this device to finish signing in.
+          </>
+        }
+        footer={
+          <>
+            Nothing after a minute? Check spam, or{' '}
+            <button
+              type="button"
+              disabled={sending}
+              onClick={() => void resend()}
+              className={cn(proseLinkClass, 'disabled:text-ink-3')}
+            >
+              {sending ? 'sending…' : 'send it again'}
+            </button>
+            .
+            <span role="status" className="block pt-2 empty:hidden">
+              {resent ? `Sent another link to ${sentTo}.` : ''}
+            </span>
+            {error && (
+              <span role="alert" className="block pt-2 text-danger">
+                {error}
+              </span>
+            )}
           </>
         }
       >
         <Button
           variant="secondary"
+          size="lg"
           onClick={() => {
             setSentTo(null)
+            setResent(false)
+            setError(null)
             setEmail('')
           }}
           className="w-full"
         >
-          <ArrowLeft className="size-4" aria-hidden="true" />
+          <ArrowLeft className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           Use a different email
         </Button>
       </AuthLayout>
@@ -108,42 +169,60 @@ export default function SignIn() {
   }
 
   return (
-    <AuthLayout title="Sign in to Squash" description="Use Google or get a one-time link by email.">
-      <div className="space-y-4">
-        <Button onClick={() => void handleGoogle()} disabled={googleBusy} className="w-full">
+    <AuthLayout
+      eyebrow="Sign in"
+      title="Sign in to Squash"
+      pitch
+      description="Use Google, or get a one-time link by email. New here? Signing in creates your account."
+      footer="Joining a teammate? Open their invite link first; it brings you back here and then into their workspace."
+    >
+      <div className="space-y-6">
+        <Button
+          size="lg"
+          onClick={() => void handleGoogle()}
+          disabled={googleBusy}
+          className="w-full"
+        >
           <GoogleIcon />
-          {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+          {googleBusy ? 'Redirecting to Google…' : 'Continue with Google'}
         </Button>
 
-        <div className="flex items-center gap-3 text-[11px] font-medium tracking-wide text-muted uppercase">
-          <div className="h-px flex-1 bg-border" />
+        <div className="flex items-center gap-3 specimen-label text-ink-3">
+          <div className="h-px flex-1 bg-line" />
           or
-          <div className="h-px flex-1 bg-border" />
+          <div className="h-px flex-1 bg-line" />
         </div>
 
-        <form onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
-          <Field label="Email" error={error}>
+        <form noValidate onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
+          <Field label="Work email" error={error}>
             {({ id, describedBy }) => (
               <Input
+                ref={emailRef}
                 id={id}
                 type="email"
                 required
                 autoComplete="email"
-                placeholder="you@example.com"
+                inputMode="email"
+                placeholder="you@company.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (error) setError(null)
+                }}
                 aria-describedby={describedBy}
                 aria-invalid={error ? true : undefined}
+                className="max-sm:min-h-[3.1429rem]"
               />
             )}
           </Field>
           <Button
             type="submit"
             variant="primary"
-            disabled={sending || !email.trim()}
+            size="lg"
+            aria-busy={sending || undefined}
             className="w-full"
           >
-            {sending ? 'Sending…' : 'Email me a link'}
+            {sending ? 'Sending link…' : 'Email me a link'}
           </Button>
         </form>
       </div>

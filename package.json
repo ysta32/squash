@@ -1,7 +1,7 @@
 {
   "name": "squash",
   "private": true,
-  "version": "1.7.0",
+  "version": "2.0.0",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -22,10 +22,13 @@
     "test": "vitest run",
     "test:db": "node scripts/db-test/run.mjs",
     "screenshots": "node scripts/screenshots/capture.mjs",
+    "screenshots:webp": "node scripts/screenshots/webp.mjs",
     "a11y": "node scripts/a11y/run.mjs",
     "qa:shots": "node scripts/visual-qa/run.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^1.50.0",
     "react": "^19.3.0",

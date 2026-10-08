@@ -1,10 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Copy, RefreshCw, Share2, X } from 'lucide-react'
+import { Check, Copy, RefreshCw, Share2 } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { inviteUrl, friendlyError } from '../hooks/useWorkspaces'
 import type { Workspace } from '../lib/types'
 import { cn } from '../lib/utils'
-import { Button, Field, Input, dialogOverlayClass, dialogPanelClass } from './ui'
+import { Button, Field, Input } from './ui'
+import { DialogHeader } from './DialogHeader'
+import {
+  dialogActionsClass,
+  dialogClass,
+  dialogMaxHeightClass,
+  dialogPositionClass,
+  eyebrowClass,
+  scrimClass,
+} from './dialogStyles'
+
+/** Full-width 44px buttons on phones; regular height from 480px unless the pointer is coarse. */
+const TOUCH = 'max-[479px]:h-11 max-[479px]:w-full pointer-coarse:h-[3.1429rem]'
+/** Footer actions stack (primary on top) below 480px. */
+const STACK = 'max-[479px]:flex-col-reverse max-[479px]:items-stretch'
 
 interface InviteDialogProps {
   workspace: Workspace
@@ -29,7 +43,7 @@ export function InviteDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, open)
+  useFocusTrap(dialogRef, open, { initialFocus: 'field' })
 
   useEffect(() => {
     if (!copied) return
@@ -83,34 +97,24 @@ export function InviteDialog({
   }
 
   return (
-    <div
-      className={cn(dialogOverlayClass, 'flex items-center justify-center p-4')}
-      onClick={onClose}
-    >
+    <div className={cn(scrimClass, dialogPositionClass)} onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Invite people"
-        className={cn(dialogPanelClass, 'max-w-md p-5 text-fg')}
+        className={cn(dialogClass, dialogMaxHeightClass, 'max-w-120 overflow-y-auto p-6')}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold">Invite to {workspace.name}</h2>
-            <p className="mt-1 text-sm text-muted">Anyone with this link can join.</p>
-          </div>
-          <Button
-            variant="ghost"
-            aria-label="Close"
-            onClick={onClose}
-            className="-mt-1 -mr-1 size-8 px-0"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
+        <DialogHeader
+          eyebrow="Workspace · invite"
+          title={<span className="block truncate">Invite to {workspace.name}</span>}
+          onClose={onClose}
+        >
+          <p className="mt-1 text-sm text-ink-2">Anyone with this link can join.</p>
+        </DialogHeader>
 
-        <Field label="Invite link" className="mt-5">
+        <Field label="Invite link" className="mt-6">
           {({ id, describedBy }) => (
             <Input
               id={id}
@@ -118,72 +122,76 @@ export function InviteDialog({
               readOnly
               value={url}
               onFocus={(e) => e.currentTarget.select()}
+              className="font-mono text-xs"
             />
           )}
         </Field>
 
-        <div className="mt-3 flex gap-2">
-          <Button variant="primary" onClick={() => void copy()} className="flex-1">
-            {copied ? (
-              <Check className="size-4" aria-hidden="true" />
-            ) : (
-              <Copy className="size-4" aria-hidden="true" />
-            )}
-            {copied ? 'Copied' : 'Copy link'}
-          </Button>
-          {canShare && (
-            <Button aria-label="Share" onClick={() => void share()} className="w-9 px-0">
-              <Share2 className="size-4" aria-hidden="true" />
-            </Button>
-          )}
+        <div className="mt-4 flex items-baseline justify-between gap-4 border-y border-line py-3">
+          <span className={eyebrowClass}>Invite code</span>
+          <span className="font-mono text-lg font-medium tracking-[0.2em] text-ink nums">
+            {code}
+          </span>
         </div>
+
         <p role="status" className="sr-only">
           {copied ? 'Link copied to clipboard' : ''}
         </p>
 
-        <div className="mt-4 rounded-lg border border-border bg-bg-subtle px-4 py-3 text-center">
-          <div className="text-[11px] font-medium tracking-wide text-muted uppercase">
-            Invite code
-          </div>
-          <div className="mt-1 font-mono text-2xl font-semibold tracking-[0.2em]">{code}</div>
-        </div>
-
-        {canRegenerate && onRegenerate && (
-          <div className="-mx-5 mt-5 -mb-5 rounded-b-xl border-t border-border bg-bg-subtle/60 px-5 py-3 text-sm">
-            {confirming ? (
-              <div>
-                <p className="text-muted">This invalidates the current link and code. Continue?</p>
-                <div className="mt-2 flex justify-end gap-2">
-                  <Button size="sm" onClick={() => setConfirming(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    disabled={busy}
-                    onClick={() => void regenerate()}
-                  >
-                    Yes, regenerate
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirming(true)}
-                className="-ml-2.5"
-              >
-                <RefreshCw className="size-3.5" aria-hidden="true" /> Regenerate
-              </Button>
-            )}
-          </div>
-        )}
-
         {error && (
-          <p role="alert" className="mt-3 text-sm text-danger">
+          <p role="alert" className="mt-4 text-sm text-danger">
             {error}
           </p>
+        )}
+
+        {confirming ? (
+          <div className="mt-6">
+            <p className="text-sm text-ink-2">
+              This invalidates the current link and code. Continue?
+            </p>
+            <div className={cn('mt-3 flex flex-wrap items-center justify-end gap-2', STACK)}>
+              {/* Focus lands on the safe choice; the Regenerate button that had it is gone. */}
+              <Button autoFocus onClick={() => setConfirming(false)} className={TOUCH}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={busy}
+                onClick={() => void regenerate()}
+                className={TOUCH}
+              >
+                Yes, regenerate
+              </Button>
+            </div>
+          </div>
+        ) : (
+          // Same weights as the settings invite row: Copy link and Regenerate are both secondary.
+          // Phones stack Copy link, Share, then Regenerate; wider screens put Regenerate on the left.
+          <div className={cn(dialogActionsClass, STACK)}>
+            {canRegenerate && onRegenerate && (
+              <Button
+                onClick={() => setConfirming(true)}
+                className={cn(TOUCH, 'min-[480px]:mr-auto')}
+              >
+                <RefreshCw size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                Regenerate
+              </Button>
+            )}
+            {canShare && (
+              <Button onClick={() => void share()} className={TOUCH}>
+                <Share2 size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+                Share
+              </Button>
+            )}
+            <Button onClick={() => void copy()} className={cn(TOUCH, 'min-[480px]:min-w-31')}>
+              {copied ? (
+                <Check size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+              ) : (
+                <Copy size={16} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
+              )}
+              {copied ? 'Copied' : 'Copy link'}
+            </Button>
+          </div>
         )}
       </div>
     </div>

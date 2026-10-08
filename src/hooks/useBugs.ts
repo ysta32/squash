@@ -13,6 +13,7 @@ import type {
 import { deriveTitle, randomId } from '../lib/utils'
 import { compressImage } from './useImageCompression'
 import { uploadAttachment } from '../lib/upload'
+import type { Annotations } from '../lib/annotations'
 import { removeScreenshots } from '../lib/storageCleanup'
 import { requireUserId } from './useBug'
 import { openChannel } from './useRealtimeStatus'
@@ -41,7 +42,16 @@ export interface NewBugInput {
   transcript: string | null
   severity: Severity
   kind: BugKind
+  /** Images to upload; a marked-up image is its flattened render (used if the server is old). */
   files: File[]
+  /** Per file (same index): the unmarked original plus its vector markup, when it was marked up. */
+  markup?: (AttachmentMarkup | null | undefined)[]
+}
+
+/** A screenshot's live markup layers: stored as vectors next to the unmarked original. */
+export interface AttachmentMarkup {
+  original: File
+  annotations: Annotations
 }
 
 export interface BugCounts {
@@ -108,6 +118,11 @@ export function friendlyError(err: unknown, fallback = 'Something went wrong. Tr
     if (message.includes(code)) return text
   }
   return message || fallback
+}
+
+/** Whether any search or filter narrows the list (sort and status tab do not count). */
+export function hasActiveFilters(f: BugFilters): boolean {
+  return Boolean(f.query.trim() || f.filedBy || f.resolvedBy || f.assignee || f.severity)
 }
 
 /** Pure list filter used by the bug list (kind, tabs, people, severity, free-text and `#<number>`). */
@@ -309,9 +324,18 @@ function mergeRows(current: BugWithMeta[], rows: BugWithMeta[]): BugWithMeta[] {
 // retry, survive workspace switches and remounts.
 
 interface PendingFile extends PendingUpload {
+  /** What uploads without live markup: the image, or its flattened render when marked up. */
   file: File
+  markup?: AttachmentMarkup
   status: 'queued' | 'uploading' | 'failed'
 }
+
+/**
+ * Set once the server reports that bug_attachments.annotations is missing (migration 0009 not
+ * applied): marked-up screenshots then upload flattened, like before live markup layers.
+ * Never reset within a page load: a server only gains the column through a deploy.
+ */
+let annotationsUnsupported = false
 
 type PendingByBug = Readonly<Record<string, PendingUpload[]>>
 
@@ -699,6 +723,29 @@ export function useBugs(
       )
       .on<BugAttachment>(
         'postgres_changes',
+        // Only annotations are client-updatable (migration 0009): replace the row in place.
+        { event: 'UPDATE', schema: 'public', table: 'bug_attachments' },
+        (payload) => {
+          if (!active) return
+          const updated = payload.new
+          if (!updated?.id) return
+          touched.add(`att:${updated.id}`)
+          mutate(workspaceId, (b) =>
+            mapBug(b, updated.bug_id, (bug) =>
+              bug.attachments.some((a) => a.id === updated.id)
+                ? {
+                    ...bug,
+                    attachments: bug.attachments.map((a) =>
+                      a.id === updated.id ? { ...a, ...updated } : a,
+                    ),
+                  }
+                : bug,
+            ),
+          )
+        },
+      )
+      .on<BugAttachment>(
+        'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'bug_attachments' },
         (payload) => {
           if (!active) return
@@ -769,20 +816,37 @@ export function useBugs(
 
     for (const item of claimed) {
       try {
-        const image = await compressImage(item.file)
+        const upload = async (source: File, annotations?: Annotations) => {
+          const image = await compressImage(source)
+          try {
+            return await uploadAttachment({
+              workspaceId: ws,
+              bugId,
+              image,
+              annotations,
+              onProgress: (p) => {
+                item.progress = p
+                publishPending(ws)
+              },
+            })
+          } finally {
+            if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
+          }
+        }
         let attachment: BugAttachment
-        try {
-          attachment = await uploadAttachment({
-            workspaceId: ws,
-            bugId,
-            image,
-            onProgress: (p) => {
-              item.progress = p
-              publishPending(ws)
-            },
-          })
-        } finally {
-          if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
+        const markup = annotationsUnsupported ? undefined : item.markup
+        if (markup) {
+          try {
+            attachment = await upload(markup.original, markup.annotations)
+          } catch (err) {
+            if (!isMissingColumn(err, 'annotations')) throw err
+            // The server predates migration 0009 (uploadAttachment already removed the object):
+            // fall back to the flattened render, as before live markup layers.
+            annotationsUnsupported = true
+            attachment = await upload(item.file)
+          }
+        } else {
+          attachment = await upload(item.file)
         }
         // Through the shared store, so whichever hook instance is mounted now (even after a
         // remount) merges the attachment.
@@ -812,13 +876,17 @@ export function useBugs(
       const description = input.description.trim()
       const transcript = input.transcript?.trim() ? input.transcript.trim() : null
 
-      const files: PendingFile[] = input.files.map((file) => ({
-        localId: randomId(),
-        previewUrl: URL.createObjectURL(file),
-        progress: 0,
-        file,
-        status: 'queued',
-      }))
+      const files: PendingFile[] = input.files.map((file, index) => {
+        const markup = input.markup?.[index] ?? undefined
+        return {
+          localId: randomId(),
+          previewUrl: URL.createObjectURL(file),
+          progress: 0,
+          file,
+          ...(markup ? { markup } : {}),
+          status: 'queued',
+        }
+      })
       localIdsRef.current.add(id)
       touchedRef.current.add(`bug:${id}`)
       if (files.length) setPending(ws, id, files)

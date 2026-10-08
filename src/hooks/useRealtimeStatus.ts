@@ -1,7 +1,8 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { randomId } from '../lib/utils'
+import { useBrowserOnline } from './useBrowserOnline'
 
 export type RealtimeStatus = 'connected' | 'reconnecting' | 'offline'
 
@@ -17,29 +18,12 @@ export function openChannel(topic: string): RealtimeChannel {
   return supabase.channel(taken ? `${topic}:${randomId()}` : topic)
 }
 
-function subscribeOnline(onChange: () => void): () => void {
-  window.addEventListener('online', onChange)
-  window.addEventListener('offline', onChange)
-  return () => {
-    window.removeEventListener('online', onChange)
-    window.removeEventListener('offline', onChange)
-  }
-}
-
-function getOnline(): boolean {
-  return navigator.onLine
-}
-
-function getServerOnline(): boolean {
-  return true
-}
-
 /**
  * Connection health for the UI. `offline` when the browser reports no network; otherwise derived
  * from a lightweight `status` channel (optimistically `connected` until the socket reports trouble).
  */
 export function useRealtimeStatus(): RealtimeStatus {
-  const online = useSyncExternalStore(subscribeOnline, getOnline, getServerOnline)
+  const online = useBrowserOnline()
   const [channelStatus, setChannelStatus] = useState<'connected' | 'reconnecting'>('connected')
 
   useEffect(() => {

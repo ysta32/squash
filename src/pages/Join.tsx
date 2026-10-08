@@ -12,7 +12,7 @@ interface Preview {
   member_count: number
 }
 
-const INVALID = "That invite code doesn't exist."
+const INVALID = 'That invite code doesn’t exist.'
 
 export default function Join() {
   const { code = '' } = useParams<{ code: string }>()
@@ -58,12 +58,19 @@ export default function Join() {
 
   const next = encodeURIComponent(`/join/${code}`)
 
+  const eyebrow = `Invite · ${code.toUpperCase()}`
+
   if (loading || authLoading) {
     return (
-      <AuthLayout title="Checking invite">
-        <p role="status" className="text-sm text-muted">
-          Loading invite details…
-        </p>
+      <AuthLayout eyebrow={eyebrow} title="Checking invite">
+        <div role="status" aria-label="Loading invite details" className="space-y-3">
+          <span className="sr-only">Loading invite details…</span>
+          <div aria-hidden="true" className="h-4 w-3/4 animate-skeleton rounded-sm bg-surface-3" />
+          <div
+            aria-hidden="true"
+            className="h-11 w-full animate-skeleton rounded-md bg-surface-3"
+          />
+        </div>
       </AuthLayout>
     )
   }
@@ -71,15 +78,25 @@ export default function Join() {
   if (error || !preview) {
     return (
       <AuthLayout
+        eyebrow={eyebrow}
         title="Invite not available"
-        description={<span role="alert">{error ?? INVALID}</span>}
+        description={
+          // One lead paragraph: what happened, then what to do.
+          <>
+            <span role="alert">{error ?? INVALID}</span> Ask the person who invited you for a new
+            link, or open a workspace of your own.
+          </>
+        }
+        footer="Invite links stop working when the owner regenerates them or the workspace is full."
       >
-        <p className="mb-4 text-sm text-muted">
-          Ask the person who invited you for a new link, or create a workspace of your own.
-        </p>
-        <ButtonLink to="/" variant="secondary" size="lg" className="w-full">
-          Back to home
-        </ButtonLink>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <ButtonLink to="/app?new=1" variant="primary" size="lg" className="sm:flex-1">
+            Open a workspace
+          </ButtonLink>
+          <ButtonLink to="/" variant="secondary" size="lg" className="sm:flex-1">
+            Back to home
+          </ButtonLink>
+        </div>
       </AuthLayout>
     )
   }
@@ -88,13 +105,24 @@ export default function Join() {
 
   return (
     <AuthLayout
+      eyebrow={eyebrow}
       title={`Join ${preview.name}`}
+      pitch
       description={`You have been invited to this workspace. It has ${members}.`}
+      footer={
+        user
+          ? undefined
+          : 'Signing in with a new email creates your account, then brings you straight back here.'
+      }
     >
       {user ? (
-        <p role="status" className="text-sm text-muted">
-          Joining workspace…
-        </p>
+        <div role="status" className="space-y-3">
+          <p className="text-sm text-ink-2">Joining {preview.name}…</p>
+          <div
+            aria-hidden="true"
+            className="h-11 w-full animate-skeleton rounded-md bg-surface-3"
+          />
+        </div>
       ) : (
         <ButtonLink to={`/signin?next=${next}`} variant="primary" size="lg" className="w-full">
           Sign in to join

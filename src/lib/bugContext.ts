@@ -49,6 +49,14 @@ export function sanitizeContext(value: unknown): BugContext {
 }
 
 export function extractUrl(text: string): string | undefined {
+  return findUrl(text)?.url
+}
+
+/**
+ * Like `extractUrl`, plus where the URL sits in `text`: `index` and `length` cover the raw
+ * characters as typed (the returned `url` is normalised and may differ from them).
+ */
+export function findUrl(text: string): { url: string; index: number; length: number } | undefined {
   for (const match of text.matchAll(/https?:\/\/[^\s<>"'`]+/gi)) {
     let candidate = match[0]
     for (let previous = ''; previous !== candidate;) {
@@ -62,7 +70,7 @@ export function extractUrl(text: string): string | undefined {
     }
     const url = sanitizeContext({ url: candidate }).url
     if (url && (typeof window === 'undefined' || new URL(url).origin !== window.location.origin))
-      return url
+      return { url, index: match.index, length: candidate.length }
   }
   return undefined
 }

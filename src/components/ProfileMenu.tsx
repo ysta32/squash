@@ -4,12 +4,13 @@ import { Keyboard, LogOut, Settings } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useDismiss } from '../hooks/useDismiss'
 import { cn } from '../lib/utils'
+import { menuRowClass, popoverClass } from './dialogStyles'
 import { Avatar } from './Avatar'
 import { Kbd } from './ui'
+import { useCoarsePointer } from '../hooks/useCoarsePointer'
 
-const ITEM =
-  't focus-ring flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-fg hover:bg-bg-subtle focus-visible:bg-bg-subtle'
-const ITEM_ICON = 'h-3.5 w-3.5 shrink-0 text-muted'
+const ITEM = menuRowClass
+const ITEM_ICON = 'size-4 shrink-0 text-ink-3'
 
 export interface ProfileMenuProps {
   workspaceId: string
@@ -17,6 +18,8 @@ export interface ProfileMenuProps {
 }
 
 export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) {
+  // The shortcuts sheet is keyboard-only; touch screens do not get an entry point.
+  const touch = useCoarsePointer()
   const { profile, user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,8 +47,8 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
         aria-expanded={open}
         title={profile?.display_name ?? 'Profile'}
         className={cn(
-          't focus-ring flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-subtle',
-          open && 'bg-bg-subtle',
+          't focus-ring flex size-8 items-center justify-center rounded-md hover:bg-surface-3 pointer-coarse:size-[3.1429rem]',
+          open && 'bg-surface-3',
         )}
       >
         <Avatar profile={profile} size="sm" />
@@ -55,18 +58,21 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
           role="menu"
           aria-label="Profile"
           onKeyDown={onMenuKey}
-          className="t absolute right-0 top-full z-30 mt-1 w-60 max-w-[calc(100vw-1.5rem)] rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated starting:-translate-y-1 starting:opacity-0"
+          className={cn(
+            popoverClass,
+            'absolute top-full right-0 z-30 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] p-1',
+          )}
         >
           <div className="flex items-center gap-2.5 px-2 py-2">
             <Avatar profile={profile} size="md" />
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-fg">
+              <div className="truncate text-sm font-medium text-ink">
                 {profile?.display_name ?? ''}
               </div>
-              {email && <div className="truncate text-xs text-muted">{email}</div>}
+              {email && <div className="truncate font-mono text-xs text-ink-3">{email}</div>}
             </div>
           </div>
-          <div role="separator" className="-mx-1 my-1 border-t border-border" />
+          <div role="separator" className="-mx-1 my-1 border-t border-line" />
           <Link
             to={`/app/${workspaceId}/settings`}
             role="menuitem"
@@ -76,7 +82,7 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
             <Settings aria-hidden="true" className={ITEM_ICON} />
             Settings
           </Link>
-          {onShowShortcuts && (
+          {onShowShortcuts && !touch && (
             <button
               type="button"
               role="menuitem"
@@ -88,10 +94,10 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
             >
               <Keyboard aria-hidden="true" className={ITEM_ICON} />
               <span className="flex-1">Keyboard shortcuts</span>
-              <Kbd>?</Kbd>
+              <Kbd className="ml-auto">?</Kbd>
             </button>
           )}
-          <div role="separator" className="-mx-1 my-1 border-t border-border" />
+          <div role="separator" className="-mx-1 my-1 border-t border-line" />
           <button
             type="button"
             role="menuitem"

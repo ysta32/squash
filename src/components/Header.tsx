@@ -1,14 +1,16 @@
 import { useCallback, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { BarChart2, Monitor, Moon, Sun, UserPlus } from 'lucide-react'
 import type { MemberRole, Workspace, WorkspaceMember } from '../lib/types'
 import type { PresenceUser } from '../hooks/usePresence'
 import { useDismiss } from '../hooks/useDismiss'
 import { NEXT_THEME, useTheme } from '../lib/theme'
 import { cn } from '../lib/utils'
-import { LogoMark } from './ui'
+import { Button, Logo, LogoMark } from './ui'
 import { PresenceAvatars } from './PresenceAvatars'
 import { ProfileMenu } from './ProfileMenu'
 import { StatsPopover } from './StatsPopover'
+import { Tooltip } from './Tooltip'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 export interface HeaderProps {
@@ -23,28 +25,32 @@ export interface HeaderProps {
 }
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor }
+/** 32px icon buttons, 44px on touch screens (DESIGN.md: ≥44px targets on touch). */
 const ICON_BTN =
-  't focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg'
-// Icon-only on mobile; a compact secondary button with a label from `sm` up.
-const INVITE_BTN =
-  't focus-ring flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-muted hover:bg-bg-subtle hover:text-fg sm:mx-1 sm:h-7 sm:w-auto sm:border sm:border-border sm:bg-bg sm:px-2.5 sm:text-xs sm:font-medium sm:text-fg'
+  't focus-ring flex size-[2.2857rem] shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem] [&_svg]:size-4'
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const Icon = THEME_ICON[theme]
   return (
-    <button
-      type="button"
-      onClick={() => setTheme(NEXT_THEME[theme])}
-      aria-label={`Theme: ${theme}`}
-      title={`Theme: ${theme} (switch to ${NEXT_THEME[theme]})`}
-      className={ICON_BTN}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
+    <Tooltip label={`Theme: ${theme} → ${NEXT_THEME[theme]}`} align="end">
+      <button
+        type="button"
+        onClick={() => setTheme(NEXT_THEME[theme])}
+        aria-label={`Theme: ${theme}`}
+        className={ICON_BTN}
+      >
+        <Icon strokeWidth={1.5} aria-hidden="true" />
+      </button>
+    </Tooltip>
   )
 }
 
+/**
+ * App shell header (DESIGN.md section 5): 48px on the paper background with a hairline rule.
+ * Left: the pin mark (plus the wordmark from `sm` up) and the workspace switcher. Right:
+ * presence, Invite, stats, theme and the profile menu.
+ */
 export function Header({
   workspace,
   workspaces,
@@ -61,47 +67,62 @@ export function Header({
   useDismiss(statsRef, closeStats, statsOpen)
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className="flex shrink-0 items-center gap-2 pl-0.5 text-sm font-semibold tracking-tight">
-          <LogoMark size={20} />
-          <span className="hidden sm:inline">Squash</span>
-        </span>
-        <span aria-hidden="true" className="select-none text-sm text-muted/50">
-          /
-        </span>
+    <header className="flex h-[3.4286rem] shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-3 sm:pr-3 sm:pl-4">
+      <div className="flex min-w-0 items-center">
+        <Link
+          to="/app"
+          aria-label="Squash: your workspaces"
+          className="t focus-ring -ml-1 flex h-[2.2857rem] shrink-0 items-center rounded-md px-1 text-base pointer-coarse:h-[3.1429rem] pointer-coarse:min-w-[3.1429rem] pointer-coarse:justify-center"
+        >
+          {/* Wordmark from 360px up; only the narrowest phones fall back to the bare pin. Wrapped
+              because Logo sets its own display and cn() does not merge conflicting classes. */}
+          <span className="inline-flex min-[360px]:hidden">
+            <LogoMark size={20} />
+          </span>
+          <span className="hidden min-[360px]:inline-flex">
+            <Logo size={18} />
+          </span>
+        </Link>
+        {/* A hairline slash between brand and workspace, like a path: never shown alone. */}
+        <span
+          aria-hidden="true"
+          className="mx-1.5 h-4 w-px shrink-0 rotate-[18deg] bg-line-2 sm:mx-2"
+        />
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
         <PresenceAvatars online={online} members={members} selfId={selfId} />
         {role !== null && (
-          <button
-            type="button"
-            onClick={onInvite}
-            aria-label="Invite"
-            title="Invite people"
-            className={INVITE_BTN}
-          >
-            <UserPlus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-            <span aria-hidden="true" className="hidden sm:inline">
-              Invite
-            </span>
-          </button>
+          <Tooltip label="Invite teammates" align="end" className="sm:mr-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onInvite}
+              aria-label="Invite"
+              className="max-sm:size-[2.2857rem] max-sm:border-transparent max-sm:px-0 max-sm:text-ink-2 pointer-coarse:max-sm:size-[3.1429rem]"
+            >
+              <UserPlus size={16} strokeWidth={1.5} aria-hidden="true" className="sm:size-3.5" />
+              <span className="max-sm:hidden">Invite</span>
+            </Button>
+          </Tooltip>
         )}
         <div ref={statsRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setStatsOpen((o) => !o)}
-            aria-label="Stats"
-            title="Team stats"
-            aria-expanded={statsOpen}
-            className={cn(ICON_BTN, statsOpen && 'bg-bg-subtle text-fg')}
-          >
-            <BarChart2 className="h-4 w-4" />
-          </button>
+          <Tooltip label="Team stats" disabled={statsOpen}>
+            <button
+              type="button"
+              onClick={() => setStatsOpen((o) => !o)}
+              aria-label="Stats"
+              aria-expanded={statsOpen}
+              className={cn(ICON_BTN, statsOpen && 'bg-surface-3 text-ink')}
+            >
+              <BarChart2 strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </Tooltip>
           {statsOpen && <StatsPopover workspaceId={workspace.id} members={members} />}
         </div>
-        <ThemeToggle />
+        <span className="max-sm:hidden">
+          <ThemeToggle />
+        </span>
         <ProfileMenu workspaceId={workspace.id} onShowShortcuts={onShowShortcuts} />
       </div>
     </header>

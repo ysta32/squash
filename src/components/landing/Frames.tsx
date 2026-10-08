@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import type { ResolvedTheme } from '../../lib/theme'
 import { cn } from '../../lib/utils'
-import { shotSrc, type Shot } from './content'
+import { shotSrc, type Marker, type Shot } from './content'
 
 /** A product screenshot with its intrinsic size set, so layout never jumps or collapses. */
 export function ShotImage({
@@ -32,108 +32,47 @@ export function ShotImage({
   )
 }
 
-/** Window-like frame: a hairline outer ring with a small inset around the screenshot. */
-export function ShotFrame({
-  children,
-  className,
-  plain = false,
-}: {
-  children: ReactNode
-  className?: string
-  /** Just a hairline border and soft shadow, for screenshots that already sit on a Stage. */
-  plain?: boolean
-}) {
-  if (plain) {
-    return (
-      <div
-        className={cn(
-          'overflow-hidden rounded-lg border border-border bg-bg-elevated',
-          'shadow-[0_1px_2px_rgb(0_0_0/0.04),0_16px_32px_-12px_rgb(0_0_0/0.14)]',
-          'dark:shadow-[0_1px_2px_rgb(0_0_0/0.4),0_16px_32px_-12px_rgb(0_0_0/0.6)]',
-          className,
-        )}
-      >
-        {children}
-      </div>
-    )
-  }
+/**
+ * Specimen drawer frame: the screenshot laid on paper, with a 1px inner highlight and the layered
+ * elev-3 shadow (DESIGN.md section 8).
+ */
+export function DrawerFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-bg-subtle p-1 sm:rounded-2xl sm:p-1.5',
-        'shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_24px_-12px_rgb(0_0_0/0.12),0_40px_80px_-24px_rgb(0_0_0/0.16)]',
-        'dark:shadow-[0_1px_2px_rgb(0_0_0/0.4),0_12px_24px_-12px_rgb(0_0_0/0.5),0_40px_80px_-24px_rgb(0_0_0/0.6)]',
+        'relative overflow-hidden rounded-xl border border-line-2 bg-surface-2 shadow-elev-3',
+        "after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_1px_0_rgb(255_255_255/0.5)] after:content-[''] dark:after:shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]",
         className,
       )}
     >
-      <div className="overflow-hidden rounded-lg border border-border bg-bg-elevated sm:rounded-xl">
-        {children}
-      </div>
+      {children}
     </div>
   )
-}
-
-/** Square-cornered panel that every feature image sits on, so mixed aspect ratios line up. */
-export function Stage({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn(
-        'relative overflow-hidden rounded-2xl border border-border bg-bg-subtle',
-        className,
-      )}
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_80%)] bg-[size:16px_16px] opacity-70"
-      />
-      <div className="relative">{children}</div>
-    </div>
-  )
-}
-
-const MOBILE = { src: '/product/mobile.webp', width: 1400, height: 981 }
-
-export interface PhoneCrop {
-  /** Left, top, width and height of one phone screen inside mobile.webp, in image pixels. */
-  x: number
-  y: number
-  w: number
-  h: number
-  alt: string
 }
 
 /**
- * Shows one phone from the three-phone mobile.webp composite inside a device bezel.
- * The crop is percentage based, so it scales with the frame and keeps the right aspect ratio.
+ * A marker stroke over a screenshot, drawn in the screenshot's pixel space. The stroke draws itself
+ * (stroke-dashoffset) when an ancestor `[data-reveal]` is shown.
  */
-export function PhoneFrame({ crop, className }: { crop: PhoneCrop; className?: string }) {
+export function MarkerStroke({ shot, marker }: { shot: Shot; marker: Marker }) {
   return (
-    <div
-      className={cn(
-        'rounded-[1.75rem] bg-zinc-900 p-[5px] ring-1 ring-black/5 dark:bg-zinc-950 dark:ring-white/10',
-        'shadow-[0_2px_4px_rgb(0_0_0/0.06),0_24px_48px_-16px_rgb(0_0_0/0.28)]',
-        className,
-      )}
+    <svg
+      viewBox={`0 0 ${shot.width} ${shot.height}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 size-full"
     >
-      <div
-        className="relative overflow-hidden rounded-[1.4rem] bg-bg"
-        style={{ aspectRatio: `${crop.w} / ${crop.h}` }}
-      >
-        <img
-          src={MOBILE.src}
-          alt={crop.alt}
-          width={MOBILE.width}
-          height={MOBILE.height}
-          loading="lazy"
-          decoding="async"
-          className="absolute h-auto max-w-none"
-          style={{
-            width: `${(MOBILE.width / crop.w) * 100}%`,
-            left: `${(-crop.x / crop.w) * 100}%`,
-            top: `${(-crop.y / crop.h) * 100}%`,
-          }}
-        />
-      </div>
-    </div>
+      <path
+        d={marker.d}
+        pathLength={1}
+        fill="none"
+        stroke="var(--markup)"
+        // Scales with the screenshot: about 3px when it is shown 700px wide.
+        strokeWidth={shot.width / 230}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="mk-stroke"
+      />
+    </svg>
   )
 }

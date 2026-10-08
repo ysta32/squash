@@ -130,14 +130,14 @@ export function MentionInput({
         aria-controls={listId}
         aria-activedescendant={open ? optionId(activeIndex) : undefined}
         placeholder={placeholder}
-        className="block max-h-60 min-h-[3.25rem] w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 text-sm leading-relaxed outline-none placeholder:text-muted disabled:cursor-not-allowed"
+        className="block max-h-60 min-h-[3.25rem] w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 text-sm leading-relaxed outline-none text-ink placeholder:text-ink-3 disabled:cursor-not-allowed"
       />
       {open && (
         <ul
           id={listId}
           role="listbox"
           aria-label="Mention suggestions"
-          className="absolute top-full left-2 z-20 mt-1 w-64 max-w-[calc(100%-1rem)] rounded-lg border border-border bg-bg-elevated p-1 shadow-elevated"
+          className="absolute top-full left-2 z-20 mt-1 w-64 max-w-[calc(100%-1rem)] panel animate-in p-1"
         >
           {matches.map((m, i) => (
             <li
@@ -150,8 +150,8 @@ export function MentionInput({
                 insert(m)
               }}
               onMouseEnter={() => setActive(i)}
-              className={`flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-fg ${
-                i === activeIndex ? 'bg-bg-subtle' : ''
+              className={`flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-[3.1429rem] ${
+                i === activeIndex ? 'bg-surface-3' : ''
               }`}
             >
               <Avatar profile={m.profile} size="xs" />

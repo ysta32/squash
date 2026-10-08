@@ -3,7 +3,10 @@
 //
 // Run it through the e2e serializer (the machine is CPU-saturated):
 //   ~/.claude/orch/bin/serial e2e -- npm run qa:shots -- --out .orch/shots/latest
-//   node scripts/visual-qa/run.mjs --out <dir> [--routes /,/claude] [--widths 375,1280] [--themes light]
+//   node scripts/visual-qa/run.mjs --out <dir> [--routes /,/claude] [--states palette,toast]
+//     [--widths 375,1280] [--themes light]
+// Routes: `/path` (signed in), `public:/path` (signed out), `state:<name>` (scripted UI state, see STATES).
+// Without --routes/--states the default routes and every state are shot.
 // Env: QA_PORT (default 4210). Uses your installed Google Chrome.
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -11,14 +14,32 @@ import { relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer } from 'vite'
-import { renderFixtures } from '../screenshots/render-fixtures.mjs'
+import { fixturesDir, renderFixtures } from '../screenshots/render-fixtures.mjs'
 
 const DEFAULT_ROUTES = [
+  'public:/',
+  'public:/signin',
+  'public:/no-such-page',
+  'public:/privacy',
+  'public:/terms',
+  'public:/features',
+  'public:/pricing',
+  'public:/changelog',
+  'public:/docs',
+  'public:/docs/self-host',
+  'public:/docs/keyboard',
+  'public:/claude',
+  'public:/faq',
+  'public:/about',
+  'public:/press',
+  'public:/status',
   '/',
   '/signin',
   '/claude',
   '/privacy',
   '/terms',
+  '/app',
+  '/app?new=1',
   '/app/ws-lumen',
   '/app/ws-lumen/bug/24',
   '/app/ws-lumen/settings',
@@ -33,7 +54,320 @@ const opt = (name) => {
 }
 const list = (name, fallback) => opt(name)?.split(',').filter(Boolean) ?? fallback
 
-const routes = list('routes', DEFAULT_ROUTES)
+const WS = '/app/ws-lumen'
+const SAMPLE_DESCRIPTION = 'Checkout button is hidden behind the cookie banner on iPhone'
+const SHORT = 15_000
+const FIXED_TIME = new Date('2026-10-06T14:30:00Z')
+
+/**
+ * Scripted states. `path` is loaded first (with optional mock `delayBugs` ms), then `run` interacts
+ * until the state is visible. `run` may return a cleanup. A state whose UI never appears
+ * (timeout) is logged as a warning and skipped, never failing the run.
+ */
+const searchbox = (page) => page.getByRole('searchbox', { name: /^Search/ })
+const settingsState = (tab) => ({
+  path: `${WS}/settings?tab=${tab}`,
+  run: (page) =>
+    page
+      // The active section's nav link carries aria-current.
+      .locator('nav [aria-current="page"]')
+      .first()
+      .waitFor({ timeout: SHORT }),
+})
+async function createWorkspace(page) {
+  await page.getByRole('textbox', { name: 'Workspace name' }).fill('Lumen', { timeout: SHORT })
+  await page.getByRole('button', { name: 'Create workspace' }).click()
+  await page.getByRole('button', { name: 'Continue' }).waitFor({ timeout: SHORT })
+}
+const STATES = {
+  palette: {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.getByRole('dialog', { name: 'Command palette' }).waitFor({ timeout: SHORT })
+    },
+  },
+  shortcuts: {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('?')
+      await page.getByRole('dialog').waitFor({ timeout: SHORT })
+    },
+  },
+  invite: {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Invite', exact: true }).click({ timeout: SHORT })
+      await page.getByRole('dialog', { name: 'Invite people' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'capture-focused': {
+    path: WS,
+    run: async (page) => {
+      const box = page.getByRole('textbox', { name: /^Describe the/ })
+      await box.click({ timeout: SHORT })
+      await box.fill(SAMPLE_DESCRIPTION)
+      await box.waitFor({ state: 'visible' })
+    },
+  },
+  'filter-empty': {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).fill('zzz-no-such-bug')
+      await page.getByText('No matches', { exact: true }).waitFor({ timeout: SHORT })
+    },
+  },
+  'filter-popover': {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: /^Filter(,|$)/ }).click({ timeout: SHORT })
+      await page.getByRole('dialog', { name: 'Filters' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'list-actions': {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'List actions' }).click({ timeout: SHORT })
+      await page.getByRole('menu', { name: 'List actions' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'empty-workspace': {
+    path: '/app/ws-side',
+    run: (page) => page.getByRole('textbox', { name: /^Describe the/ }).waitFor({ timeout: SHORT }),
+  },
+  loading: {
+    path: WS,
+    delayBugs: 120_000,
+    waitUntil: 'domcontentloaded',
+    run: (page) => page.getByRole('status', { name: 'Loading bugs' }).waitFor({ timeout: SHORT }),
+  },
+  offline: {
+    path: WS,
+    run: async (page, context) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await context.setOffline(true)
+      await page.getByRole('status').filter({ hasText: 'Offline' }).waitFor({ timeout: SHORT })
+      return () => context.setOffline(false)
+    },
+  },
+  lightbox: {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Open screenshot 1' }).click({ timeout: SHORT })
+      const dialog = page.getByRole('dialog', { name: 'Screenshot viewer' })
+      await dialog.waitFor({ timeout: SHORT })
+      await dialog
+        .locator('img')
+        .first()
+        .evaluate((img) =>
+          Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 5_000))]),
+        )
+    },
+  },
+  // The viewer zoomed in on pin 1: a transform zoom on wide screens, a scrollable pan on phones.
+  'lightbox-zoom': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Open screenshot 1' }).click({ timeout: SHORT })
+      const image = page.getByRole('dialog', { name: 'Screenshot viewer' }).locator('img').first()
+      await image.evaluate((img) =>
+        Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 5_000))]),
+      )
+      const box = await image.boundingBox()
+      if (box) await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.35)
+      await page.waitForTimeout(300)
+    },
+  },
+  // The bug detail scrolls inside its own pane, so a full-page shot never reaches the Claude panel,
+  // timeline and comments; this scrolls that pane to the end first.
+  'detail-timeline': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      const timeline = page.getByRole('list', { name: 'Timeline', exact: true })
+      await timeline.waitFor({ timeout: SHORT })
+      await page
+        .locator('article')
+        .first()
+        .evaluate((article) => {
+          for (let el = article.parentElement; el; el = el.parentElement) el.scrollTop = 1e6
+          window.scrollTo(0, document.documentElement.scrollHeight)
+        })
+    },
+  },
+  // Proof of fix on the resolved #18: the fix record scrolled to the top of the detail pane, its
+  // other runs expanded and the before/after slider moved off centre with the keyboard.
+  'fix-record': {
+    path: `${WS}/bug/18`,
+    run: async (page) => {
+      const slider = page.getByRole('slider', { name: /^Before and after/ })
+      await slider.waitFor({ timeout: SHORT })
+      await page.getByText('2 other runs', { exact: true }).click({ timeout: SHORT })
+      await slider.focus()
+      await slider.press('ArrowLeft')
+      for (const alt of ['Before the fix', 'After the fix']) {
+        await page
+          .getByAltText(alt)
+          .evaluate((img) =>
+            Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 5_000))]),
+          )
+      }
+      await page
+        .getByRole('region', { name: 'Fix record' })
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }))
+    },
+  },
+  // A run still in progress on #24: only the live Claude panel shows it (no fix record until a
+  // run has a commit).
+  'fix-running': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      const panel = page.getByRole('region', { name: 'Claude progress' })
+      await panel.waitFor({ timeout: SHORT })
+      await panel.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+    },
+  },
+  'resolve-popover': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Resolve', exact: true }).click({ timeout: SHORT })
+      await page.getByRole('textbox', { name: 'Note', exact: true }).waitFor({ timeout: SHORT })
+    },
+  },
+  'detail-menu': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'More actions' }).click({ timeout: SHORT })
+      await page.getByRole('menu', { name: 'More actions' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'delete-confirm': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'More actions' }).click({ timeout: SHORT })
+      await page
+        .getByRole('menuitem', { name: 'Delete bug', exact: true })
+        .click({ timeout: SHORT })
+      await page.getByRole('dialog', { name: /^Delete bug #24/ }).waitFor({ timeout: SHORT })
+    },
+  },
+  toast: {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      // Resolving shows no toast; deleting does (the mock only changes in this page).
+      // Delete lives in the detail's … menu.
+      await page.getByRole('button', { name: 'More actions' }).click({ timeout: SHORT })
+      await page
+        .getByRole('menuitem', { name: 'Delete bug', exact: true })
+        .click({ timeout: SHORT })
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Delete bug', exact: true })
+        .click({ timeout: SHORT })
+      await page.getByRole('button', { name: 'Dismiss notification' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'toast-action': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'More actions' }).waitFor({ timeout: SHORT })
+      await page.keyboard.press('i')
+      await page.getByRole('button', { name: 'Undo', exact: true }).waitFor({ timeout: SHORT })
+    },
+  },
+  'claude-setup': {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.keyboard.type('Set up Claude Code')
+      await page.keyboard.press('Enter')
+      await page.getByRole('dialog', { name: 'Connect Claude Code' }).waitFor({ timeout: SHORT })
+    },
+  },
+  // Connected: the install step folds to one line; this opens it to show the command scroller.
+  'claude-setup-command': {
+    path: WS,
+    run: async (page) => {
+      await searchbox(page).waitFor({ timeout: SHORT })
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.keyboard.type('Set up Claude Code')
+      await page.keyboard.press('Enter')
+      const dialog = page.getByRole('dialog', { name: 'Connect Claude Code' })
+      await dialog.getByRole('button', { name: /Show command/ }).click({ timeout: SHORT })
+      await dialog.getByRole('group', { name: 'Install command' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'invite-regenerate': {
+    path: WS,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Invite', exact: true }).click({ timeout: SHORT })
+      const dialog = page.getByRole('dialog', { name: 'Invite people' })
+      await dialog.getByRole('button', { name: 'Regenerate' }).click({ timeout: SHORT })
+      await dialog.getByRole('button', { name: 'Yes, regenerate' }).waitFor({ timeout: SHORT })
+    },
+  },
+  'capture-staged': {
+    path: WS,
+    run: async (page) => {
+      const box = page.getByRole('textbox', { name: /^Describe the/ })
+      await box.click({ timeout: SHORT })
+      await box.fill(`${SAMPLE_DESCRIPTION} on https://shop.example.com/checkout`)
+      await page.getByTestId('file-input').setInputFiles(`${fixturesDir}checkout-desktop.png`)
+      await page.getByRole('button', { name: /^Mark up/ }).waitFor({ timeout: SHORT })
+    },
+  },
+  'settings-profile': settingsState('profile'),
+  'settings-appearance': settingsState('appearance'),
+  'settings-workspace': settingsState('workspace'),
+  'settings-members': settingsState('members'),
+  'settings-notifications': settingsState('notifications'),
+  'settings-claude': settingsState('claude'),
+  'settings-danger': settingsState('danger'),
+  // The inline "Saved" tick after a field autosaves on blur.
+  'settings-saved': {
+    path: `${WS}/settings?tab=profile`,
+    run: async (page) => {
+      const field = page.getByRole('textbox', { name: 'Display name' })
+      await field.fill('Sam Rivera', { timeout: SHORT })
+      await field.press('Tab')
+      await page.getByRole('status').getByText('Saved').waitFor({ timeout: SHORT })
+    },
+  },
+  // The type-to-confirm delete-account dialog, with the phrase typed.
+  'settings-delete-dialog': {
+    path: `${WS}/settings?tab=danger`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Delete account' }).click({ timeout: SHORT })
+      const dialog = page.getByRole('dialog')
+      await dialog.getByRole('textbox').fill('delete my account', { timeout: SHORT })
+    },
+  },
+  // Onboarding step 02 (invite) and 03 (first bug), reached by creating a workspace.
+  'onboarding-invite': { path: '/app?new=1', run: createWorkspace },
+  'onboarding-first-bug': {
+    path: '/app?new=1',
+    run: async (page) => {
+      await createWorkspace(page)
+      await page.getByRole('button', { name: 'Continue' }).click({ timeout: SHORT })
+      await page
+        .getByRole('button', { name: 'Continue' })
+        .waitFor({ state: 'detached', timeout: SHORT })
+    },
+  },
+}
+
+const requested = list('routes', null)
+const stateNames = [
+  ...(requested ?? []).filter((r) => r.startsWith('state:')).map((r) => r.slice(6)),
+  ...list('states', []),
+]
+const everything = requested === null && opt('states') === undefined
+const routes = (requested ?? (everything ? DEFAULT_ROUTES : [])).filter(
+  (r) => !r.startsWith('state:'),
+)
+if (everything) stateNames.push(...Object.keys(STATES))
 const widths = list('widths', ['375', '768', '1280', '1920']).map(Number)
 const themes = list('themes', ['light', 'dark'])
 const outDir = resolve(opt('out') ?? '.orch/shots/latest')
@@ -46,8 +380,14 @@ if (!Number.isInteger(port) || FORBIDDEN_PORTS.has(port)) {
 if (widths.some((w) => !Number.isFinite(w) || w <= 0)) throw new Error('invalid --widths')
 if (themes.some((t) => t !== 'light' && t !== 'dark')) throw new Error('--themes: light,dark')
 
-const slug = (route) =>
-  route === '/' ? 'home' : route.replace(/^\/|\/$/g, '').replace(/\W+/g, '-')
+const slug = (route) => {
+  const isPublic = route.startsWith('public:')
+  const path = (isPublic ? route.slice(7) : route)
+    .replace(/\?new=1$/, '/new')
+    .replace(/^\/app\/[^/]+\/settings$/, '/app/settings')
+  const base = path === '/' ? 'home' : path.replace(/^\/|\/$/g, '').replace(/\W+/g, '-')
+  return isPublic ? `public-${base}` : base
+}
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const rel = relative(outDir, repoRoot)
@@ -60,6 +400,28 @@ for (const f of readdirSync(outDir)) {
   if (f === 'index.html' || f.endsWith('.png')) rmSync(`${outDir}/${f}`, { force: true })
 }
 
+/**
+ * A full-page shot only renders what the browser has loaded, and lazy images and in-view reveals
+ * below the fold never load without scrolling. Walk the page one viewport at a time, wait for
+ * every image to finish (bounded), then return to the top.
+ */
+async function settleFullPage(page) {
+  await page.evaluate(async () => {
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms))
+    for (let y = 0; y < document.documentElement.scrollHeight; y += window.innerHeight * 0.8) {
+      window.scrollTo(0, y)
+      await pause(60)
+    }
+    window.scrollTo(0, document.documentElement.scrollHeight)
+    await pause(60)
+    // decode() settles once the image has loaded (or failed); a broken image must not hang the run.
+    const pending = [...document.images].map((img) => img.decode().catch(() => {}))
+    await Promise.race([Promise.all(pending), pause(5000)])
+    window.scrollTo(0, 0)
+  })
+  await page.waitForTimeout(300)
+}
+
 const configFile = fileURLToPath(new URL('../screenshots/vite.config.ts', import.meta.url))
 const server = await createServer({
   configFile,
@@ -67,6 +429,7 @@ const server = await createServer({
   server: { port, strictPort: true },
   define: { 'import.meta.env.VITE_SITE_URL': JSON.stringify(`http://localhost:${port}`) },
 })
+const TOUCH_MAX_WIDTH = 480
 const shots = []
 try {
   await server.listen()
@@ -76,25 +439,81 @@ try {
     // Bug attachments are served from this cache; (re)build it so they never render broken.
     await renderFixtures(browser)
     for (const theme of themes) {
-      const context = await browser.newContext({
-        viewport: { width: widths[0], height },
-        colorScheme: theme,
-        reducedMotion: 'reduce',
-      })
-      await context.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
-      const page = await context.newPage()
+      // Phone widths get a touch context so `pointer: coarse` styles (44px targets, tap wording)
+      // show up in the shots; wider widths stay mouse-driven.
+      const makeContext = async (touch) => {
+        const ctx = await browser.newContext({
+          viewport: { width: widths[0], height },
+          colorScheme: theme,
+          reducedMotion: 'reduce',
+          ...(touch ? { hasTouch: true, isMobile: true } : {}),
+        })
+        await ctx.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
+        // Freeze Date so seeded timestamps ("5m ago") are identical between runs. Timers still run.
+        await ctx.clock.setFixedTime(FIXED_TIME)
+        return ctx
+      }
+      const context = await makeContext(false)
+      const touchContext = await makeContext(true)
+      // A fresh page per shot, so mock flags (signed out, delayed fetch) never leak between shots.
+      const open = async (width, { signedOut = false, delayBugs = 0 } = {}) => {
+        const page = await (width <= TOUCH_MAX_WIDTH ? touchContext : context).newPage()
+        await page.addInitScript(
+          ([out, delay]) => {
+            const set = (key, on, value) =>
+              on ? localStorage.setItem(key, value) : localStorage.removeItem(key)
+            set('squash:demo-signed-out', out, '1')
+            set('squash:demo-delay-bugs', delay > 0, String(delay))
+          },
+          [signedOut, delayBugs],
+        )
+        await page.setViewportSize({ width, height })
+        return page
+      }
       for (const route of routes) {
+        const signedOut = route.startsWith('public:')
+        const path = signedOut ? route.slice(7) : route
         for (const width of widths) {
-          await page.setViewportSize({ width, height })
-          await page.goto(origin + route, { waitUntil: 'networkidle' })
-          await page.waitForTimeout(300)
+          const page = await open(width, { signedOut })
+          await page.goto(origin + path, { waitUntil: 'networkidle' })
+          await settleFullPage(page)
           const file = `${slug(route)}_${width}_${theme}.png`
           await page.screenshot({ path: `${outDir}/${file}`, fullPage: true })
-          shots.push({ route, width, theme, file })
+          shots.push({ group: route, width, theme, file })
           console.log(file)
+          await page.close()
+        }
+      }
+      for (const name of stateNames) {
+        const state = STATES[name]
+        if (!state) {
+          console.warn(`WARN state:${name} is unknown; skipped`)
+          continue
+        }
+        for (const width of widths) {
+          const page = await open(width, { delayBugs: state.delayBugs })
+          let cleanup
+          try {
+            await page.goto(origin + state.path, { waitUntil: state.waitUntil ?? 'networkidle' })
+            cleanup = await state.run(page, page.context())
+            await page.waitForTimeout(300)
+            const file = `state-${name}_${width}_${theme}.png`
+            await page.screenshot({ path: `${outDir}/${file}` })
+            shots.push({ group: `state:${name}`, width, theme, file })
+            console.log(file)
+          } catch (err) {
+            const why = err instanceof Error ? err.message.split('\n')[0] : String(err)
+            console.warn(`WARN state:${name} @${width} ${theme} skipped: ${why}`)
+          } finally {
+            await cleanup?.()
+            // Always restore the shared context, even if a state failed before returning its cleanup.
+            await page.context().setOffline(false)
+            await page.close()
+          }
         }
       }
       await context.close()
+      await touchContext.close()
     }
   } finally {
     await browser.close()
@@ -104,18 +523,28 @@ try {
 }
 
 const esc = (s) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
-const cells = shots
+const groups = new Map()
+for (const s of shots) groups.set(s.group, [...(groups.get(s.group) ?? []), s])
+const cells = [...groups]
   .map(
-    (s) =>
-      `<figure><figcaption>${esc(s.route)} &middot; ${s.width} &middot; ${s.theme}</figcaption>` +
-      `<a href="${s.file}"><img src="${s.file}" loading="lazy" alt="${esc(s.file)}"></a></figure>`,
+    ([group, items]) =>
+      `<section><h2>${esc(group)}</h2><div class="row">` +
+      items
+        .map(
+          (s) =>
+            `<figure><figcaption>${s.width} &middot; ${s.theme}</figcaption>` +
+            `<a href="${s.file}"><img src="${s.file}" loading="lazy" alt="${esc(s.file)}"></a></figure>`,
+        )
+        .join('\n') +
+      '</div></section>',
   )
   .join('\n')
 writeFileSync(
   `${outDir}/index.html`,
   `<!doctype html><meta charset="utf-8"><title>Visual QA</title>
 <style>body{font:12px system-ui;margin:16px;background:#888}
-main{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+h2{margin:16px 0 6px;font:600 14px system-ui}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 figure{margin:0;background:#fff;padding:6px}img{max-width:360px;max-height:600px;object-fit:contain;object-position:top;display:block}</style>
 <main>
 ${cells}

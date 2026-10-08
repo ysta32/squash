@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta } from '../lib/types'
 import { uploadAttachment } from '../lib/upload'
 import { removeScreenshots } from '../lib/storageCleanup'
+import { compressImage } from './useImageCompression'
 import {
   applySnapshot,
   countBugs,
@@ -685,6 +686,26 @@ describe('useBugs sync', () => {
     expect(result.current.bugs[0].optimistic).toBe(false)
   })
 
+  it('applies realtime annotation updates to a listed attachment', async () => {
+    h.state.selectResult = {
+      data: [{ ...bug({ id: 'x' }), bug_attachments: [att('a1', 'x'), att('a2', 'x')] }],
+      error: null,
+    }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.bugs[0]?.attachments).toHaveLength(2))
+    const annotations = { v: 1, shapes: [{ type: 'pin', color: 'danger', n: 1, x: 0.5, y: 0.5 }] }
+    act(() => handler('bug_attachments', 'UPDATE')({ new: { ...att('a2', 'x'), annotations } }))
+    expect(result.current.bugs[0].attachments.map((a) => a.annotations ?? null)).toEqual([
+      null,
+      annotations,
+    ])
+    // Unknown attachments are ignored rather than added.
+    const before = result.current.bugs
+    act(() => handler('bug_attachments', 'UPDATE')({ new: { ...att('zz', 'x'), annotations } }))
+    expect(result.current.bugs[0].attachments).toHaveLength(2)
+    expect(result.current.bugs[0]).toBe(before[0])
+  })
+
   it('assignBug patches assignee_id optimistically and reverts on error', async () => {
     h.state.selectResult = {
       data: [{ ...bug({ id: 'a', assignee_id: 'u1' }), bug_attachments: [] }],
@@ -821,6 +842,91 @@ describe('useBugs sync', () => {
     h.state.selectResult = { data: [{ ...bug({ id }), bug_attachments: [] }], error: null }
     rerender({ ws: 'ws1' })
     await waitFor(() => expect(result.current.bugs[0]?.pending?.[0].error).toBe('network down'))
+  })
+
+  // These run in order: the last leaves the module remembering the missing column.
+  const markupInput = (description: string) => {
+    const flattened = new File(['flat'], 'a-marked.png', { type: 'image/png' })
+    const original = new File(['orig'], 'a.png', { type: 'image/png' })
+    const annotations = {
+      v: 1 as const,
+      shapes: [{ type: 'pin' as const, color: 'danger' as const, n: 1, x: 0.5, y: 0.5 }],
+    }
+    return {
+      flattened,
+      original,
+      annotations,
+      input: {
+        description,
+        transcript: null,
+        severity: 'low' as const,
+        kind: 'bug' as const,
+        files: [flattened, new File(['plain'], 'b.png', { type: 'image/png' })],
+        markup: [{ original, annotations }, null],
+      },
+    }
+  }
+
+  it('uploads a marked-up screenshot as the unmarked original plus its annotations', async () => {
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const { original, annotations, input } = markupInput('Marked')
+    await act(async () => {
+      await result.current.fileBug(input)
+    })
+    await waitFor(() => expect(vi.mocked(uploadAttachment)).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(compressImage).mock.calls.map((c) => c[0])).toEqual([original, input.files[1]])
+    expect(vi.mocked(uploadAttachment).mock.calls[0][0].annotations).toEqual(annotations)
+    expect(vi.mocked(uploadAttachment).mock.calls[1][0].annotations).toBeUndefined()
+  })
+
+  it('reports other upload errors on a marked-up screenshot without falling back', async () => {
+    const upload = vi.mocked(uploadAttachment)
+    upload.mockRejectedValueOnce(new Error('network down'))
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const { input } = markupInput('Flaky')
+    await act(async () => {
+      await result.current.fileBug({ ...input, files: [input.files[0]], markup: [input.markup[0]] })
+    })
+    await waitFor(() => expect(result.current.bugs[0].pending?.[0].error).toBe('network down'))
+    expect(upload).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the flattened image when the annotations column is missing', async () => {
+    const upload = vi.mocked(uploadAttachment)
+    upload.mockRejectedValueOnce({
+      code: 'PGRST204',
+      message: "Could not find the 'annotations' column of 'bug_attachments' in the schema cache",
+    })
+    h.state.insertResult = { data: bug({ id: 'tmp' }), error: null }
+    const { result } = renderHook(() => useBugs('ws1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const first = markupInput('Old server')
+    await act(async () => {
+      await result.current.fileBug(first.input)
+    })
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(3))
+    expect(vi.mocked(compressImage).mock.calls.map((c) => c[0])).toEqual([
+      first.original,
+      first.flattened,
+      first.input.files[1],
+    ])
+    expect(upload.mock.calls[1][0].annotations).toBeUndefined()
+    await waitFor(() => expect(result.current.bugs[0].pending).toBeUndefined())
+
+    // Once known, later marked-up screenshots upload flattened straight away.
+    upload.mockClear()
+    vi.mocked(compressImage).mockClear()
+    const second = markupInput('Old server again')
+    await act(async () => {
+      await result.current.fileBug(second.input)
+    })
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(compressImage).mock.calls[0][0]).toBe(second.flattened)
+    expect(upload.mock.calls.every((c) => c[0].annotations === undefined)).toBe(true)
   })
 
   it('a failed update does not clobber a later optimistic edit of the same field', async () => {

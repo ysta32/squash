@@ -1,17 +1,22 @@
-import type { RefObject } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useParams } from 'react-router-dom'
-import { Bot, Bug, Copy, FolderCog, Lightbulb, Search, X } from 'lucide-react'
-import { filterBugs } from '../hooks/useBugs'
+import { AlertTriangle, Copy, FolderCog, Search, Sparkle, X } from 'lucide-react'
+import { filterBugs, hasActiveFilters } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
 import { KIND_LABEL } from '../lib/types'
 import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
-import { BugFilters } from './BugFilters'
+import { ActiveFilters, BugFilters, Count, StatusMenu } from './BugFilters'
+import type { ListAction } from './BugFilters'
 import type { ClaudeRun } from '../lib/claudeExport'
 import { BugRow } from './BugRow'
-import { EmptyState } from './EmptyState'
-import { GettingStarted } from './GettingStarted'
+import { EmptyState, StatePanel } from './EmptyState'
+import { Tooltip } from './Tooltip'
+import { Button, Kbd } from './ui'
+import { GettingStarted, Onboarding } from './GettingStarted'
+import { isFirstItemView, onboardingSteps } from '../lib/onboarding'
 import { Skeleton } from './Skeleton'
 import { BulkBar } from './BulkBar'
 import type { BulkBarProps } from './BulkBar'
@@ -53,10 +58,111 @@ export interface BugListProps {
   claudeConnected?: boolean
   /** Latest Claude Code session per bug number, to mark rows Claude is working on. */
   claudeRuns?: Map<number, ClaudeRun>
+  /**
+   * The detail pane beside the list shows the onboarding for an empty kind (desktop), so the list
+   * keeps only a quiet line instead of repeating it.
+   */
+  onboardingInDetail?: boolean
 }
 
-const countPill =
-  'inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-fg/[0.06] px-1 text-[11px] font-medium tabular-nums leading-none text-muted'
+/** Bugs / Features as underline tabs: one 2px accent bar that slides between them. */
+function KindTabs({
+  kind,
+  openByKind,
+  countsPending = false,
+  onChange,
+}: {
+  kind: BugKind
+  openByKind?: Record<BugKind, number>
+  /** Counts are not known yet (first load): keep their space but show nothing. */
+  countsPending?: boolean
+  onChange: (kind: BugKind) => void
+}) {
+  const listRef = useRef<HTMLDivElement>(null)
+  const [bar, setBar] = useState<{ left: number; width: number } | null>(null)
+  const [settled, setSettled] = useState(false)
+
+  useLayoutEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const measure = () => {
+      const tab = list.querySelector<HTMLElement>('[aria-selected="true"]')
+      if (!tab || tab.offsetWidth === 0) return
+      setBar({ left: tab.offsetLeft, width: tab.offsetWidth })
+    }
+    measure()
+    if (typeof ResizeObserver !== 'function') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(list)
+    return () => observer.disconnect()
+  }, [kind, openByKind])
+
+  // The first placement jumps into position; later tab changes slide.
+  useLayoutEffect(() => {
+    if (bar && !settled) {
+      const frame = requestAnimationFrame(() => setSettled(true))
+      return () => cancelAnimationFrame(frame)
+    }
+  }, [bar, settled])
+
+  const kinds = ['bug', 'feature'] as const
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const index = kinds.indexOf(kind)
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? kinds.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + kinds.length) % kinds.length
+    onChange(kinds[next])
+    listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus()
+  }
+
+  return (
+    <div
+      ref={listRef}
+      role="tablist"
+      aria-label="Bugs or features"
+      onKeyDown={onKeyDown}
+      className="relative flex h-full shrink-0 items-stretch gap-5"
+    >
+      {kinds.map((k) => {
+        const active = kind === k
+        return (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => {
+              if (!active) onChange(k)
+            }}
+            className={cn(
+              't focus-ring-inset flex items-center gap-1.5 rounded-xs text-sm font-medium',
+              active ? 'text-ink' : 'text-ink-3 hover:text-ink',
+            )}
+          >
+            {KIND_LABEL[k].many}{' '}
+            {/* The active kind's count already shows on the status control beside it. */}
+            {openByKind && !active && <Count value={openByKind[k]} pending={countsPending} />}
+          </button>
+        )
+      })}
+      <span
+        aria-hidden="true"
+        className={cn(
+          'pointer-events-none absolute bottom-[-1px] left-0 h-[2px] w-px origin-left bg-accent',
+          settled && 'transition-transform duration-(--dur-standard) ease-(--ease-out)',
+          !bar && 'opacity-0',
+        )}
+        style={bar ? { transform: `translateX(${bar.left}px) scaleX(${bar.width})` } : undefined}
+      />
+    </div>
+  )
+}
 
 export function BugList({
   bugs,
@@ -87,238 +193,238 @@ export function BugList({
   onInvite,
   claudeConnected = false,
   claudeRuns,
+  onboardingInDetail = false,
 }: BugListProps) {
   const { workspaceId } = useParams<{ workspaceId: string }>()
+  const searchInput = useRef<HTMLInputElement | null>(null)
+  const footerRef = useRef<HTMLDivElement>(null)
+  // The footer (send bar or bulk bar) publishes its height as --list-footer-h so toasts in the
+  // bottom-left corner rise above it instead of covering it. It measures 0 while the list pane is
+  // hidden (the phone detail view) or the footer is empty.
+  useLayoutEffect(() => {
+    const el = footerRef.current
+    const root = document.documentElement
+    if (!el) return
+    const sync = () => {
+      const height = el.getBoundingClientRect().height
+      if (height > 0) root.style.setProperty('--list-footer-h', `${height}px`)
+      else root.style.removeProperty('--list-footer-h')
+    }
+    sync()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync)
+    observer?.observe(el)
+    window.addEventListener('resize', sync)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', sync)
+      root.style.removeProperty('--list-footer-h')
+    }
+  }, [])
   const visible = filterBugs(bugs, filters)
   const picked = pickedIds ? bugs.filter((b) => pickedIds.has(b.id)) : []
   const bulkActions = onResolve && onReopen && onAssign && onClearPicked
   const exportable = picked.length > 0 ? picked : visible.filter((b) => !b.optimistic)
   const items = filters.kind === 'feature' ? 'features' : 'bugs'
-  const filtered = Boolean(
-    filters.query.trim() ||
-    filters.filedBy ||
-    filters.resolvedBy ||
-    filters.assignee ||
-    filters.severity,
+  const otherFilters = Boolean(
+    filters.filedBy || filters.resolvedBy || filters.assignee || filters.severity,
   )
-  const sendLabel =
+  const filtered = hasActiveFilters(filters)
+  const sendLabel = `Send ${exportable.length} to Claude Code`
+  // Sending everything in view starts a Claude Code run per bug, so it asks once first; an
+  // explicit pick (or a single bug) sends straight away.
+  const needsConfirm = picked.length === 0 && exportable.length > 1
+  const [confirmSend, setConfirmSend] = useState(false)
+  // Leaving the confirm removes the focused button; focus goes back to the send trigger.
+  const refocusSend = useRef(false)
+  function closeConfirm(): void {
+    refocusSend.current = true
+    setConfirmSend(false)
+  }
+  const viewLabel =
     picked.length > 0
-      ? `Send ${picked.length} to Claude`
-      : `Send all ${exportable.length} to Claude`
-  const iconButton =
-    't focus-ring inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-bg-subtle hover:text-fg'
+      ? `${picked.length} picked`
+      : exportable.length !== counts[filters.tab]
+        ? `${exportable.length} ${exportable.length === 1 ? KIND_LABEL[filters.kind].one.toLowerCase() : items} in view`
+        : ''
+  const showBulk = Boolean(bulkActions && picked.length > 0)
+  const showSendBar = Boolean(onSend && exportable.length > 0 && !showBulk)
+
+  const actions: ListAction[] = []
+  if (onCopy && exportable.length > 0)
+    actions.push({
+      id: 'copy',
+      label: `Copy prompt for ${exportable.length} ${exportable.length === 1 ? KIND_LABEL[filters.kind].one.toLowerCase() : items}`,
+      icon: <Copy size={16} strokeWidth={1.5} />,
+      onSelect: () => onCopy(exportable),
+    })
+  if (onClaudeSetup && claudeConnected)
+    actions.push({
+      id: 'claude-folder',
+      label: 'Claude Code folder…',
+      icon: <FolderCog size={16} strokeWidth={1.5} />,
+      onSelect: onClaudeSetup,
+    })
+
+  // On the first load every count is still 0: show blanks rather than a false "0".
+  const countsPending = loading && bugs.length === 0 && counts.all === 0
+  const steps = onboardingSteps(bugs, members.length, claudeConnected)
+  /** Nothing of this kind yet (and nothing hidden by a filter): the list shows how to start. */
+  const firstItem = isFirstItemView({
+    loading,
+    error: error ?? null,
+    total: bugs.length,
+    kindTotal: counts.all,
+    visible: visible.length,
+    filtered,
+    tab: filters.tab,
+  })
 
   return (
-    <section aria-label="Bug list" className="flex h-full min-h-0 flex-col bg-bg text-fg">
-      <div className="space-y-3 border-b border-border p-3">
-        <div
-          role="tablist"
-          aria-label="Bugs or features"
-          className="grid grid-cols-2 gap-1 rounded-lg bg-bg-subtle p-1"
-        >
-          {(['bug', 'feature'] as const).map((kind) => {
-            const Icon = kind === 'bug' ? Bug : Lightbulb
-            const active = filters.kind === kind
-            return (
-              <button
-                key={kind}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => {
-                  if (!active) onFilters({ ...filters, kind })
-                }}
-                className={cn(
-                  't flex h-7 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                  active ? 'bg-bg text-fg shadow-sm' : 'text-muted hover:text-fg',
-                )}
-              >
-                <Icon size={14} aria-hidden="true" />
-                {KIND_LABEL[kind].many}
-                {openByKind && <span className={countPill}>{openByKind[kind]}</span>}
-              </button>
-            )
-          })}
+    <section aria-label="Bug list" className="flex h-full min-h-0 flex-col bg-surface-1 text-ink">
+      <div className="shrink-0 border-b border-line">
+        <div className="flex h-[2.8571rem] items-stretch justify-between gap-3 border-b border-line px-4 pointer-coarse:h-[3.1429rem]">
+          <KindTabs
+            kind={filters.kind}
+            openByKind={openByKind}
+            countsPending={countsPending}
+            onChange={(kind) => onFilters({ ...filters, kind })}
+          />
+          {/* Status is a filter, so it is one compact menu at every width, never a second row
+              of tabs beside the Bugs / Features underline. */}
+          <StatusMenu
+            tab={filters.tab}
+            counts={counts}
+            countsPending={countsPending}
+            onTab={(tab) => onFilters({ ...filters, tab })}
+            className="-mr-2 flex shrink-0 items-center"
+          />
         </div>
-        <div role="group" aria-label="Bug status" className="flex items-center gap-1">
-          {(['open', 'resolved', 'all'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              aria-pressed={filters.tab === tab}
-              onClick={() => onFilters({ ...filters, tab })}
-              className={cn(
-                't flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                filters.tab === tab
-                  ? 'bg-bg-subtle text-fg'
-                  : 'text-muted hover:bg-bg-subtle hover:text-fg',
-              )}
-            >
-              {tab === 'open' ? 'Open' : tab === 'resolved' ? 'Resolved' : 'All'}{' '}
-              <span className={countPill}>{counts[tab]}</span>
-            </button>
-          ))}
-          {onSend && exportable.length > 0 && !(bulkActions && picked.length > 0) && (
-            <div className="ml-auto flex min-w-0 items-center gap-0.5">
-              {picked.length > 0 && onClearPicked && (
-                <button
-                  type="button"
-                  onClick={onClearPicked}
-                  aria-label={`Clear picked ${items}`}
-                  title={`Clear picked ${items}`}
-                  className={iconButton}
-                >
-                  <X size={14} aria-hidden="true" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => onSend(exportable)}
-                title={
-                  picked.length > 0
-                    ? `Open Claude Code on the picked ${items} (C)`
-                    : `Open Claude Code on every ${KIND_LABEL[filters.kind].one.toLowerCase()} in this view. ⌘/Ctrl-click or press X to pick specific ${items}.`
+        <div className="flex items-center gap-1 px-4 py-2">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={14}
+              strokeWidth={1.5}
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-3"
+            />
+            <input
+              ref={(node) => {
+                searchInput.current = node
+                if (searchRef) searchRef.current = node
+              }}
+              type="search"
+              aria-label={`Search ${items}`}
+              placeholder="Search"
+              value={filters.query}
+              onChange={(event) => onFilters({ ...filters, query: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation()
+                  event.nativeEvent.stopImmediatePropagation()
+                  onFilters({ ...filters, query: '' })
+                  event.currentTarget.blur()
                 }
-                aria-label={sendLabel}
-                className="t focus-ring inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-medium text-muted hover:bg-bg-subtle hover:text-fg sm:px-2"
+              }}
+              // The browser's own clear button is hidden (off-palette, and the text ran under
+              // it); the 24px clear button below replaces it, and the right padding keeps the
+              // text clear of it and of the "/" key cap.
+              className="peer t focus-ring h-[2.2857rem] w-full rounded-md border border-line-2 bg-surface-2 pr-[36px] pl-8 text-sm text-ink placeholder:text-ink-3 hover:border-line-input focus-visible:border-focus pointer-coarse:h-[3.1429rem] pointer-coarse:text-base [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            {/* The "/" shortcut as a key cap; gone while typing, focused or on touch. */}
+            <Kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 peer-focus:hidden peer-[:not(:placeholder-shown)]:hidden pointer-coarse:hidden">
+              /
+            </Kbd>
+            {filters.query !== '' && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                title="Clear search (Esc)"
+                onClick={() => {
+                  onFilters({ ...filters, query: '' })
+                  searchInput.current?.focus()
+                }}
+                // 24px to see; on touch an invisible 44px hit area around it.
+                className="t focus-ring absolute top-1/2 right-1.5 flex size-[24px] -translate-y-1/2 items-center justify-center rounded-sm text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:after:absolute pointer-coarse:after:-inset-[10px]"
               >
-                <Bot size={14} aria-hidden="true" />
-                <span aria-hidden="true" className="hidden sm:inline">
-                  {sendLabel}
-                </span>
-                {picked.length > 0 && (
-                  <span
-                    aria-hidden="true"
-                    className={cn(countPill, 'bg-accent/15 text-accent sm:hidden')}
-                  >
-                    {picked.length}
-                  </span>
-                )}
+                <X size={14} strokeWidth={1.5} aria-hidden="true" />
               </button>
-              {onCopy && (
-                <button
-                  type="button"
-                  onClick={() => onCopy(exportable)}
-                  aria-label={
-                    picked.length > 0
-                      ? `Copy picked ${items} for Claude`
-                      : `Copy all ${items} for Claude`
-                  }
-                  title="Copy a prompt to paste into Claude Code"
-                  className={iconButton}
-                >
-                  <Copy size={14} aria-hidden="true" />
-                </button>
-              )}
-              {onClaudeSetup && claudeConnected && (
-                <button
-                  type="button"
-                  onClick={onClaudeSetup}
-                  aria-label="Claude Code project folder"
-                  title="Claude Code: change this workspace's project folder"
-                  className={iconButton}
-                >
-                  <FolderCog size={14} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        {bulkActions && picked.length > 0 && (
-          <BulkBar
-            bugs={picked}
+            )}
+          </div>
+          <BugFilters
+            filters={filters}
+            onFilters={onFilters}
             members={members}
-            selfId={selfId ?? ''}
-            onResolve={onResolve}
-            onReopen={onReopen}
-            onAssign={onAssign}
-            onClear={onClearPicked}
-            onSend={onSend}
-            onCopy={onCopy}
-            onClaudeSetup={claudeConnected ? onClaudeSetup : undefined}
+            selfId={selfId}
+            bugs={visible}
+            workspaceName={workspaceName}
+            actions={actions}
           />
-        )}
-        <label className="relative block">
-          <Search
-            size={14}
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
-          />
-          <input
-            ref={searchRef}
-            type="search"
-            aria-label={`Search ${items}`}
-            placeholder="Search  /"
-            value={filters.query}
-            onChange={(event) => onFilters({ ...filters, query: event.target.value })}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.stopPropagation()
-                event.nativeEvent.stopImmediatePropagation()
-                onFilters({ ...filters, query: '' })
-                event.currentTarget.blur()
-              }
-            }}
-            className="t focus-ring h-9 w-full rounded-md border border-border bg-bg pl-8 pr-3 text-sm text-fg placeholder:text-muted hover:border-fg/20"
-          />
-        </label>
-        <BugFilters
-          filters={filters}
-          onFilters={onFilters}
-          members={members}
-          selfId={selfId}
-          bugs={visible}
-          workspaceName={workspaceName}
-        />
+        </div>
+        <ActiveFilters filters={filters} onFilters={onFilters} members={members} selfId={selfId} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={loading}>
-        {!loading && !error && workspaceId && (
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]" aria-busy={loading}>
+        {!loading && error && bugs.length > 0 && (
+          <div
+            role="status"
+            className="flex h-[2rem] items-center gap-2 border-b border-line bg-surface-3 px-4 text-xs text-ink-2"
+          >
+            <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-warning" />
+            <p className="min-w-0 truncate">Couldn't refresh — showing saved results</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="focus-ring ml-auto shrink-0 rounded-xs font-medium text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {/* While nothing is filed anywhere the checklist is the onboarding itself (below). */}
+        {!loading && !error && workspaceId && !(firstItem && !steps.filed) && (
           <GettingStarted
             workspaceId={workspaceId}
-            steps={{
-              filed: bugs.some((b) => !b.optimistic),
-              invited: members.length > 1,
-              claude: !!claudeConnected,
-              resolved: bugs.some((b) => b.status === 'resolved'),
-            }}
+            steps={steps}
             onInvite={onInvite}
             onClaudeSetup={onClaudeSetup}
           />
         )}
-        {!loading && error && bugs.length > 0 && (
-          <div
-            role="status"
-            className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-muted"
-          >
-            <p>Couldn't refresh — showing saved results</p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="focus-ring shrink-0 rounded-md px-2 py-1 text-accent hover:bg-bg-subtle"
-            >
-              Retry
-            </button>
-          </div>
-        )}
         {loading ? (
           <Skeleton />
         ) : error && bugs.length === 0 ? (
-          <div role="alert" className="space-y-3 p-6 text-center">
-            <p className="text-sm text-fg">{error}</p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="focus-ring rounded-md px-3 py-2 text-sm text-accent hover:bg-bg-subtle"
-            >
-              Retry
-            </button>
-          </div>
+          <StatePanel
+            role="alert"
+            tone="danger"
+            icon={AlertTriangle}
+            title={error}
+            body="Check your connection, then try again."
+            action={
+              <Button variant="secondary" size="sm" onClick={onRetry}>
+                Retry
+              </Button>
+            }
+          />
+        ) : firstItem ? (
+          onboardingInDetail ? (
+            <p role="status" className="px-4 pt-4 text-sm text-ink-3">
+              No {filters.kind === 'feature' ? 'feature requests' : 'bugs'} yet.
+            </p>
+          ) : (
+            <Onboarding
+              workspaceId={workspaceId}
+              kind={filters.kind}
+              tab={filters.tab}
+              steps={steps}
+              onInvite={onInvite}
+              onClaudeSetup={onClaudeSetup}
+            />
+          )
         ) : visible.length === 0 ? (
           <EmptyState
             kind={filters.kind}
             tab={filters.tab}
             filtered={filtered}
             hasItems={counts.all > 0}
+            query={otherFilters ? '' : filters.query}
             onClearFilters={() =>
               onFilters({
                 ...filters,
@@ -331,11 +437,7 @@ export function BugList({
             }
           />
         ) : (
-          <div
-            role="listbox"
-            aria-label={KIND_LABEL[filters.kind].many}
-            className="space-y-px p-1.5"
-          >
+          <div role="listbox" aria-label={KIND_LABEL[filters.kind].many}>
             {visible.map((bug) => (
               <BugRow
                 key={bug.id}
@@ -350,6 +452,120 @@ export function BugList({
                 claudeState={bug.optimistic ? undefined : claudeRuns?.get(bug.number)?.state}
               />
             ))}
+          </div>
+        )}
+      </div>
+      <div ref={footerRef} className="shrink-0">
+        {showBulk && bulkActions && (
+          <BulkBar
+            bugs={picked}
+            members={members}
+            selfId={selfId ?? ''}
+            onResolve={onResolve}
+            onReopen={onReopen}
+            onAssign={onAssign}
+            onClear={onClearPicked}
+            onSend={onSend}
+            onCopy={onCopy}
+            onClaudeSetup={claudeConnected ? onClaudeSetup : undefined}
+          />
+        )}
+        {showSendBar && onSend && (
+          <div
+            className="flex h-[2.8571rem] shrink-0 items-center gap-2 border-t border-line bg-surface-1 pr-2 pl-4 pointer-coarse:h-[3.4286rem]"
+            onKeyDown={(event) => {
+              if (confirmSend && event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                event.nativeEvent.stopImmediatePropagation()
+                closeConfirm()
+              }
+            }}
+          >
+            {confirmSend && needsConfirm ? (
+              <>
+                <p role="status" className="min-w-0 truncate text-sm text-ink-2">
+                  Start Claude Code on{' '}
+                  <span className="font-mono tabular-nums">{exportable.length}</span> {items}?
+                </p>
+                <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closeConfirm}
+                    className="pointer-coarse:h-[3.1429rem]"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    autoFocus
+                    onClick={() => {
+                      closeConfirm()
+                      onSend(exportable)
+                    }}
+                    className="text-ink pointer-coarse:h-[3.1429rem]"
+                  >
+                    <Sparkle
+                      size={14}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      className="text-accent"
+                    />
+                    Send
+                  </Button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="min-w-0 truncate font-mono text-label tracking-[0.06em] text-ink-3 uppercase tabular-nums">
+                  {viewLabel}
+                </span>
+                <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                  {picked.length > 0 && onClearPicked && (
+                    <Tooltip label={`Clear picked ${items}`} align="end">
+                      <button
+                        type="button"
+                        onClick={onClearPicked}
+                        aria-label={`Clear picked ${items}`}
+                        className="t focus-ring flex size-[2.2857rem] items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem]"
+                      >
+                        <X size={16} strokeWidth={1.5} aria-hidden="true" />
+                      </button>
+                    </Tooltip>
+                  )}
+                  <Button
+                    ref={(node: HTMLButtonElement | null) => {
+                      if (node && refocusSend.current) {
+                        refocusSend.current = false
+                        node.focus()
+                      }
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => (needsConfirm ? setConfirmSend(true) : onSend(exportable))}
+                    aria-label={sendLabel}
+                    aria-keyshortcuts={picked.length > 0 ? 'C' : undefined}
+                    title={
+                      picked.length > 0
+                        ? `Open Claude Code on the picked ${items} (C)`
+                        : `Open Claude Code on every ${KIND_LABEL[filters.kind].one.toLowerCase()} in this view. ⌘/Ctrl-click or press X to pick specific ${items}.`
+                    }
+                    className="pointer-coarse:h-[3.1429rem]"
+                  >
+                    <Sparkle
+                      size={14}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      className="text-accent"
+                    />
+                    {sendLabel}
+                    {picked.length > 0 && <Kbd className="ml-0.5">C</Kbd>}
+                  </Button>
+                </span>
+              </>
+            )}
           </div>
         )}
       </div>

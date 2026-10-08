@@ -59,6 +59,10 @@ export interface BugAttachment {
   height: number
   size_bytes: number
   created_at: string
+  /** Vector markup `{ v: 1, shapes }` (see lib/annotations). Absent until migration 0009 runs. */
+  annotations?: Json | null
+  /** Set by the server on insert. Absent until migration 0009 runs. */
+  uploaded_by?: string | null
 }
 
 export interface Comment {

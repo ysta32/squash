@@ -1,13 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { BugFilters } from './BugFilters'
+import { ActiveFilters, BugFilters } from './BugFilters'
 import { DEFAULT_FILTERS } from '../hooks/useUrlFilters'
 
 afterEach(cleanup)
 
-it('selects a sort from the Sort chip menu with the keyboard', () => {
+it('selects a sort from the Sort menu in the Filter popover with the keyboard', () => {
   const onFilters = vi.fn()
   render(<BugFilters filters={DEFAULT_FILTERS} onFilters={onFilters} members={[]} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }))
   const trigger = screen.getByRole('button', { name: /^Sort/ })
   fireEvent.keyDown(trigger, { key: 'ArrowDown' })
   const list = screen.getByRole('listbox', { name: 'Sort' })
@@ -32,7 +33,19 @@ it('shows the active sort and clears back to newest', () => {
       members={[]}
     />,
   )
+  fireEvent.click(screen.getByRole('button', { name: 'Filter, 1 active' }))
   expect(screen.getByRole('button', { name: /Sort: Oldest/ })).toBeTruthy()
+  cleanup()
+  render(
+    <ActiveFilters
+      filters={{ ...DEFAULT_FILTERS, sort: 'oldest' }}
+      onFilters={onFilters}
+      members={[]}
+    />,
+  )
+  expect(screen.getByRole('group', { name: 'Active filters' }).textContent).toContain(
+    'Sort: Oldest',
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Clear Sort filter' }))
   expect(onFilters).toHaveBeenCalledWith({ ...DEFAULT_FILTERS, sort: 'newest' })
 })

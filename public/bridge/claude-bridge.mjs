@@ -3,6 +3,9 @@
 // Claude's last step is to write result.json in the batch folder; when it exits, the terminal
 // closes and the open Squash tab resolves each bug it fixed with Claude's summary (or comments on
 // the ones it could not finish), claiming the run through POST .../results/<batch>/claim.
+// Proof of fix: the runner notes HEAD before Claude starts and, when it exits, reports the new HEAD,
+// the branch, `git diff --shortstat <start>..<end>` and the branch's PR URL (when `gh` is installed),
+// which Squash records on each bug it resolves.
 //
 // Install (macOS, starts at login):  curl -fsSL https://<squash>/bridge/install.sh | sh
 // Run by hand:                       node claude-bridge.mjs [default-folder]
@@ -38,7 +41,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 6
+const VERSION = 7
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -102,6 +105,14 @@ const RESERVED_FILES = new Set([
 ])
 const RUN_ID = /^[0-9a-f]{32}$/
 const CLOSE_AFTER_MS = 4000
+// Proof of fix: git and gh run with fixed argv (never a shell) and these limits.
+const GIT_TIMEOUT_MS = 10_000
+const GH_TIMEOUT_MS = 10_000
+const MAX_CMD_OUTPUT = 64 * 1024
+const FULL_SHA = /^[0-9a-f]{40}$/
+const BRANCH_NAME = /^[^\s\p{Cc}-][^\s\p{Cc}]{0,254}$/u
+const PR_URL = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?\/[!-~]*$/
+const PR_URL_MAX = 500
 
 // ── Hook mode ────────────────────────────────────────────────────────────────────────────────
 // Claude Code runs `node claude-bridge.mjs --hook <run folder>` on each hook event with the event
@@ -712,6 +723,8 @@ async function runBatch(batchDir, runId) {
   const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a', mode: FILE_MODE })
   console.log(`Squash → Claude Code in ${process.cwd()}`)
   console.log('Running unattended. This window closes on its own when Claude is done.\n')
+  const startedAt = new Date().toISOString()
+  const start = await startSha(process.cwd())
 
   const settings = join(batchDir, 'settings.json')
   const child = spawn(
@@ -746,17 +759,152 @@ async function runBatch(batchDir, runId) {
   log.end()
 
   const result = await readJson(join(batchDir, RESULT_FILE))
+  const git = await collectGitReport(process.cwd(), start, { startedAt })
   const t = new Date().toISOString()
   // Close the run even if Claude exits without its SessionEnd hook.
   await appendFile(join(batchDir, 'events.jsonl'), JSON.stringify({ t, kind: 'end' }) + '\n', {
     mode: FILE_MODE,
   })
-  await writePrivate(join(batchDir, DONE_FILE), JSON.stringify({ exitCode, result, finishedAt: t }))
+  await writePrivate(
+    join(batchDir, DONE_FILE),
+    JSON.stringify({ exitCode, result, git, finishedAt: t }),
+  )
   console.log(
     result
       ? '\n✓ Done. Squash will update the bugs. Closing this window…'
       : `\n✗ Claude finished without a result (exit ${exitCode}). Closing this window…`,
   )
+}
+
+// ── Proof of fix ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Runs `file` with a fixed argv (no shell) in `cwd`; resolves its trimmed stdout, or null when it is
+ * missing, fails, times out or prints too much. Never rejects and never prompts.
+ */
+export function execQuiet(file, args, { cwd, timeout = GIT_TIMEOUT_MS } = {}) {
+  return new Promise((ok) => {
+    try {
+      execFile(
+        file,
+        args,
+        {
+          cwd,
+          timeout,
+          maxBuffer: MAX_CMD_OUTPUT,
+          windowsHide: true,
+          env: {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+            GIT_OPTIONAL_LOCKS: '0',
+            GH_PROMPT_DISABLED: '1',
+            GH_NO_UPDATE_NOTIFIER: '1',
+            NO_COLOR: '1',
+          },
+        },
+        (err, stdout) => ok(err ? null : String(stdout).trim()),
+      )
+    } catch {
+      ok(null)
+    }
+  })
+}
+
+/** A full lower-case commit sha, or null. */
+export function parseSha(text) {
+  const t = typeof text === 'string' ? text.trim().toLowerCase() : ''
+  return FULL_SHA.test(t) ? t : null
+}
+
+/** A branch name safe to store and show (not detached HEAD, no spaces or control characters), or null. */
+export function parseBranch(text) {
+  const t = typeof text === 'string' ? text.trim() : ''
+  return t !== 'HEAD' && BRANCH_NAME.test(t) ? t : null
+}
+
+/** `git diff --shortstat` output as counts. Empty output means nothing changed; anything else is null. */
+export function parseShortstat(text) {
+  if (typeof text !== 'string') return null
+  const t = text.trim()
+  if (!t) return { filesChanged: 0, additions: 0, deletions: 0 }
+  const m =
+    /^(\d{1,9}) files? changed(?:, (\d{1,9}) insertions?\(\+\))?(?:, (\d{1,9}) deletions?\(-\))?$/.exec(
+      t,
+    )
+  if (!m) return null
+  return { filesChanged: Number(m[1]), additions: Number(m[2] ?? 0), deletions: Number(m[3] ?? 0) }
+}
+
+/** The https URL from `gh pr view --json url`, or null. */
+export function parsePrUrl(text) {
+  let url
+  try {
+    url = JSON.parse(text)?.url
+  } catch {
+    return null
+  }
+  return typeof url === 'string' && url.length <= PR_URL_MAX && PR_URL.test(url) ? url : null
+}
+
+const headSha = (cwd, run) => run('git', ['rev-parse', '--verify', '--quiet', 'HEAD'], { cwd })
+
+/** HEAD of the git repo at `cwd` when a run begins, or null (not a repo, or no commits yet). */
+export async function startSha(cwd, run = execQuiet) {
+  return parseSha(await headSha(cwd, run))
+}
+
+/**
+ * What a run left behind in the repo at `cwd`: the new HEAD, its branch, the diff since `start`
+ * and the branch's pull request (when `gh` is installed and finds one). When HEAD is still `start`
+ * the run made no commit: commitSha is null, noCommit is true and the diff is empty (zero counts).
+ * Null outside a git repo.
+ * Every output is validated; a step that fails just leaves its fields null.
+ */
+export async function collectGitReport(cwd, start, { run = execQuiet, startedAt = null } = {}) {
+  const head = parseSha(await headSha(cwd, run))
+  if (!head) return null
+  const begin = parseSha(start)
+  // HEAD did not move: the run made no commit, and the old HEAD is no proof of anything.
+  const noCommit = begin !== null && head === begin
+  const branch = parseBranch(
+    await run('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd }),
+  )
+  // Both ends are validated full shas, so the range can never be read as an option.
+  const stat = begin
+    ? parseShortstat(
+        await run(
+          'git',
+          [
+            '-c',
+            'core.fsmonitor=false',
+            'diff',
+            '--shortstat',
+            '--no-ext-diff',
+            '--no-textconv',
+            `${begin}..${head}`,
+          ],
+          { cwd },
+        ),
+      )
+    : null
+  // Without a new commit an existing PR on the branch is not this run's work either.
+  const prUrl =
+    branch && !noCommit
+      ? parsePrUrl(
+          await run('gh', ['pr', 'view', '--json', 'url'], { cwd, timeout: GH_TIMEOUT_MS }),
+        )
+      : null
+  return {
+    startSha: begin,
+    commitSha: noCommit ? null : head,
+    noCommit,
+    branch,
+    prUrl,
+    filesChanged: stat?.filesChanged ?? null,
+    additions: stat?.additions ?? null,
+    deletions: stat?.deletions ?? null,
+    startedAt,
+  }
 }
 
 /** Closes a Terminal window once its shell has exited, so macOS does not ask to confirm. */
@@ -892,7 +1040,12 @@ async function workspaceResults(workspaceId) {
     if (!run.dir || existsSync(join(run.dir, CLAIM_FILE))) continue
     const done = await readJson(join(run.dir, DONE_FILE))
     if (done)
-      results.push({ batch: run.id, exitCode: done.exitCode ?? null, result: done.result ?? null })
+      results.push({
+        batch: run.id,
+        exitCode: done.exitCode ?? null,
+        result: done.result ?? null,
+        git: done.git ?? null,
+      })
   }
   return results
 }
