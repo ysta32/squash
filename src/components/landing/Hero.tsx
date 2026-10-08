@@ -18,53 +18,43 @@ export function Hero({ theme }: { theme: ResolvedTheme }) {
         aria-hidden="true"
         className="mk-ruled pointer-events-none absolute inset-0 -z-10 opacity-40"
       />
-      <div
-        className={cn(
-          MK_CONTAINER,
-          'grid gap-y-14 pt-14 pb-16 sm:pt-20 lg:pb-24 xl:grid-cols-12 xl:items-center xl:gap-x-8 xl:pt-24 xl:pb-28',
-        )}
-      >
-        <div className="relative z-10 xl:col-span-5">
+      <div className={cn(MK_CONTAINER, 'pt-14 pb-16 sm:pt-20 lg:pb-24 xl:pt-24 xl:pb-28')}>
+        {/* Copy on top, the full product frame below it: the headline and the pitch sit side by side
+            from 1280px, so the screenshot can take the whole grid width and no control is cut. */}
+        <div className="grid gap-y-6 xl:grid-cols-12 xl:items-end xl:gap-x-8">
           <h1
             id="hero-heading"
-            className="text-[2.75rem]/[2.9rem] font-semibold tracking-[-0.035em] text-balance sm:text-display-m lg:text-display-l"
+            className="text-[2.75rem]/[2.9rem] font-semibold tracking-[-0.035em] text-balance sm:text-display-m lg:text-display-l xl:col-span-7"
           >
             Bug reports your cofounder actually reads.
           </h1>
-          <p className="mt-6 max-w-[44ch] text-read text-pretty text-ink-2 sm:text-lg sm:leading-8 2xl:mt-8 2xl:text-[1.2857rem] 2xl:leading-[2.1429rem]">
-            A bug tracker for teams of 2–10. Paste a screenshot, say what broke, press Enter: it is
-            on your teammate’s screen about a second later, and Claude Code can fix it from there.
-          </p>
-          <TypedSpecimenLabel delay={200} lines={HERO_LABEL} className="mt-8" />
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <OpenWorkspaceLink size="lg" />
-            <a href="#self-host" className={buttonClass('secondary', 'lg')}>
-              Self-host it
-            </a>
+          <div className="xl:col-span-5 xl:pb-2">
+            <p className="max-w-[44ch] text-read text-pretty text-ink-2 sm:text-lg sm:leading-8 2xl:text-[1.2857rem] 2xl:leading-[2.1429rem]">
+              A bug tracker for teams of 2–10. Paste a screenshot, say what broke, press Enter: it
+              is on your teammate’s screen about a second later, and Claude Code can fix it from
+              there.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <OpenWorkspaceLink size="lg" />
+              <a href="#self-host" className={buttonClass('secondary', 'lg')}>
+                Self-host it
+              </a>
+            </div>
+            <SpecimenLabel
+              segments={[facts.license, 'Self-host on Supabase', 'No trackers']}
+              className="mt-6 text-ink-3"
+            />
           </div>
-          <SpecimenLabel
-            segments={[facts.license, 'Self-host on Supabase', 'No trackers']}
-            className="mt-6 text-ink-3"
-          />
         </div>
-        {/* Bleeds off the right edge: the bug list stays readable, the detail pane runs out of frame.
-            From 1280px the copy is centred on the shot so neither column leaves a dead block. */}
-        <div className="xl:col-span-7 xl:col-start-6">
-          <div
-            className="mk-rise w-[175%] sm:w-[130%] lg:w-[115%] xl:w-[64vw]"
-            style={{ '--mk-delay': '520ms' } as CSSProperties}
-          >
-            <DrawerFrame>
-              <ShotImage shot={HERO_SHOT} theme={theme} lazy={false} />
-            </DrawerFrame>
-          </div>
+        {/* The whole workspace, contained in the grid at every width: list, detail and controls. */}
+        <div className="mk-rise mt-14 lg:mt-20" style={{ '--mk-delay': '520ms' } as CSSProperties}>
+          {/* The specimen label of the bug open in the frame, pinned above it like a drawer tag. */}
+          <TypedSpecimenLabel delay={200} lines={HERO_LABEL} className="mb-4" />
+          <DrawerFrame>
+            <ShotImage shot={HERO_SHOT} theme={theme} lazy={false} />
+          </DrawerFrame>
         </div>
       </div>
-      {/* Fades the bleed so the screenshot runs out of frame instead of being cut mid-word. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-linear-to-l from-bg to-transparent sm:w-28"
-      />
     </section>
   )
 }

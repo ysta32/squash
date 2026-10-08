@@ -68,8 +68,9 @@ export const CHAPTERS: Chapter[] = [
       alt: 'The capture bar holding a typed description and an attached screenshot, above the live bug list',
     },
     marker: {
-      d: 'M262 48 C 520 40, 900 42, 1142 50 C 1150 96, 1148 150, 1140 188 C 900 194, 520 192, 266 186 C 258 140, 256 96, 266 44',
-      label: 'The capture bar',
+      // Rings the typed description and the pasted screenshot's thumbnail, not the empty input.
+      d: 'M80 62 C 200 52, 380 54, 490 60 C 498 100, 496 148, 488 180 C 380 188, 200 186, 84 180 C 76 142, 74 100, 86 56',
+      label: 'The description and the pasted screenshot',
     },
   },
   {
@@ -87,11 +88,12 @@ export const CHAPTERS: Chapter[] = [
       name: 'annotate',
       themed: true,
       width: 1400,
-      height: 1111,
+      height: 1105,
       alt: 'The mark-up editor over a checkout page: a red box around a cookie banner and an arrow pointing at the Pay now button',
     },
     marker: {
-      d: 'M58 72 C 52 40, 300 34, 308 64 C 314 98, 70 104, 56 78 C 50 62, 110 44, 190 44',
+      // Underlines the Arrow, Box and Pen buttons, which sit flush with the top of the crop.
+      d: 'M16 56 C 90 52, 200 58, 292 54',
       label: 'The arrow, box and pen tools',
     },
   },

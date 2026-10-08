@@ -1,7 +1,7 @@
 // Client-side reachability checks for the /status page: the app origin, the Supabase REST API
 // and a Supabase Realtime connection, each timed from this browser. Deliberately independent of
 // lib/supabase.ts (which throws without configuration), so the page works on a build without
-// Supabase settings and reports those two checks as not configured.
+// a real Supabase project and reports those two checks as not checked.
 
 export type CheckState = 'ok' | 'down' | 'unconfigured'
 
@@ -23,13 +23,36 @@ export const CHECK_TIMEOUT_MS = 8000
 type Clock = () => number
 const defaultClock: Clock = () => performance.now()
 
-/** The Supabase settings baked into this build, or nulls when they are missing or blank. */
+/**
+ * Settings that cannot point at a real project: CI's `ci-placeholder` values, or a supabase.co
+ * host whose project ref is not the 20 lowercase letters and digits Supabase assigns (the demo
+ * build's `demo.supabase.co`). Probing them would only ever fail, which is not an outage.
+ */
+export function isPlaceholderSupabase(url: string, key: string): boolean {
+  if (/placeholder/i.test(url) || /placeholder/i.test(key)) return true
+  let host: string
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return true
+  }
+  if (!host.endsWith('.supabase.co')) return false
+  return !/^[a-z0-9]{20}$/.test(host.slice(0, -'.supabase.co'.length))
+}
+
+/**
+ * The Supabase settings baked into this build, or nulls when they are missing, blank or
+ * placeholders, so the page says it did not check instead of reporting a failure.
+ */
 export function statusConfig(
   env: Record<string, string | undefined>,
   appOrigin: string,
 ): StatusConfig {
   const url = env.VITE_SUPABASE_URL?.trim().replace(/\/+$/, '') || null
   const key = env.VITE_SUPABASE_ANON_KEY?.trim() || null
+  if (!url || !key || isPlaceholderSupabase(url, key)) {
+    return { appOrigin, supabaseUrl: null, anonKey: null }
+  }
   return { appOrigin, supabaseUrl: url, anonKey: key }
 }
 
@@ -87,7 +110,11 @@ export async function checkRest(
   now: Clock = defaultClock,
 ): Promise<CheckResult> {
   if (!config.supabaseUrl || !config.anonKey) {
-    return { state: 'unconfigured', ms: null, detail: 'This build has no Supabase settings' }
+    return {
+      state: 'unconfigured',
+      ms: null,
+      detail: 'This build has no Supabase project to check',
+    }
   }
   const { response, ms, error } = await timedFetch(
     `${config.supabaseUrl}/rest/v1/`,
@@ -135,7 +162,7 @@ export function checkRealtime(
     return Promise.resolve({
       state: 'unconfigured',
       ms: null,
-      detail: 'This build has no Supabase settings',
+      detail: 'This build has no Supabase project to check',
     })
   }
   return new Promise((resolve) => {

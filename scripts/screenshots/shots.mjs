@@ -209,8 +209,9 @@ export function shots({ desktop, mobile }) {
       },
       clip: async (page) => {
         const box = await page.getByRole('dialog', { name: /^Mark up / }).boundingBox()
-        // As much margin as fits above the dialog, the same on every side.
-        return around(box, Math.min(32, Math.floor(box.y)), { width: 1200, height: desktop.height })
+        // The dialog alone, 1px inside its border: a margin would show the blurred backdrop as a
+        // stray strip, and the page frames the image with its own border and radius.
+        return around(box, -1, { width: 1200, height: desktop.height })
       },
     })),
 

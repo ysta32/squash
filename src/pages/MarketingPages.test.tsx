@@ -183,7 +183,7 @@ describe('marketing pages', () => {
 })
 
 describe('status page', () => {
-  it('degrades to "not configured" without Supabase settings and still times the app', async () => {
+  it('degrades to a neutral "not checked" without Supabase settings and still times the app', async () => {
     vi.stubEnv('VITE_SUPABASE_URL', '')
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', '')
     const fetchMock = vi.fn(
@@ -193,11 +193,11 @@ describe('status page', () => {
     const { container } = renderAt('/status', '/status', Status)
     expect(container.textContent).toMatch(/checked from your browser/i)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled())
-    expect(screen.getAllByText('Not configured')).toHaveLength(2)
+    expect(screen.getAllByText('Not checked')).toHaveLength(2)
     expect(screen.getByText('Reachable')).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { level: 2, name: /not configured on this build/ }),
-    ).toBeInTheDocument()
+      screen.getByRole('heading', { level: 2, name: /2 of 3 not checked on this build/ }),
+    ).not.toHaveClass('text-danger')
     // Only the app's own origin was contacted.
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/manifest\.webmanifest$/)

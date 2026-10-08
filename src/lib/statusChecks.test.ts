@@ -4,13 +4,17 @@ import {
   checkApp,
   checkRealtime,
   checkRest,
+  isPlaceholderSupabase,
   realtimeUrl,
   statusConfig,
   type SocketLike,
 } from './statusChecks'
 
 const configured = statusConfig(
-  { VITE_SUPABASE_URL: 'https://abc.supabase.co/', VITE_SUPABASE_ANON_KEY: 'anon key' },
+  {
+    VITE_SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co/',
+    VITE_SUPABASE_ANON_KEY: 'anon key',
+  },
   'https://squash.test',
 )
 
@@ -51,7 +55,25 @@ describe('statusConfig', () => {
       supabaseUrl: null,
       anonKey: null,
     })
-    expect(configured.supabaseUrl).toBe('https://abc.supabase.co')
+    expect(configured.supabaseUrl).toBe('https://abcdefghijklmnopqrst.supabase.co')
+  })
+
+  it('treats placeholder settings as unconfigured, so nothing is probed', () => {
+    for (const [url, key] of [
+      ['https://ci-placeholder.supabase.co', 'ci-placeholder-anon-key'],
+      ['https://demo.supabase.co', 'demo'],
+      ['https://abcdefghijklmnopqrst.supabase.co', 'placeholder'],
+      ['not a url', 'key'],
+    ]) {
+      expect(isPlaceholderSupabase(url, key)).toBe(true)
+      expect(
+        statusConfig({ VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: key }, 'o'),
+      ).toMatchObject({ supabaseUrl: null, anonKey: null })
+    }
+    // A real project ref, a self-hosted instance and a custom domain are all probed.
+    expect(isPlaceholderSupabase('https://abcdefghijklmnopqrst.supabase.co', 'eyJ.a.b')).toBe(false)
+    expect(isPlaceholderSupabase('http://127.0.0.1:54321', 'eyJ.a.b')).toBe(false)
+    expect(isPlaceholderSupabase('https://db.example.com', 'sb_publishable_x')).toBe(false)
   })
 })
 
@@ -102,7 +124,7 @@ describe('checkRest', () => {
     expect(result).toEqual({
       state: 'unconfigured',
       ms: null,
-      detail: 'This build has no Supabase settings',
+      detail: 'This build has no Supabase project to check',
     })
     expect(fetchImpl).not.toHaveBeenCalled()
   })
@@ -115,7 +137,7 @@ describe('checkRest', () => {
       detail: 'Answered HTTP 401',
     })
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://abc.supabase.co/rest/v1/',
+      'https://abcdefghijklmnopqrst.supabase.co/rest/v1/',
       expect.objectContaining({ headers: { apikey: 'anon key' } }),
     )
     expect(
@@ -127,7 +149,7 @@ describe('checkRest', () => {
 describe('checkRealtime', () => {
   it('builds the websocket URL with an encoded key', () => {
     expect(realtimeUrl(configured)).toBe(
-      'wss://abc.supabase.co/realtime/v1/websocket?apikey=anon%20key&vsn=1.0.0',
+      'wss://abcdefghijklmnopqrst.supabase.co/realtime/v1/websocket?apikey=anon%20key&vsn=1.0.0',
     )
   })
 

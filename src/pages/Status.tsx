@@ -47,12 +47,13 @@ type Results = Partial<Record<CheckDef['id'], CheckResult>>
 const STATE_LABEL: Record<CheckResult['state'] | 'checking', string> = {
   ok: 'Reachable',
   down: 'Not reachable',
-  unconfigured: 'Not configured',
+  unconfigured: 'Not checked',
   checking: 'Checking…',
 }
 
 function Glyph({ state }: { state: CheckResult['state'] | 'checking' }) {
-  // Status glyphs from the app: hollow ring (pending), filled check (ok), cross (down).
+  // Status glyphs from the app: dashed ring (checking), filled check (ok), cross (down); a ring
+  // with a dash is "not checked", neutral rather than red, since nothing was probed.
   if (state === 'ok') {
     return (
       <svg viewBox="0 0 16 16" className="size-4 text-success" aria-hidden="true">
@@ -92,6 +93,9 @@ function Glyph({ state }: { state: CheckResult['state'] | 'checking' }) {
         strokeWidth="1.5"
         strokeDasharray={state === 'checking' ? '3 2.5' : undefined}
       />
+      {state === 'unconfigured' && (
+        <path d="M5.5 8h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      )}
     </svg>
   )
 }
@@ -102,8 +106,7 @@ function summary(results: Results, running: boolean): string {
   const down = values.filter((r) => r.state === 'down').length
   const skipped = values.filter((r) => r.state === 'unconfigured').length
   if (down === 0 && skipped === 0) return 'Everything answered.'
-  if (down === 0)
-    return `Reachable. ${skipped} of ${CHECKS.length} checks are not configured on this build.`
+  if (down === 0) return `Reachable. ${skipped} of ${CHECKS.length} not checked on this build.`
   return `${down} of ${CHECKS.length} ${down === 1 ? 'check' : 'checks'} failed from your browser.`
 }
 

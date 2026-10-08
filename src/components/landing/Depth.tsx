@@ -84,13 +84,13 @@ function CopyBlock({ step }: { step: SelfHostStep }) {
 
   const shell = !step.command.includes('=')
   return (
-    // The button sits beside the code, not over it, so a long line scrolls under a fade instead
-    // of under the button.
+    // The button sits beside the code, not over it. Long lines wrap (never clip at 375px) with a
+    // hanging indent, so a continuation never reads as a new command or a new variable.
     <div className="mt-4 flex items-start rounded-lg border border-line bg-surface-1">
-      <pre className="mk-scroll-mask min-w-0 flex-1 overflow-x-auto py-3.5 pr-4 pl-4 text-sm leading-6 text-ink">
+      <pre className="min-w-0 flex-1 py-3.5 pr-2 pl-4 text-sm leading-6 whitespace-pre-wrap text-ink wrap-anywhere">
         <code>
           {step.command.split('\n').map((line) => (
-            <span key={line} className="block">
+            <span key={line} className="block pl-[2ch] -indent-[2ch]">
               {shell && (
                 <span aria-hidden="true" className="text-ink-3 select-none">
                   ${' '}
@@ -145,22 +145,24 @@ export function Depth() {
             </SectionHead>
           </Reveal>
           <Reveal delay={80}>
+            {/* Three columns at most: the 18 keys in the app fill every row at 2 and at 3 columns.
+                Each key sits in a fixed slot right before its label instead of across the cell. */}
             <ul
               aria-label="Keyboard shortcuts"
-              className="mt-10 grid grid-cols-1 border-t border-line sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              className="mt-10 grid grid-cols-1 border-t border-line sm:grid-cols-2 sm:gap-x-10 lg:grid-cols-3"
             >
               {facts.shortcuts.map((shortcut) => (
                 <li
                   key={shortcut.label}
-                  className="flex min-h-12 items-center justify-between gap-4 border-b border-line py-2 sm:pr-6"
+                  className="grid min-h-12 grid-cols-[5rem_minmax(0,1fr)] items-center gap-4 border-b border-line py-2"
                 >
-                  <span className="text-sm text-ink-2">
-                    {shortcut.label.replace(/\s*\([^)]*\)/g, '')}
-                  </span>
-                  <span className="flex shrink-0 gap-1">
+                  <span className="flex justify-end gap-1">
                     {shortcut.keys.map((key, i) => (
                       <Kbd key={i}>{keyLabel(key)}</Kbd>
                     ))}
+                  </span>
+                  <span className="text-sm text-ink-2">
+                    {shortcut.label.replace(/\s*\([^)]*\)/g, '')}
                   </span>
                 </li>
               ))}
