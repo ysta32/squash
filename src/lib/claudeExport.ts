@@ -243,6 +243,8 @@ export const PROGRESS_VERSION = 3
 export const AUTO_RESOLVE_VERSION = 4
 /** Oldest bridge that pins downloads to the app's Supabase storage host. */
 export const HARDENED_VERSION = 6
+/** Oldest bridge that reports the commit, branch, PR and diff a run left behind (proof of fix). */
+export const PROOF_VERSION = 7
 
 export interface BridgeStatus {
   version: number
@@ -400,6 +402,8 @@ export interface FinishedRun {
   exitCode: number | null
   /** Parsed result file, or null when Claude did not write a valid one. */
   result: unknown
+  /** Git evidence for the run (bridge v7+; see parseFixReport), or null/absent. */
+  git?: unknown
 }
 
 /** Finished runs for this workspace that no Squash tab has applied yet. */

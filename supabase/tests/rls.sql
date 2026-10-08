@@ -864,6 +864,268 @@ do $$ begin
   end;
 end $$;
 
+-- ===== Proof of fix (0008_fix_runs.sql); WS One members: A, B, 04..11; C is an outsider =====
+:as_c
+-- C's own workspace and bug, for the cross-workspace checks
+do $$ declare w public.workspaces; bid uuid; begin
+  w := public.create_workspace('F3 Other');
+  perform set_config('t.ws_c', w.id::text, true);
+  insert into public.bugs (workspace_id, title, description, severity, filed_by)
+    values (w.id, 'C bug', 'x', 'low', auth.uid()) returning id into bid;
+  perform set_config('t.bug_c', bid::text, true);
+end $$;
+:as_a
+-- [92] a member records a run as themselves; workspace_id is derived from the bug (a spoofed one is
+-- replaced), a future started_at is clamped to now and a running run has no finished_at
+do $$ declare r public.fix_runs; begin
+  insert into public.fix_runs (bug_id, workspace_id, run_id, started_at, finished_at)
+    values (current_setting('t.context_bug')::uuid, current_setting('t.ws_c')::uuid, 'run-1',
+            now() + interval '1 hour', now())
+    returning * into r;
+  perform set_config('t.fr1', r.id::text, true);
+  if r.workspace_id is distinct from current_setting('t.ws1')::uuid then
+    raise exception 'FAIL[92]: workspace_id not derived from the bug'; end if;
+  if r.created_by is distinct from auth.uid() or r.status <> 'running' then
+    raise exception 'FAIL[92]: created_by / status defaults wrong'; end if;
+  if r.started_at > now() or r.finished_at is not null then
+    raise exception 'FAIL[92]: server did not own started_at / finished_at'; end if;
+end $$;
+-- [93] cross-workspace writes denied: a bug in another workspace (whatever workspace_id is sent) and a
+-- bug that does not exist get the same RLS denial
+do $$ declare ws uuid; begin
+  foreach ws in array array[current_setting('t.ws1')::uuid, current_setting('t.ws_c')::uuid] loop
+    begin
+      insert into public.fix_runs (bug_id, workspace_id, run_id)
+        values (current_setting('t.bug_c')::uuid, ws, 'run-x');
+      raise exception 'FAIL[93]: fix run recorded on another workspace''s bug';
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  begin
+    insert into public.fix_runs (bug_id, workspace_id, run_id)
+      values (gen_random_uuid(), current_setting('t.ws1')::uuid, 'run-x');
+    raise exception 'FAIL[93]: fix run recorded on a missing bug';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+-- [94] spoofed created_by denied
+do $$ begin
+  begin
+    insert into public.fix_runs (bug_id, workspace_id, run_id, created_by)
+      values (current_setting('t.context_bug')::uuid, current_setting('t.ws1')::uuid, 'run-spoof',
+              '10000000-0000-0000-0000-000000000002');
+    raise exception 'FAIL[94]: fix run created_by spoofed';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+-- [95] malformed evidence rejected: sha, PR URL, branch, run id, negative counts, oversized summary,
+-- unknown status
+do $$ declare bad text; begin
+  foreach bad in array array['abc123', 'ABCDEF1', 'xyz1234', repeat('a', 41), 'abcdef1 ', ''] loop
+    begin
+      insert into public.fix_runs (bug_id, run_id, status, commit_sha)
+        values (current_setting('t.context_bug')::uuid, 'run-bad', 'succeeded', bad);
+      raise exception 'FAIL[95]: bad commit_sha % accepted', bad;
+    exception when check_violation then null;
+    end;
+  end loop;
+  foreach bad in array array['http://github.com/o/r/pull/1', 'javascript:alert(1)', 'https://github.com',
+                             'https://git hub.com/x', 'https://github.com/o/r/pull/1 x',
+                             'https://user@github.com/x', 'https://github.com/' || repeat('a', 500)] loop
+    begin
+      insert into public.fix_runs (bug_id, run_id, status, pr_url)
+        values (current_setting('t.context_bug')::uuid, 'run-bad', 'succeeded', bad);
+      raise exception 'FAIL[95]: bad pr_url % accepted', bad;
+    exception when check_violation then null;
+    end;
+  end loop;
+  foreach bad in array array['', 'has space', 'tab' || chr(9), repeat('b', 256)] loop
+    begin
+      insert into public.fix_runs (bug_id, run_id, status, branch)
+        values (current_setting('t.context_bug')::uuid, 'run-bad', 'succeeded', bad);
+      raise exception 'FAIL[95]: bad branch accepted';
+    exception when check_violation then null;
+    end;
+  end loop;
+  foreach bad in array array['', '.hidden', 'a/b', repeat('r', 81)] loop
+    begin
+      insert into public.fix_runs (bug_id, run_id) values (current_setting('t.context_bug')::uuid, bad);
+      raise exception 'FAIL[95]: bad run_id % accepted', bad;
+    exception when check_violation then null;
+    end;
+  end loop;
+  begin
+    insert into public.fix_runs (bug_id, run_id, status, files_changed, additions, deletions)
+      values (current_setting('t.context_bug')::uuid, 'run-bad', 'succeeded', 1, -1, 0);
+    raise exception 'FAIL[95]: negative additions accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.fix_runs (bug_id, run_id, status, summary)
+      values (current_setting('t.context_bug')::uuid, 'run-bad', 'succeeded', repeat('s', 4001));
+    raise exception 'FAIL[95]: oversized summary accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.fix_runs (bug_id, run_id, status)
+      values (current_setting('t.context_bug')::uuid, 'run-bad', 'done');
+    raise exception 'FAIL[95]: unknown status accepted';
+  exception when check_violation then null;
+  end;
+  if exists (select 1 from public.fix_runs where run_id = 'run-bad') then
+    raise exception 'FAIL[95]: a rejected run was stored'; end if;
+  -- well-formed evidence is accepted; a run recorded already finished gets finished_at from the server
+  insert into public.fix_runs (bug_id, run_id, status, branch, commit_sha, pr_url, files_changed,
+                               additions, deletions, summary)
+    values (current_setting('t.context_bug')::uuid, 'run-ok', 'succeeded', 'fix/bug-85',
+            repeat('a1', 20), 'https://github.com/o/r/pull/12', 3, 10, 2, 'Fixed it');
+  if (select finished_at from public.fix_runs where run_id = 'run-ok') is null then
+    raise exception 'FAIL[95]: finished run has no finished_at'; end if;
+end $$;
+:as_b
+-- [96] another member reads every run; cannot update the creator's run (0 rows)
+do $$ declare n int; begin
+  if (select count(*) from public.fix_runs where bug_id = current_setting('t.context_bug')::uuid) <> 2 then
+    raise exception 'FAIL[96]: member cannot read fix runs'; end if;
+  update public.fix_runs set status = 'failed' where id = current_setting('t.fr1')::uuid;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[96]: non-creator updated a fix run'; end if;
+end $$;
+:as_c
+-- [97] outsider cannot read, update or delete runs in WS One
+do $$ declare n int; begin
+  if exists (select 1 from public.fix_runs where workspace_id = current_setting('t.ws1')::uuid) then
+    raise exception 'FAIL[97]: outsider reads fix runs'; end if;
+  update public.fix_runs set summary = 'pwn' where id = current_setting('t.fr1')::uuid;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[97]: outsider updated a fix run'; end if;
+  begin
+    delete from public.fix_runs where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[97]: outsider delete was not refused';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+:as_pg
+-- attachments of the run's bug and of another bug, for after_attachment_id
+do $$ declare ws text := current_setting('t.ws1'); b text := current_setting('t.context_bug');
+  ob uuid; a1 uuid; a2 uuid; begin
+  select id into ob from public.bugs
+    where workspace_id = ws::uuid and id <> b::uuid order by number limit 1;
+  insert into public.bug_attachments (bug_id, storage_path, width, height, size_bytes)
+    values (b::uuid, ws || '/' || b || '/after.webp', 1, 1, 1) returning id into a1;
+  insert into public.bug_attachments (bug_id, storage_path, width, height, size_bytes)
+    values (ob, ws || '/' || ob || '/other.webp', 1, 1, 1) returning id into a2;
+  perform set_config('t.att_after', a1::text, true);
+  perform set_config('t.att_other', a2::text, true);
+end $$;
+:as_a
+-- [98] creator updates a running run: an attachment of another bug is refused, its own bug's is kept;
+-- identity columns are not client-writable; finishing sets finished_at; a finished run is final
+do $$ declare n int; r public.fix_runs; begin
+  begin
+    update public.fix_runs set after_attachment_id = current_setting('t.att_other')::uuid
+      where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[98]: after_attachment_id from another bug accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.fix_runs set workspace_id = current_setting('t.ws_c')::uuid
+      where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[98]: workspace_id was client-writable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.fix_runs set created_by = '10000000-0000-0000-0000-000000000002'
+      where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[98]: created_by was client-writable';
+  exception when insufficient_privilege then null;
+  end;
+  update public.fix_runs
+    set after_attachment_id = current_setting('t.att_after')::uuid, branch = 'main'
+    where id = current_setting('t.fr1')::uuid;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'FAIL[98]: creator cannot update a running run'; end if;
+  update public.fix_runs
+    set status = 'succeeded', commit_sha = 'deadbeef', files_changed = 1, additions = 2, deletions = 0
+    where id = current_setting('t.fr1')::uuid
+    returning * into r;
+  if r.finished_at is null or r.status <> 'succeeded' then
+    raise exception 'FAIL[98]: finishing did not set finished_at'; end if;
+  update public.fix_runs set status = 'running' where id = current_setting('t.fr1')::uuid;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[98]: finished run was reopened'; end if;
+  update public.fix_runs set summary = 'rewritten' where id = current_setting('t.fr1')::uuid;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[98]: finished run was edited'; end if;
+  -- [99] creator cannot delete, and one row per (bug, run)
+  begin
+    delete from public.fix_runs where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[99]: creator delete was not refused';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.fix_runs (bug_id, run_id) values (current_setting('t.context_bug')::uuid, 'run-1');
+    raise exception 'FAIL[99]: duplicate (bug, run) accepted';
+  exception when unique_violation then null;
+  end;
+end $$;
+:as_pg
+-- [100] deleting the attachment clears after_attachment_id; the service role still cannot reopen a
+-- finished run or move it to another bug
+do $$ begin
+  delete from public.bug_attachments where id = current_setting('t.att_after')::uuid;
+  if (select after_attachment_id from public.fix_runs where id = current_setting('t.fr1')::uuid) is not null then
+    raise exception 'FAIL[100]: after_attachment_id survived its attachment'; end if;
+  begin
+    update public.fix_runs set status = 'failed' where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[100]: finished run status changed';
+  exception when others then if sqlerrm <> 'immutable_field' then raise; end if;
+  end;
+  begin
+    update public.fix_runs set bug_id = current_setting('t.bug_c')::uuid where id = current_setting('t.fr1')::uuid;
+    raise exception 'FAIL[100]: fix run moved to another bug';
+  exception when others then if sqlerrm <> 'immutable_field' then raise; end if;
+  end;
+end $$;
+:as_a
+-- [101] at most 50 runs per bug
+do $$ declare bid uuid; i int; begin
+  insert into public.bugs (workspace_id, title, description, severity, filed_by)
+    values (current_setting('t.ws1')::uuid, 'Fix run cascade', 'x', 'low', auth.uid()) returning id into bid;
+  perform set_config('t.fr_bug', bid::text, true);
+  for i in 1..50 loop
+    insert into public.fix_runs (bug_id, run_id, status) values (bid, 'lim-' || i, 'failed');
+  end loop;
+  begin
+    insert into public.fix_runs (bug_id, run_id, status) values (bid, 'lim-51', 'failed');
+    raise exception 'FAIL[101]: 51st fix run on a bug accepted';
+  exception when others then if sqlerrm <> 'fix_run_limit' then raise; end if;
+  end;
+  -- [102] deleting the bug (as its filer) cascades its fix runs
+  delete from public.bugs where id = bid;
+end $$;
+:as_pg
+do $$ begin
+  if exists (select 1 from public.fix_runs where bug_id = current_setting('t.fr_bug')::uuid) then
+    raise exception 'FAIL[102]: fix runs survived their bug'; end if;
+  -- [103] the guard is not client-callable; anon has no table access; fix_runs is published to realtime
+  if has_function_privilege('authenticated', 'public.fix_runs_guard()', 'execute')
+     or has_function_privilege('anon', 'public.fix_runs_guard()', 'execute') then
+    raise exception 'FAIL[103]: fix_runs_guard callable by clients'; end if;
+  if has_table_privilege('anon', 'public.fix_runs', 'select')
+     or has_table_privilege('anon', 'public.fix_runs', 'insert')
+     or has_table_privilege('authenticated', 'public.fix_runs', 'delete')
+     or has_table_privilege('authenticated', 'public.fix_runs', 'truncate') then
+    raise exception 'FAIL[103]: fix_runs privileges too wide'; end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'fix_runs') then
+    raise exception 'FAIL[103]: fix_runs not in the realtime publication'; end if;
+  -- [104] the migration ran twice (scripts/db-test/run.mjs) without duplicating its objects
+  if (select count(*) from pg_trigger where tgrelid = 'public.fix_runs'::regclass and not tgisinternal) <> 1
+     or (select count(*) from pg_policies where schemaname = 'public' and tablename = 'fix_runs') <> 3 then
+    raise exception 'FAIL[104]: fix_runs trigger / policies duplicated'; end if;
+end $$;
+
 :as_pg
 \o
 \echo ALL RLS TESTS PASSED

@@ -6,7 +6,9 @@ import {
   parseClaudeResult,
   type FinishedRun,
 } from '../lib/claudeExport'
+import { parseFixReport, type FixRunInput } from '../lib/fixRuns'
 import { supabase } from '../lib/supabase'
+import { recordFixRun } from './useFixRuns'
 import type { BugWithMeta } from '../lib/types'
 
 const POLL_MS = 5000
@@ -15,6 +17,8 @@ export interface ClaudeResultActions {
   getBugByNumber(number: number): Promise<BugWithMeta | null>
   resolveBug(id: string, note: string | null): Promise<void>
   addComment(bugId: string, body: string): Promise<void>
+  /** Stores the run's git evidence for a bug it resolved (proof of fix). */
+  recordFixRun?(input: FixRunInput): Promise<unknown>
 }
 
 /** Posts a comment on any bug in the workspace as the signed-in user. */
@@ -71,6 +75,9 @@ export async function applyClaudeRun(
   }
   const resolved: number[] = []
   const open: number[] = []
+  const unrecorded: number[] = []
+  let recordError: string | null = null
+  const report = parseFixReport(run.git)
   const list = (ns: number[]) => ns.map((n) => `#${n}`).join(', ')
   for (const [i, item] of items.entries()) {
     try {
@@ -79,6 +86,21 @@ export async function applyClaudeRun(
       if (item.resolved && bug.status === 'open') {
         await withRetry(() => actions.resolveBug(bug.id, item.summary))
         resolved.push(item.number)
+        if (actions.recordFixRun) {
+          // The bug is resolved either way; a failed record is reported, not retried.
+          try {
+            await actions.recordFixRun({
+              bugId: bug.id,
+              runId: run.batch,
+              status: 'succeeded',
+              summary: item.summary,
+              report,
+            })
+          } catch (err) {
+            unrecorded.push(item.number)
+            recordError ??= err instanceof Error ? err.message : String(err)
+          }
+        }
       } else {
         await withRetry(() => actions.addComment(bug.id, `Claude Code: ${item.summary}`))
         if (!item.resolved) open.push(item.number)
@@ -95,7 +117,11 @@ export async function applyClaudeRun(
   const parts = []
   if (resolved.length > 0) parts.push(`resolved ${list(resolved)}`)
   if (open.length > 0) parts.push(`left ${list(open)} open with a comment`)
-  return parts.length > 0 ? `Claude Code ${parts.join(' and ')}.` : 'Claude Code reported back.'
+  const message =
+    parts.length > 0 ? `Claude Code ${parts.join(' and ')}.` : 'Claude Code reported back.'
+  return unrecorded.length > 0
+    ? `${message} Could not save the proof of fix for ${list(unrecorded)} (${recordError}).`
+    : message
 }
 
 /**
@@ -127,7 +153,7 @@ export function useClaudeResults(
           if (!(await claimBridgeResult(workspaceId, run.batch))) continue
           const { onToast: toast, ...rest } = latest.current
           try {
-            toast(await applyClaudeRun(run, { ...rest, addComment: postComment }))
+            toast(await applyClaudeRun(run, { ...rest, addComment: postComment, recordFixRun }))
           } catch (err) {
             toast(err instanceof Error ? err.message : 'Could not apply Claude Code’s result.')
           }

@@ -9,6 +9,8 @@ type MemberRoleEnum = 'owner' | 'member'
 type BugSeverityEnum = 'low' | 'medium' | 'high' | 'critical'
 type BugStatusEnum = 'open' | 'resolved'
 type BugKindEnum = 'bug' | 'feature'
+/** fix_runs.status is text with a CHECK (0008_fix_runs.sql), not a Postgres enum. */
+type FixRunStatusEnum = 'running' | 'succeeded' | 'failed' | 'cancelled'
 type BugEventTypeEnum = 'filed' | 'resolved' | 'reopened' | 'edited' | 'commented' | 'assigned'
 
 type WorkspaceRow = {
@@ -346,6 +348,85 @@ export type Database = {
           created_at?: string
         }
         Relationships: []
+      }
+      /**
+       * Proof of fix (0008_fix_runs.sql): one Claude Code run on one bug and the git evidence the
+       * local helper reported. Members read; a member inserts as themselves; only the creator updates,
+       * and only while the run is 'running'. workspace_id, started_at and finished_at are set by the
+       * server. No client deletes.
+       */
+      fix_runs: {
+        Row: {
+          id: string
+          bug_id: string
+          workspace_id: string
+          run_id: string
+          status: FixRunStatusEnum
+          branch: string | null
+          commit_sha: string | null
+          pr_url: string | null
+          files_changed: number | null
+          additions: number | null
+          deletions: number | null
+          summary: string | null
+          after_attachment_id: string | null
+          created_by: string
+          started_at: string
+          finished_at: string | null
+        }
+        Insert: {
+          id?: string
+          bug_id: string
+          /** Ignored: the server derives it from the bug. */
+          workspace_id?: string
+          run_id: string
+          status?: FixRunStatusEnum
+          branch?: string | null
+          commit_sha?: string | null
+          pr_url?: string | null
+          files_changed?: number | null
+          additions?: number | null
+          deletions?: number | null
+          summary?: string | null
+          after_attachment_id?: string | null
+          created_by?: string
+          /** Clamped by the server to the last 24 hours. */
+          started_at?: string
+        }
+        Update: {
+          status?: FixRunStatusEnum
+          branch?: string | null
+          commit_sha?: string | null
+          pr_url?: string | null
+          files_changed?: number | null
+          additions?: number | null
+          deletions?: number | null
+          summary?: string | null
+          after_attachment_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'fix_runs_bug_id_fkey'
+            columns: ['bug_id']
+            isOneToOne: false
+            referencedRelation: 'bugs'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'fix_runs_workspace_id_fkey'
+            columns: ['workspace_id']
+            isOneToOne: false
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'fix_runs_after_attachment_id_fkey'
+            columns: ['after_attachment_id']
+            isOneToOne: false
+            referencedRelation: 'bug_attachments'
+            referencedColumns: ['id']
+          },
+        ]
       }
     }
     Views: {

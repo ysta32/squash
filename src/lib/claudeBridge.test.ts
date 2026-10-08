@@ -36,6 +36,34 @@ interface Bridge {
   runnerPidFile(batchDir: string, runId: string): string
   pidAlive(pid: number): boolean
   runnerLive(pidFile: string, msSinceLaunch: number, graceMs?: number): boolean
+  execQuiet(file: string, args: string[], options?: ExecOptions): Promise<string | null>
+  parseSha(text: unknown): string | null
+  parseBranch(text: unknown): string | null
+  parseShortstat(
+    text: unknown,
+  ): { filesChanged: number; additions: number; deletions: number } | null
+  parsePrUrl(text: unknown): string | null
+  startSha(cwd: string, run?: Exec): Promise<string | null>
+  collectGitReport(
+    cwd: string,
+    start: string | null,
+    options?: { run?: Exec; startedAt?: string | null },
+  ): Promise<GitReport | null>
+}
+interface ExecOptions {
+  cwd?: string
+  timeout?: number
+}
+type Exec = (file: string, args: string[], options?: ExecOptions) => Promise<string | null>
+interface GitReport {
+  startSha: string | null
+  commitSha: string
+  branch: string | null
+  prUrl: string | null
+  filesChanged: number | null
+  additions: number | null
+  deletions: number | null
+  startedAt: string | null
 }
 
 // The bridge is a standalone script served from /bridge; importing it must not start the server.
@@ -561,5 +589,170 @@ describe('runnerLive', () => {
     writeFileSync(empty, '')
     expect(bridge.runnerLive(empty, 0, 30_000)).toBe(true)
     expect(bridge.runnerLive(empty, 30_000, 30_000)).toBe(false)
+  })
+})
+
+describe('proof of fix', () => {
+  const A = 'a'.repeat(40)
+  const B = 'b'.repeat(40)
+
+  it('accepts only full lower-case shas', () => {
+    expect(bridge.parseSha(` ${A.toUpperCase()}\n`)).toBe(A)
+    for (const bad of ['abc1234', 'g'.repeat(40), 'a'.repeat(64), `${A} x`, '', null]) {
+      expect(bridge.parseSha(bad)).toBeNull()
+    }
+  })
+
+  it('keeps ordinary branch names and drops detached HEAD, options and odd characters', () => {
+    expect(bridge.parseBranch('fix/bug-12\n')).toBe('fix/bug-12')
+    for (const bad of ['HEAD', '-x', 'a b', 'tab\there', 'x'.repeat(256), '', undefined]) {
+      expect(bridge.parseBranch(bad)).toBeNull()
+    }
+  })
+
+  it('parses git diff --shortstat', () => {
+    expect(bridge.parseShortstat(' 3 files changed, 10 insertions(+), 2 deletions(-)\n')).toEqual({
+      filesChanged: 3,
+      additions: 10,
+      deletions: 2,
+    })
+    expect(bridge.parseShortstat('1 file changed, 1 insertion(+)')).toEqual({
+      filesChanged: 1,
+      additions: 1,
+      deletions: 0,
+    })
+    expect(bridge.parseShortstat('2 files changed, 5 deletions(-)')).toEqual({
+      filesChanged: 2,
+      additions: 0,
+      deletions: 5,
+    })
+    expect(bridge.parseShortstat('')).toEqual({ filesChanged: 0, additions: 0, deletions: 0 })
+    expect(bridge.parseShortstat('fatal: bad revision')).toBeNull()
+    expect(bridge.parseShortstat(null)).toBeNull()
+  })
+
+  it('takes only a capped https PR URL from gh', () => {
+    const url = 'https://github.com/o/r/pull/12'
+    expect(bridge.parsePrUrl(JSON.stringify({ url }))).toBe(url)
+    for (const bad of [
+      'http://github.com/o/r/pull/1',
+      'javascript:alert(1)',
+      'https://github.com/o/r/pull/1 x',
+      `https://github.com/${'a'.repeat(500)}`,
+    ]) {
+      expect(bridge.parsePrUrl(JSON.stringify({ url: bad }))).toBeNull()
+    }
+    expect(bridge.parsePrUrl('no pull requests found')).toBeNull()
+    expect(bridge.parsePrUrl(null)).toBeNull()
+  })
+
+  it('runs git and gh with fixed argv and validates every answer', async () => {
+    const calls: { file: string; args: string[]; options?: ExecOptions }[] = []
+    const answers: Record<string, string | null> = {
+      'git rev-parse': `${B}\n`,
+      'git symbolic-ref': 'fix/bug-12',
+      'git -c': ' 2 files changed, 7 insertions(+), 1 deletion(-)',
+      'gh pr': '{"url":"https://github.com/o/r/pull/9"}',
+    }
+    const run: Exec = async (file, args, options) => {
+      calls.push({ file, args, options })
+      return answers[`${file} ${args[0]}`] ?? null
+    }
+    const report = await bridge.collectGitReport('/repo', A, { run, startedAt: 'when' })
+    expect(report).toEqual({
+      startSha: A,
+      commitSha: B,
+      branch: 'fix/bug-12',
+      prUrl: 'https://github.com/o/r/pull/9',
+      filesChanged: 2,
+      additions: 7,
+      deletions: 1,
+      startedAt: 'when',
+    })
+    expect(calls.map((c) => [c.file, ...c.args])).toEqual([
+      ['git', 'rev-parse', '--verify', '--quiet', 'HEAD'],
+      ['git', 'symbolic-ref', '--quiet', '--short', 'HEAD'],
+      [
+        'git',
+        '-c',
+        'core.fsmonitor=false',
+        'diff',
+        '--shortstat',
+        '--no-ext-diff',
+        '--no-textconv',
+        `${A}..${B}`,
+      ],
+      ['gh', 'pr', 'view', '--json', 'url'],
+    ])
+    expect(calls.every((c) => c.options?.cwd === '/repo')).toBe(true)
+  })
+
+  it('leaves out what it cannot trust: no repo, a bad start, detached HEAD, gh failing', async () => {
+    expect(await bridge.collectGitReport('/x', A, { run: async () => null })).toBeNull()
+    expect(await bridge.collectGitReport('/x', A, { run: async () => 'not a sha' })).toBeNull()
+
+    const calls: string[][] = []
+    const run: Exec = async (file, args) => {
+      calls.push([file, ...args])
+      if (args[0] === 'rev-parse') return B
+      if (args[0] === 'symbolic-ref') return null // detached
+      throw new Error(`unexpected ${file} ${args.join(' ')}`)
+    }
+    const report = await bridge.collectGitReport('/x', '--output=/tmp/pwn', { run })
+    expect(report).toMatchObject({
+      startSha: null,
+      commitSha: B,
+      branch: null,
+      prUrl: null,
+      filesChanged: null,
+    })
+    // No diff without a trusted start, and no gh without a branch.
+    expect(calls).toHaveLength(2)
+  })
+
+  it('execQuiet resolves null for a missing command and never uses a shell', async () => {
+    expect(await bridge.execQuiet('squash-no-such-command', ['--version'])).toBeNull()
+    // A shell would expand this; execFile passes it through literally.
+    expect(
+      await bridge.execQuiet(process.execPath, ['-e', 'console.log(process.argv[1])', '$HOME;x']),
+    ).toBe('$HOME;x')
+  })
+
+  it('reports the commits a run made in a real repo', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'squash-git-'))
+    const git = (...args: string[]) => {
+      const r = spawnSync(
+        'git',
+        ['-c', 'user.name=Squash', '-c', 'user.email=squash@example.test', ...args],
+        { cwd: dir, encoding: 'utf8' },
+      )
+      if (r.status !== 0) throw new Error(r.stderr)
+    }
+    git('init', '-q', '-b', 'main')
+    writeFileSync(join(dir, 'a.txt'), 'one\ntwo\n')
+    git('add', '.')
+    git('commit', '-q', '-m', 'start')
+    const start = await bridge.startSha(dir)
+    expect(start).toMatch(/^[0-9a-f]{40}$/)
+    git('checkout', '-q', '-b', 'fix/bug-7')
+    writeFileSync(join(dir, 'a.txt'), 'one\nTWO\nthree\n')
+    writeFileSync(join(dir, 'b.txt'), 'new\n')
+    git('add', '.')
+    git('commit', '-q', '-m', 'fix')
+    // gh is left out so the test never reaches the network.
+    const run: Exec = (file, args, options) =>
+      file === 'gh' ? Promise.resolve(null) : bridge.execQuiet(file, args, options)
+    const report = await bridge.collectGitReport(dir, start, { run })
+    expect(report).toMatchObject({
+      startSha: start,
+      branch: 'fix/bug-7',
+      prUrl: null,
+      filesChanged: 2,
+      additions: 3,
+      deletions: 1,
+    })
+    expect(report?.commitSha).toMatch(/^[0-9a-f]{40}$/)
+    expect(report?.commitSha).not.toBe(start)
+    expect(await bridge.startSha(tmpdir())).toBeNull()
   })
 })

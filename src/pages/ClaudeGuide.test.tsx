@@ -107,7 +107,8 @@ describe('ClaudeGuide', () => {
       /pins screenshot downloads to this app’s Supabase storage host/,
     ],
     [{ version: 5, platform: 'darwin' }, /pins screenshot downloads/],
-    [{ version: 6, platform: 'darwin' }, /up to date/],
+    [{ version: 6, platform: 'darwin' }, /records its commit, branch, pull request and diff/],
+    [{ version: 7, platform: 'darwin' }, /up to date/],
   ])('reports %o', async (status, text) => {
     pingBridge.mockResolvedValue(status)
     setup()
