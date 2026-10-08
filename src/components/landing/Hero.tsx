@@ -59,6 +59,11 @@ export function Hero({ theme }: { theme: ResolvedTheme }) {
           </div>
         </div>
       </div>
+      {/* Fades the bleed so the screenshot runs out of frame instead of being cut mid-word. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-linear-to-l from-bg to-transparent sm:w-28"
+      />
     </section>
   )
 }

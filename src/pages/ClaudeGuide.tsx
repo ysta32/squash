@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Check, ChevronRight, Copy, RefreshCw } from 'lucide-react'
+import { Check, ChevronRight, Copy, RefreshCw } from 'lucide-react'
 import {
   BRIDGE_URL,
   BRIDGE_VERSION,
@@ -13,9 +12,21 @@ import {
   type BridgeStatus,
 } from '../lib/claudeExport'
 import { cn } from '../lib/utils'
-import { Button, ButtonLink, Kbd, Label, Logo, proseLinkClass } from '../components/ui'
+import type { DocHeading } from '../components/marketing/content-types'
+import { DocsLayout } from '../components/marketing/DocsLayout'
+import { usePageTitle } from '../components/marketing/usePageTitle'
+import { Button, Kbd, proseLinkClass } from '../components/ui'
 
 const POLL_MS = 2000
+
+/** Section outline for the docs layout (ids on the h2s below). */
+const GUIDE_HEADINGS: DocHeading[] = [
+  { id: 'how-it-works', text: 'How it works', level: 2 },
+  { id: 'install', text: 'Install or update', level: 2 },
+  { id: 'progress', text: 'Following Claude’s progress', level: 2 },
+  { id: 'troubleshooting', text: 'Troubleshooting', level: 2 },
+  { id: 'uninstall', text: 'Uninstall', level: 2 },
+]
 
 /**
  * A terminal command with a copy button. Long commands scroll sideways inside the block (never
@@ -231,46 +242,14 @@ function Disclosure({ title, children }: { title: ReactNode; children: ReactNode
 }
 
 export default function ClaudeGuide() {
+  usePageTitle('Claude Code helper')
   const origin = window.location.origin
   const command = installCommand(origin)
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      {/* TODO(M2): replace this header with the shared marketing nav once MarketingLayout lands. */}
-      <header className="border-b border-line">
-        <nav
-          aria-label="Main navigation"
-          className="mx-auto flex h-14 max-w-2xl items-center justify-between gap-3 px-6 max-sm:px-4"
-        >
-          <Link
-            to="/"
-            aria-label="Squash home"
-            className="t focus-ring -ml-1 flex min-h-11 items-center rounded-md px-1 text-ink"
-          >
-            <Logo />
-          </Link>
-          <div className="flex items-center gap-1">
-            <ButtonLink to="/" variant="ghost" size="sm" className="pointer-coarse:h-[3.1429rem]">
-              <ArrowLeft className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
-              Home
-            </ButtonLink>
-            <ButtonLink
-              to="/signin"
-              variant="secondary"
-              size="sm"
-              className="pointer-coarse:h-[3.1429rem]"
-            >
-              Sign in
-            </ButtonLink>
-          </div>
-        </nav>
-      </header>
-      <main className="mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14">
-        <Label as="p" tone="muted" className="mb-4">
-          Claude Code
-        </Label>
-        <h1 className="text-3xl font-semibold tracking-tight">Claude Code helper</h1>
-        <p className="mt-4 leading-7 text-muted">
+    <DocsLayout current="claude" headings={GUIDE_HEADINGS}>
+      <div className="text-base leading-7">
+        <p className="max-w-[68ch] text-read text-ink-2">
           The helper is a small program on your computer that lets Squash open Claude Code on a bug,
           with its screenshots, in your project folder. While Claude works, the helper reports back
           so the bug in Squash shows what Claude is doing: its current step, its plan, and its
@@ -278,7 +257,9 @@ export default function ClaudeGuide() {
         </p>
 
         <section className="mt-8 rounded-xl border border-border bg-bg-subtle p-5">
-          <h2 className="text-lg font-semibold">How it works</h2>
+          <h2 id="how-it-works" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            How it works
+          </h2>
           <p className="mt-2 text-sm leading-7 text-muted">
             Squash sends the bugs you select, their comments, and screenshot links to a local helper
             at <code className={code}>127.0.0.1:4317</code>. It accepts requests from configured
@@ -296,7 +277,9 @@ export default function ClaudeGuide() {
         <HelperCheck />
 
         <section className="mt-10">
-          <h2 className="text-lg font-semibold">Install or update</h2>
+          <h2 id="install" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Install or update
+          </h2>
           <p className="mt-2 text-sm leading-6 text-muted">
             The same command installs the helper and updates an existing one. If you installed it
             before live progress arrived, run it again.
@@ -360,7 +343,9 @@ export default function ClaudeGuide() {
         </section>
 
         <section className="mt-10 space-y-3">
-          <h2 className="text-lg font-semibold">Following Claude’s progress</h2>
+          <h2 id="progress" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Following Claude’s progress
+          </h2>
           <p className="text-sm leading-6 text-muted">
             Keep the bug open in Squash. A <span className="text-fg">Claude progress</span> panel
             under the title updates every couple of seconds with:
@@ -383,7 +368,12 @@ export default function ClaudeGuide() {
         </section>
 
         <section className="mt-10 space-y-3">
-          <h2 className="text-lg font-semibold">Troubleshooting</h2>
+          <h2
+            id="troubleshooting"
+            className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]"
+          >
+            Troubleshooting
+          </h2>
           <div className="divide-y divide-line rounded-xl border border-line px-4 text-sm leading-7">
             <Disclosure title="No progress panel on the bug">
               Use the check at the top of this page. If it says the helper can send bugs but needs
@@ -423,7 +413,9 @@ export default function ClaudeGuide() {
         </section>
 
         <section className="mt-10 space-y-3">
-          <h2 className="text-lg font-semibold">Uninstall</h2>
+          <h2 id="uninstall" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Uninstall
+          </h2>
           <p className="text-sm leading-6 text-muted">
             This stops the helper and removes it. Your folder choices stay in{' '}
             <code className={code}>~/.squash/bridge.json</code>.
@@ -433,23 +425,7 @@ export default function ClaudeGuide() {
             label="Uninstall command"
           />
         </section>
-      </main>
-      <footer className="mx-auto flex max-w-2xl flex-wrap items-center gap-5 border-t border-border px-6 py-6 text-sm text-muted">
-        <Link to="/" className="focus-ring rounded-md hover:text-fg">
-          Squash
-        </Link>
-        <nav aria-label="Footer" className="flex flex-wrap gap-5">
-          <Link to="/claude" className="focus-ring rounded-md hover:text-fg">
-            Claude Code guide
-          </Link>
-          <Link to="/privacy" className="focus-ring rounded-md hover:text-fg">
-            Privacy
-          </Link>
-          <Link to="/terms" className="focus-ring rounded-md hover:text-fg">
-            Terms
-          </Link>
-        </nav>
-      </footer>
-    </div>
+      </div>
+    </DocsLayout>
   )
 }

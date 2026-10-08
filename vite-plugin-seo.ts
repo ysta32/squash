@@ -35,6 +35,23 @@ export interface OgPage {
   description?: string
 }
 
+/** One card per docs/site/*.md page (the test keeps the two lists in step). */
+const DOC_PAGES: OgPage[] = [
+  ['getting-started', 'Getting started', 'Open a workspace and file the first bug.'],
+  ['capture', 'Capture', 'Paste, type, press Enter.'],
+  ['markup', 'Markup', 'Arrows, boxes and numbered pins.'],
+  ['keyboard', 'Keyboard', 'Every action has a key.'],
+  ['self-host', 'Self-host', 'Your own Squash on a free Supabase project.'],
+  ['migrations', 'Migrations', 'Ship database changes safely.'],
+  ['security', 'Security model', 'Enforced in Postgres, not the browser.'],
+].map(([slug, name, title]) => ({
+  path: `/docs/${slug}`,
+  slug: `docs-${slug}`,
+  name: `${name} · Docs`,
+  label: `Docs · ${name}`,
+  title,
+}))
+
 export const OG_PAGES: readonly OgPage[] = [
   {
     path: '/',
@@ -69,9 +86,10 @@ export const OG_PAGES: readonly OgPage[] = [
     path: '/docs',
     slug: 'docs',
     name: 'Docs',
-    label: 'Docs · Getting started',
+    label: 'Docs',
     title: 'Run, use and self-host Squash.',
   },
+  ...DOC_PAGES,
   {
     path: '/faq',
     slug: 'faq',
@@ -169,7 +187,7 @@ export function pageHtml(html: string, page: OgPage, siteUrl?: string): string {
 
 export function createSeoAssets(siteUrl?: string): { robots: string; sitemap: string } {
   const baseUrl = resolveSiteUrl(siteUrl)
-  const urls = ['/', '/claude', '/privacy', '/terms']
+  const urls = OG_PAGES.map((page) => page.path)
     .map((path) => `  <url><loc>${escapeMarkup(`${baseUrl}${path}`)}</loc></url>`)
     .join('\n')
 

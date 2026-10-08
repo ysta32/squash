@@ -22,6 +22,7 @@ function SiteLink({
   onClick?: () => void
 }) {
   const { href, external } = resolveHref(link.to)
+  const { pathname } = useLocation()
   if (external) {
     return (
       <a href={href} className={className} onClick={onClick}>
@@ -30,10 +31,25 @@ function SiteLink({
     )
   }
   return (
-    <Link to={href} className={className} onClick={onClick}>
+    <Link
+      to={href}
+      aria-current={isCurrent(href, pathname) ? 'page' : undefined}
+      className={className}
+      onClick={onClick}
+    >
       {link.label}
     </Link>
   )
+}
+
+/**
+ * The link for the page being shown: an exact match, or its section (Docs on /docs/capture),
+ * unless a more specific link exists for that exact page (Self-host on /docs/self-host).
+ */
+function isCurrent(href: string, pathname: string): boolean {
+  if (href === pathname) return true
+  if (href === '/' || !pathname.startsWith(`${href}/`)) return false
+  return !NAV_LINKS.some((link) => link.to === pathname)
 }
 
 function useScrolled(threshold = 4): boolean {
@@ -89,7 +105,7 @@ function Header() {
   }, [open])
 
   const navLink =
-    't focus-ring rounded-md px-3 py-2 text-sm text-ink-2 hover:bg-surface-3/60 hover:text-ink'
+    't focus-ring rounded-md px-3 py-2 text-sm text-ink-2 hover:bg-surface-3/60 hover:text-ink aria-[current=page]:text-ink aria-[current=page]:bg-surface-3/60'
 
   return (
     <header
@@ -136,7 +152,7 @@ function Header() {
               <SiteLink
                 link={link}
                 onClick={() => setOpen(false)}
-                className="t focus-ring-inset flex h-12 items-center text-base text-ink hover:text-accent"
+                className="t focus-ring-inset flex h-12 items-center text-base text-ink hover:text-accent aria-[current=page]:text-accent"
               />
             </li>
           ))}

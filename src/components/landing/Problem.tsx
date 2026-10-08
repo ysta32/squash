@@ -54,10 +54,8 @@ function Ledger({
           <dt className="specimen-label pt-0.5 text-ink-3">{row.term}</dt>
           <dd className={cn('text-sm', missing ? 'text-ink-3' : 'text-ink')}>
             {missing ? (
-              <>
-                <span aria-hidden="true">—</span>
-                <span className="sr-only">Not recorded</span>
-              </>
+              // Said in words, so the empty rows read as missing facts, not as a page still loading.
+              <span className="text-ink-3">Not recorded</span>
             ) : (
               row.value
             )}

@@ -5,6 +5,7 @@ import { seoPlugin } from './vite-plugin-seo'
 import { bridgeConfigPlugin } from './vite-plugin-bridge'
 import { slimBundlePlugin } from './vite-plugin-slim'
 import { factsPlugin } from './vite-plugin-facts'
+import { contentPlugin } from './vite-plugin-content'
 
 /** Preloads the Latin IBM Plex Sans file so body text renders in Plex on first paint. */
 function fontPreloadPlugin(): Plugin {
@@ -48,6 +49,7 @@ export default defineConfig({
     seoPlugin(),
     bridgeConfigPlugin(),
     factsPlugin(),
+    contentPlugin(),
     fontPreloadPlugin(),
   ],
   build: {

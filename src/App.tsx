@@ -6,9 +6,17 @@ import { AuthProvider, useAuth } from './lib/auth'
 import Landing from './pages/Landing'
 import NotFound from './pages/NotFound'
 import SignIn from './pages/SignIn'
+const About = lazy(() => import('./pages/About'))
 const AppIndex = lazy(() => import('./pages/AppIndex'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
+const Changelog = lazy(() => import('./pages/Changelog'))
 const ClaudeGuide = lazy(() => import('./pages/ClaudeGuide'))
+const Docs = lazy(() => import('./pages/Docs'))
+const Faq = lazy(() => import('./pages/Faq'))
+const Features = lazy(() => import('./pages/Features'))
+const Press = lazy(() => import('./pages/Press'))
+const Pricing = lazy(() => import('./pages/Pricing'))
+const Status = lazy(() => import('./pages/Status'))
 const Join = lazy(() => import('./pages/Join'))
 const Privacy = lazy(() => import('./pages/Privacy'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -87,6 +95,15 @@ export function App() {
             <Suspense fallback={<DelayedSkeleton />}>
               <Routes>
                 <Route path="/" element={<Home />} />
+                <Route path="/features" element={<Features />} />
+                <Route path="/pricing" element={<Pricing />} />
+                <Route path="/changelog" element={<Changelog />} />
+                <Route path="/docs" element={<Docs />} />
+                <Route path="/docs/:slug" element={<Docs />} />
+                <Route path="/faq" element={<Faq />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/press" element={<Press />} />
+                <Route path="/status" element={<Status />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/claude" element={<ClaudeGuide />} />

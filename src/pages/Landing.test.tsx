@@ -81,10 +81,7 @@ describe('Landing', () => {
     for (const link of open) expect(link).toHaveAttribute('href', '/signin')
 
     const nav = screen.getAllByRole('navigation', { name: 'Main navigation' })[0]
-    expect(within(nav).getByRole('link', { name: 'Features' })).toHaveAttribute(
-      'href',
-      '/#features',
-    )
+    expect(within(nav).getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features')
     expect(within(nav).getByRole('link', { name: 'Changelog' })).toHaveAttribute(
       'href',
       '/changelog',
@@ -92,7 +89,7 @@ describe('Landing', () => {
     expect(within(nav).getByRole('link', { name: 'Docs' })).toHaveAttribute('href', '/docs')
     expect(within(nav).getByRole('link', { name: 'Self-host' })).toHaveAttribute(
       'href',
-      '/#self-host',
+      '/docs/self-host',
     )
     for (const link of screen.getAllByRole('link', { name: 'GitHub' })) {
       expect(link).toHaveAttribute('href', 'https://github.com/ysta32/squash')
@@ -130,7 +127,7 @@ describe('Landing', () => {
     )
     expect(screen.getByRole('link', { name: /Read the self-host guide/ })).toHaveAttribute(
       'href',
-      'https://github.com/example/squash#self-host',
+      '/docs/self-host',
     )
   })
 
@@ -295,15 +292,19 @@ describe('Landing', () => {
   it.each([
     { Page: Privacy, name: 'Privacy' },
     { Page: Terms, name: 'Terms' },
-  ])('labels the $name page as a maintainer placeholder', ({ Page, name }) => {
-    render(
+  ])('gives the $name page honest copy inside the marketing chrome', ({ Page, name }) => {
+    const { container } = render(
       <MemoryRouter>
         <Page />
       </MemoryRouter>,
     )
     expect(screen.getByRole('heading', { level: 1, name })).toBeInTheDocument()
-    expect(screen.getByRole('note')).toHaveTextContent(
-      `Maintainer: edit this page before launch (src/pages/${name}.tsx)`,
-    )
+    expect(screen.getAllByRole('navigation', { name: 'Main navigation' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('navigation', { name: 'Footer navigation' })).toBeInTheDocument()
+    expect(container.textContent).toMatch(/Last updated\s*\d{2} [A-Z]{3} \d{4}/)
+    expect(container.textContent).toContain('the maintainer of this open-source project')
+    expect(container.textContent).not.toMatch(/Maintainer: edit|placeholder|lorem/i)
+    expect(container.textContent).not.toContain('!')
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 })

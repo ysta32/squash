@@ -1,20 +1,15 @@
 import { ArrowRight, Check, Copy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { facts } from '../marketing/facts'
-import { cn, isMac } from '../../lib/utils'
-import type { FactKey } from '../marketing/facts-types'
+import { cn } from '../../lib/utils'
+import { keyLabel } from '../marketing/keyLabel'
 import { MK_CONTAINER } from '../marketing/MarketingLayout'
 import { Reveal } from '../marketing/Reveal'
 import { githubUrl } from '../marketing/links'
 import { Kbd } from '../ui'
 import { LEDGER, SECURITY, SELF_HOST_STEPS, type SelfHostStep } from './content'
 import { Band, SectionHead } from './Section'
-
-function keyLabel(key: FactKey): string {
-  if (key.kind === 'mod') return isMac ? '⌘' : 'Ctrl'
-  if (key.kind === 'alt') return isMac ? '⌥' : 'Alt'
-  return key.label
-}
 
 /** Two-column definition list with hairline rules between rows (DESIGN.md section 5). */
 function DefinitionLedger({ rows }: { rows: { term: string; body: string }[] }) {
@@ -227,10 +222,10 @@ export function Depth() {
             </li>
           ))}
         </ol>
-        <a href={`${repo}#self-host`} className={cn(linkClass, 'mt-4')}>
+        <Link to="/docs/self-host" className={cn(linkClass, 'mt-4')}>
           Read the self-host guide
           <ArrowRight size={16} aria-hidden="true" />
-        </a>
+        </Link>
       </SplitBand>
     </>
   )

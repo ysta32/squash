@@ -6,6 +6,9 @@ import ClaudeGuide from './ClaudeGuide'
 
 const pingBridge = vi.fn()
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
+vi.mock('../lib/auth', () => ({
+  useAuth: () => ({ user: null, profile: null, loading: false }),
+}))
 vi.mock('../lib/claudeExport', async (load) => ({
   ...(await load<typeof ClaudeExport>()),
   pingBridge: () => pingBridge(),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import html from '../index.html?raw'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -9,8 +10,17 @@ import {
   ogImagePath,
   pageHtml,
   resolveSiteUrl,
+  seoPlugin,
   transformSeoHtml,
 } from '../vite-plugin-seo'
+
+/** Calls a Rollup/Vite hook (function or {handler}) with a minimal plugin context. */
+function call(hook: unknown, ...args: unknown[]): unknown {
+  const context = args.length === 3 ? args.pop() : {}
+  type Fn = (...a: unknown[]) => unknown
+  const fn = typeof hook === 'function' ? (hook as Fn) : (hook as { handler: Fn }).handler
+  return fn.apply(context, args)
+}
 
 describe('SEO build helpers', () => {
   it.each([undefined, '', '   '])('uses the deployment fallback for %j', (siteUrl) => {
@@ -38,7 +48,7 @@ describe('SEO build helpers', () => {
     expect(document.querySelector('link[rel="canonical"]')).toBeNull()
   })
 
-  it('generates crawl rules and only the four public sitemap routes', () => {
+  it('generates crawl rules and a sitemap of every public page', () => {
     const { robots, sitemap } = createSeoAssets('https://squash.example/')
     expect(robots).toBe(
       'User-agent: *\nAllow: /\nDisallow: /app$\nDisallow: /app/\nDisallow: /auth/\nDisallow: /signin\nDisallow: /join/\n\nSitemap: https://squash.example/sitemap.xml\n',
@@ -48,12 +58,15 @@ describe('SEO build helpers', () => {
     expect(document.documentElement.namespaceURI).toBe(
       'http://www.sitemaps.org/schemas/sitemap/0.9',
     )
-    expect(Array.from(document.querySelectorAll('loc'), (loc) => loc.textContent)).toEqual([
-      'https://squash.example/',
-      'https://squash.example/claude',
-      'https://squash.example/privacy',
-      'https://squash.example/terms',
-    ])
+    const locs = Array.from(document.querySelectorAll('loc'), (loc) => loc.textContent)
+    expect(locs).toEqual(OG_PAGES.map((page) => `https://squash.example${page.path}`))
+    for (const path of ['/', '/features', '/pricing', '/changelog', '/docs', '/docs/self-host']) {
+      expect(locs).toContain(`https://squash.example${path}`)
+    }
+    for (const path of ['/faq', '/about', '/press', '/status', '/privacy', '/terms', '/claude']) {
+      expect(locs).toContain(`https://squash.example${path}`)
+    }
+    expect(locs.some((loc) => loc?.includes('/app'))).toBe(false)
   })
 
   it('escapes markup characters in generated HTML and XML', () => {
@@ -109,6 +122,41 @@ describe('SEO build helpers', () => {
     expect(pageHtml(built, home, 'https://squash.example')).toContain(
       'content="https://squash.example/og.png"',
     )
+  })
+
+  it('writes an index.html with its own card and title for every public route', () => {
+    const outDir = mkdtempSync(join(tmpdir(), 'squash-seo-'))
+    try {
+      const plugin = seoPlugin()
+      const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+      call(plugin.configResolved, {
+        env: { VITE_SITE_URL: 'https://squash.example' },
+        root,
+        build: { outDir },
+        publicDir: join(root, 'public'),
+      })
+      const built = transformSeoHtml(html, 'https://squash.example')
+      const errors: string[] = []
+      const context = {
+        error: (message: string) => {
+          errors.push(message)
+          throw new Error(message)
+        },
+      }
+      call(plugin.writeBundle, {}, { 'index.html': { type: 'asset', source: built } }, context)
+      expect(errors).toEqual([])
+      for (const page of OG_PAGES.filter((p) => p.path !== '/')) {
+        const file = join(outDir, page.path, 'index.html')
+        expect(existsSync(file), file).toBe(true)
+        const document = new DOMParser().parseFromString(readFileSync(file, 'utf8'), 'text/html')
+        expect(document.title).toBe(`${page.name} — Squash`)
+        expect(document.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(
+          `https://squash.example${ogImagePath(page)}`,
+        )
+      }
+    } finally {
+      rmSync(outDir, { recursive: true, force: true })
+    }
   })
 
   it('refuses to build page copies from an index.html without the social tags', () => {

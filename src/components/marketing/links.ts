@@ -1,5 +1,4 @@
-// Marketing site map (DESIGN.md section 6). Routes listed here that do not exist yet render the 404
-// page until their task lands; keep this the single source for nav and footer links.
+// Marketing site map (DESIGN.md section 6): the single source for nav and footer links.
 
 export const DEFAULT_GITHUB_URL = 'https://github.com/ysta32/squash'
 
@@ -24,10 +23,10 @@ export function resolveHref(to: string): { href: string; external: boolean } {
 }
 
 export const NAV_LINKS: MarketingLink[] = [
-  { label: 'Features', to: '/#features' },
+  { label: 'Features', to: '/features' },
   { label: 'Changelog', to: '/changelog' },
   { label: 'Docs', to: '/docs' },
-  { label: 'Self-host', to: '/#self-host' },
+  { label: 'Self-host', to: '/docs/self-host' },
   { label: 'GitHub', to: 'github:' },
 ]
 
@@ -35,7 +34,7 @@ export const FOOTER_COLUMNS: { title: string; links: MarketingLink[] }[] = [
   {
     title: 'Product',
     links: [
-      { label: 'Features', to: '/#features' },
+      { label: 'Features', to: '/features' },
       { label: 'Changelog', to: '/changelog' },
       { label: 'Pricing', to: '/pricing' },
       { label: 'Status', to: '/status' },
@@ -45,7 +44,7 @@ export const FOOTER_COLUMNS: { title: string; links: MarketingLink[] }[] = [
     title: 'Resources',
     links: [
       { label: 'Docs', to: '/docs' },
-      { label: 'Self-host', to: '/#self-host' },
+      { label: 'Self-host', to: '/docs/self-host' },
       { label: 'Claude Code guide', to: '/claude' },
       { label: 'FAQ', to: '/faq' },
       { label: 'Press kit', to: '/press' },

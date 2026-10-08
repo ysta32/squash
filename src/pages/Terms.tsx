@@ -1,84 +1,120 @@
 import { Link } from 'react-router-dom'
-import { Logo } from '../components/ui'
-import { SkipLink } from '../components/SkipLink'
+import { LegalLayout } from '../components/marketing/LegalLayout'
+import { githubUrl } from '../components/marketing/links'
+import { usePageTitle } from '../components/marketing/usePageTitle'
 
 export default function Terms() {
+  usePageTitle('Terms')
+  const repo = githubUrl()
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <SkipLink />
-      <header className="border-b border-border">
-        <nav aria-label="Main navigation" className="mx-auto flex h-14 max-w-2xl items-center px-6">
-          <Link to="/" aria-label="Squash home" className="focus-ring rounded-md">
-            <Logo />
-          </Link>
-        </nav>
-      </header>
-      <main
-        id="main"
-        tabIndex={-1}
-        className="focus:outline-none mx-auto max-w-2xl px-6 py-10 text-base leading-7 sm:py-14"
-      >
-        <h1 className="text-3xl font-semibold tracking-tight">Terms</h1>
-        <p className="mt-3 text-sm text-muted">
-          Last updated: <time dateTime="2026-10-07">October 7, 2026</time>
+    <LegalLayout
+      title="Terms"
+      updated="2026-10-07"
+      lead={
+        <p>
+          The terms for using the hosted instance of Squash, an open-source project run by its
+          maintainer. They are short because the promise is small: it is free, and it comes with no
+          guarantees.
         </p>
-        <p
-          role="note"
-          className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm leading-7"
-        >
-          Maintainer: edit this page before launch (src/pages/Terms.tsx)
-        </p>
-        <p className="mt-6 leading-7 text-muted">
-          These are placeholder sections, not the final terms for this service. The maintainer must
-          identify the operator and publish terms appropriate to their installation before launch.
-        </p>
-        <section className="mt-8 space-y-3">
-          <h2 className="text-lg font-semibold">Using Squash</h2>
-          <p className="leading-7 text-muted">
-            Squash is a shared space for reporting and resolving bugs. Keep your sign-in secure,
-            invite only intended teammates, and avoid uploading content you do not have permission
-            to share.
-          </p>
-        </section>
-        <section className="mt-8 space-y-3">
-          <h2 className="text-lg font-semibold">Your content</h2>
-          <p className="leading-7 text-muted">
-            The maintainer should explain content ownership and the permissions needed to host and
-            display reports, screenshots, and comments to workspace members.
-          </p>
-        </section>
-        <section className="mt-8 space-y-3">
-          <h2 className="text-lg font-semibold">Service availability and accounts</h2>
-          <p className="leading-7 text-muted">
-            The maintainer should describe support, availability, account closure, data export, and
-            any limits on use. Include the process for handling abuse and changes to the service.
-          </p>
-        </section>
-        <section className="mt-8 space-y-3">
-          <h2 className="text-lg font-semibold">Contact and final terms</h2>
-          <p className="leading-7 text-muted">
-            Before launch, provide operator contact details, an effective date, and any applicable
-            legal terms. The software’s open-source license is separate from the terms of a hosted
-            service.
-          </p>
-        </section>
-      </main>
-      <footer className="mx-auto flex max-w-2xl flex-wrap items-center gap-5 border-t border-border px-6 py-6 text-sm text-muted">
-        <Link to="/" className="focus-ring rounded-md hover:text-fg">
-          Squash
-        </Link>
-        <nav aria-label="Footer" className="flex flex-wrap gap-5">
-          <Link to="/claude" className="focus-ring rounded-md hover:text-fg">
-            Claude Code guide
-          </Link>
-          <Link to="/privacy" className="focus-ring rounded-md hover:text-fg">
-            Privacy
-          </Link>
-          <Link to="/terms" className="focus-ring rounded-md hover:text-fg">
-            Terms
-          </Link>
-        </nav>
-      </footer>
-    </div>
+      }
+      sections={[
+        {
+          id: 'the-service',
+          title: 'The service',
+          body: (
+            <>
+              <p>
+                The hosted instance is offered free of charge, as is, by the maintainer of this
+                open-source project. There is no paid tier, no service level agreement and no uptime
+                guarantee. Features can change or be removed between releases, which are listed in
+                the <Link to="/changelog">changelog</Link>.
+              </p>
+              <p>
+                If you need guarantees, run your own copy: see{' '}
+                <Link to="/docs/self-host">Self-host</Link>.
+              </p>
+            </>
+          ),
+        },
+        {
+          id: 'your-content',
+          title: 'Your content',
+          body: (
+            <p>
+              What you put into Squash (bugs, screenshots, comments) stays yours. You let the
+              service store it and show it to the members of the workspace you put it in, which is
+              what it is for. Only upload what you are allowed to share with those members.
+            </p>
+          ),
+        },
+        {
+          id: 'fair-use',
+          title: 'Fair use',
+          body: (
+            <>
+              <p>Don’t use the hosted instance to:</p>
+              <ul>
+                <li>break the law or store content you have no right to share;</li>
+                <li>get into workspaces or data that are not yours;</li>
+                <li>
+                  load-test it, flood it, or work around its limits (10 members per workspace, 5
+                  owned workspaces, 10 images per bug, 30 bugs and 30 comments a minute).
+                </li>
+              </ul>
+              <p>
+                Accounts or workspaces that do may be removed. Found a security problem? Report it
+                privately as described in the <Link to="/docs/security">security model</Link>.
+              </p>
+            </>
+          ),
+        },
+        {
+          id: 'your-account',
+          title: 'Your account',
+          body: (
+            <p>
+              Keep access to your email or Google account secure: it is how you sign in. Invite
+              links let anyone who has them join a workspace, so share them only with people you
+              mean to invite; an owner can regenerate the link at any time. You can export your bugs
+              and delete your account from the app whenever you like.
+            </p>
+          ),
+        },
+        {
+          id: 'no-warranty',
+          title: 'No warranty',
+          body: (
+            <p>
+              Squash is provided “as is”, without warranty of any kind, in the same terms as its{' '}
+              <a href={`${repo}/blob/main/LICENSE`}>MIT license</a>. To the extent the law allows,
+              the maintainer is not liable for any loss arising from its use, including lost data.
+              Keep your own copy of anything you cannot afford to lose; the CSV and Markdown exports
+              exist for that.
+            </p>
+          ),
+        },
+        {
+          id: 'the-code',
+          title: 'The code',
+          body: (
+            <p>
+              These terms cover the hosted service. The software itself is licensed separately under
+              the MIT license, which lets you use, copy, modify and distribute it.
+            </p>
+          ),
+        },
+        {
+          id: 'changes',
+          title: 'Changes and questions',
+          body: (
+            <p>
+              These terms change in the open repository, and the date above changes with them.
+              Questions go to an issue on <a href={`${repo}/issues`}>GitHub</a>. See also the{' '}
+              <Link to="/privacy">privacy notice</Link>.
+            </p>
+          ),
+        },
+      ]}
+    />
   )
 }
