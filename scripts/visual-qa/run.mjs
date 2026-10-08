@@ -315,7 +315,7 @@ const STATES = {
     run: async (page) => {
       const box = page.getByRole('textbox', { name: /^Describe the/ })
       await box.click({ timeout: SHORT })
-      await box.fill(`${SAMPLE_DESCRIPTION} on https://shop.example.com/checkout`)
+      await box.fill(`${SAMPLE_DESCRIPTION} https://shop.example.com/checkout`)
       await page.getByTestId('file-input').setInputFiles(`${fixturesDir}checkout-desktop.png`)
       await page.getByRole('button', { name: /^Mark up/ }).waitFor({ timeout: SHORT })
     },

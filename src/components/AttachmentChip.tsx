@@ -20,8 +20,9 @@ export function AttachmentChip({
   progress,
 }: AttachmentChipProps) {
   return (
-    // 96×72: big enough to tell screenshots apart at a glance.
-    <div className="group relative h-[72px] w-[96px] shrink-0 overflow-hidden rounded-md border border-line-2 bg-surface-3 shadow-elev-1">
+    // 96×72: big enough to tell screenshots apart at a glance; 128×96 on touch, where the
+    // always-on caption and remove button need room around them.
+    <div className="group relative h-[72px] w-[96px] shrink-0 pointer-coarse:h-[96px] pointer-coarse:w-[128px] overflow-hidden rounded-md border border-line-2 bg-surface-3 shadow-elev-1">
       {onEdit ? (
         <button
           type="button"
@@ -33,7 +34,8 @@ export function AttachmentChip({
           <img src={previewUrl} alt={name} className="h-full w-full object-cover" />
           <span
             aria-hidden="true"
-            className="t pointer-events-none absolute inset-x-0 bottom-0 bg-ink/80 py-0.5 text-center font-mono text-[10px] leading-4 text-surface-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 pointer-coarse:opacity-100"
+            // Fixed dark glass in both themes, so it never blends into a light screenshot.
+            className="t pointer-events-none absolute inset-x-0 bottom-0 bg-[rgb(12_12_10/0.78)] py-0.5 text-center font-mono text-[10px] leading-4 text-white opacity-0 pointer-coarse:py-1 pointer-coarse:text-[11px] group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 pointer-coarse:opacity-100"
           >
             Mark up
           </span>
@@ -66,7 +68,7 @@ export function AttachmentChip({
         onClick={onRemove}
         title={`Remove ${name}`}
         // Shown on hover or focus; always on touch screens, where it grows to a 32px target.
-        className="t absolute top-1 right-1 flex size-6 items-center justify-center rounded-sm bg-ink/80 text-surface-2 opacity-0 outline-none group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus [@media(hover:none)]:opacity-100 pointer-coarse:size-[2.2857rem] pointer-coarse:opacity-100"
+        className="t absolute top-1 right-1 flex size-6 items-center justify-center rounded-sm bg-[rgb(12_12_10/0.78)] text-white opacity-0 outline-none group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[rgb(12_12_10/0.92)] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus [@media(hover:none)]:opacity-100 pointer-coarse:size-[2.2857rem] pointer-coarse:opacity-100"
       >
         <X size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
       </button>

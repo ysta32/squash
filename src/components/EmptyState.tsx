@@ -38,7 +38,7 @@ export interface StatePanelProps {
 
 /**
  * The one empty / error state layout (DESIGN.md "States"): left-aligned, a 20px icon, one base
- * 500 line, one sm text-2 line at a readable measure, an action, then faint ruled paper below.
+ * 500 line, one sm text-2 line at a readable measure, then an action or faint ruled paper below.
  * No illustrations.
  */
 export function StatePanel({
@@ -78,7 +78,10 @@ export function StatePanel({
         {hints && <div className="mt-[24px]">{hints}</div>}
         {action && <div className="mt-[24px] flex flex-wrap items-center gap-2">{action}</div>}
       </div>
-      {inset !== 'deep' && <RuledPaper className="mt-[24px]" />}
+      {/* Rules under a button read as broken row dividers, so a state with an action (no
+          matches, an error to retry) sits on plain paper; the ruled notebook stays for the calm
+          "nothing here yet" states. */}
+      {inset !== 'deep' && !action && <RuledPaper className="mt-[24px]" />}
     </div>
   )
 }

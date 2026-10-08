@@ -425,7 +425,12 @@ export function AnnotateDialog({
           }}
         />
         {shapes.length > 0 && (
-          <ol aria-label="Layers" className="flex max-h-40 flex-col gap-1 overflow-auto text-sm">
+          // The padding (cancelled by the margin) keeps the 2px + 2px-offset focus outline of a
+          // note field or remove button inside the scroller, which would otherwise clip it.
+          <ol
+            aria-label="Layers"
+            className="-m-1.5 flex max-h-40 flex-col gap-1 overflow-auto p-1.5 text-sm"
+          >
             {shapes.map((shape, index) => (
               <li key={index} className="flex items-center gap-2">
                 <span

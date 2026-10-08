@@ -286,9 +286,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-live="polite"
         role="status"
         // Clears what is pinned to the bottom of the screen: the phone bug-detail action bar
-        // (--bottom-bar-h) and the bug list footer under the bottom-left corner (--list-footer-h,
-        // then 8px of air). Each publishes its height only while it is shown.
-        className="pointer-events-none fixed bottom-[calc(max(1rem,var(--list-footer-h,0px)+8px)+var(--bottom-bar-h,0px)+env(safe-area-inset-bottom))] left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+        // (--bottom-bar-h, which already includes the safe-area inset, then 12px of air) and the
+        // bug list footer under the bottom-left corner (--list-footer-h, then 8px). Each publishes
+        // its height only while it is shown; with neither, the toast sits 16px off the edge.
+        className="pointer-events-none fixed bottom-[max(calc(16px+env(safe-area-inset-bottom)),calc(var(--list-footer-h,0px)+8px+env(safe-area-inset-bottom)),calc(var(--bottom-bar-h,0px)+12px))] left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
       >
         {items.map((item) => (
           <Notification key={item.id} item={item} dismiss={dismiss} activate={activate} />

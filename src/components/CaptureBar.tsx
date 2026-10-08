@@ -1,5 +1,5 @@
 import { collectEnvContext, extractUrl, findUrl, sanitizeContext } from '../lib/bugContext'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, RefObject } from 'react'
 import { Camera, CircleAlert, ImagePlus, Info, Mic, Paperclip, X } from 'lucide-react'
 import type { AttachmentMarkup, NewBugInput } from '../hooks/useBugs'
@@ -13,6 +13,7 @@ import { SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, isMac, randomId } from '../lib/utils'
 import { useCoarsePointer, useMediaQuery } from '../hooks/useCoarsePointer'
+import { useBrowserOnline } from '../hooks/useBrowserOnline'
 import { AttachmentChip } from './AttachmentChip'
 import { AnnotateDialog } from './AnnotateDialog'
 import { SeverityPicker } from './SeverityPicker'
@@ -24,9 +25,10 @@ const MAX_TEXTAREA_PX = 8 * 24
 /** Phones from 360px up to Tailwind's `sm`: room for a one-row bar at rest. */
 const PHONE_ROW_QUERY = '(min-width: 360px) and (max-width: 639.98px)'
 
-/** 44px touch targets on phones, 36px from `sm` up (44px again on coarse pointers). */
+/** 44px touch targets on phones, 36px from `sm` up (44px again on coarse pointers, where the
+ *  glyph grows to 20px so the target reads as one). */
 const ICON_BUTTON =
-  't focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink sm:size-9 pointer-coarse:size-[3.1429rem]'
+  't focus-ring inline-flex size-[3.1429rem] shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink sm:size-9 pointer-coarse:size-[3.1429rem] pointer-coarse:[&>svg]:size-5'
 const ICON = { size: 16, absoluteStrokeWidth: true, strokeWidth: 1.5, 'aria-hidden': true } as const
 
 const ENTER_NAME = isMac ? 'Return' : 'Enter'
@@ -36,8 +38,10 @@ const TOO_MANY = `Up to ${MAX_FILES} screenshots per bug. The rest weren’t add
 
 /** `text` without the URL at `at`, tidying the spaces around it; `cut` is where it was. */
 function withoutUrl(text: string, at: number, length: number): { text: string; cut: number } {
-  const before = text.slice(0, at).replace(/[ \t]+$/, '')
   const rawAfter = text.slice(at + length)
+  // A URL that ends the text takes the whitespace before it too (a line break included), so
+  // "… on iPhone\nhttps://…" leaves "… on iPhone", not a dangling empty line.
+  const before = text.slice(0, at).replace(rawAfter === '' ? /\s+$/ : /[ \t]+$/, '')
   const after = rawAfter.replace(/^[ \t]+/, '')
   const joinWords =
     before !== '' && !before.endsWith('\n') && after !== '' && !/^[\n.,;:!?)\]}]/.test(after)
@@ -114,6 +118,10 @@ export function CaptureBar({
   const chipsRef = useRef<Chip[]>(chips)
   const coarse = useCoarsePointer()
   const phoneRow = useMediaQuery(PHONE_ROW_QUERY)
+  // Filing needs the network (there is no offline queue): while offline the draft stays put and
+  // File is disabled with a note saying why, instead of failing and restoring the draft.
+  const online = useBrowserOnline()
+  const offlineNoteId = useId()
   const [focused, setFocused] = useState(false)
   const [filing, setFiling] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
@@ -312,6 +320,12 @@ export function CaptureBar({
 
   const submit = async () => {
     if (submittingRef.current) return
+    if (!online) {
+      if (valueRef.current.trim() || contextUrlRef.current) {
+        onToast?.(`You’re offline. Your draft stays here; file it once you reconnect.`)
+      }
+      return
+    }
     submittingRef.current = true
     try {
       await runSubmit()
@@ -443,9 +457,11 @@ export function CaptureBar({
     )
   }
 
-  const canSubmit = value.trim().length > 0 || Boolean(contextUrl)
+  const hasDraft = value.trim().length > 0 || Boolean(contextUrl)
+  const canSubmit = hasDraft && online
   const editingChip = chips.find((chip) => chip.id === editingId)
-  const showHint = !canSubmit && !coarse && !focused && !speech.listening && chips.length === 0
+  const showHint =
+    !hasDraft && online && !coarse && !focused && !speech.listening && chips.length === 0
   const hasExtras = chips.length > 0 || Boolean(contextUrl) || Boolean(attachError)
   const expanded = focused || value !== '' || Boolean(interim) || hasExtras
   // On a phone at rest the bar is one row (attach · text · severity · File), not two 44px rows;
@@ -574,7 +590,7 @@ export function CaptureBar({
             ) : (
               <span
                 title="Voice needs Chrome, Edge, or Safari"
-                className="inline-flex size-11 items-center justify-center text-ink-3 sm:size-9"
+                className="inline-flex size-[3.1429rem] items-center justify-center text-ink-3 sm:size-9 pointer-coarse:size-[3.1429rem]"
               >
                 <Info
                   size={16}
@@ -600,6 +616,19 @@ export function CaptureBar({
                 <span className="max-sm:sr-only">Listening</span>
               </span>
             )}
+            {!online && (
+              // The banner above says why; this ties it to the one control it disables. The one-row
+              // phone bar has no room for it beside the text, so there it is only the description.
+              <span
+                id={offlineNoteId}
+                className={cn(
+                  'text-xs whitespace-nowrap text-ink-3 max-[359px]:sr-only',
+                  oneRow && 'sr-only',
+                )}
+              >
+                You’re offline
+              </span>
+            )}
             {showHint && (
               <span className="hidden items-center gap-1.5 text-xs whitespace-nowrap text-ink-3 md:inline-flex">
                 Press <Kbd>N</Kbd> to focus
@@ -617,14 +646,21 @@ export function CaptureBar({
               aria-label={`File ${noun}`}
               aria-busy={filing || undefined}
               aria-disabled={!canSubmit || undefined}
-              title={canSubmit ? `File ${noun} (${ENTER_NAME})` : 'Type or paste to file'}
+              aria-describedby={online ? undefined : offlineNoteId}
+              title={
+                !online
+                  ? 'You’re offline: file once you reconnect'
+                  : canSubmit
+                    ? `File ${noun} (${ENTER_NAME})`
+                    : 'Type or paste to file'
+              }
               onClick={() => void submit()}
               className={cn(
                 't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-medium whitespace-nowrap sm:h-9 sm:pr-1.5 pointer-coarse:h-[3.1429rem] pointer-coarse:pr-3.5',
                 canSubmit || filing
                   ? 'border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong active:translate-y-px'
-                  : // Disabled reads as the same control at half strength, border and key cap kept.
-                    'cursor-default border-line-input bg-transparent text-ink opacity-50',
+                  : // Disabled reads as a quiet secondary control: border-2 and text-2, key cap kept.
+                    'cursor-default border-line-2 bg-transparent text-ink-2',
               )}
             >
               {/* Both labels share one grid cell, so the button keeps its width while filing. */}

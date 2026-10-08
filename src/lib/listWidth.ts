@@ -3,10 +3,11 @@ import { useCallback, useState, useSyncExternalStore } from 'react'
 /**
  * List pane width bounds in px (DESIGN.md "App shell": 400–480, resizable, remembered). Until the
  * user resizes it, the pane is `initial` wide, or `wide` on screens from `WIDE_QUERY` up, where
- * 440px would truncate most titles beside a lot of empty detail space.
+ * 440px would truncate most titles beside a lot of empty detail space (from 1280px, the common
+ * laptop width, the detail column still keeps its full 760px measure beside a 480px list).
  */
 export const LIST_WIDTH = { min: 400, max: 480, initial: 440, wide: 480 } as const
-export const WIDE_QUERY = '(min-width: 1440px)'
+export const WIDE_QUERY = '(min-width: 1280px)'
 const STORAGE_KEY = 'squash:list-width'
 
 function clamp(width: number): number {
@@ -53,7 +54,7 @@ export function defaultListWidth(): number {
 
 /**
  * The list pane width: the user's last committed width if there is one (restored from the last
- * session), otherwise the viewport's default, which follows the window across the 1440px line.
+ * session), otherwise the viewport's default, which follows the window across the 1280px line.
  * `reset` forgets the user's width and goes back to that default.
  */
 export function useListWidth(): [number, (width: number, commit?: boolean) => void, () => void] {
