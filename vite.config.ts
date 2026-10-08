@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { seoPlugin } from './vite-plugin-seo'
 import { bridgeConfigPlugin } from './vite-plugin-bridge'
+import { slimBundlePlugin } from './vite-plugin-slim'
 
 /** Preloads the Latin IBM Plex Sans file so body text renders in Plex on first paint. */
 function fontPreloadPlugin(): Plugin {
@@ -39,5 +40,17 @@ function fontPreloadPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), seoPlugin(), bridgeConfigPlugin(), fontPreloadPlugin()],
+  plugins: [
+    slimBundlePlugin(),
+    react(),
+    tailwindcss(),
+    seoPlugin(),
+    bridgeConfigPlugin(),
+    fontPreloadPlugin(),
+  ],
+  build: {
+    // Every browser in Vite's default target can load ES modules; the preload polyfill only warms
+    // the cache in the few without <link rel="modulepreload">, which still load correctly without it.
+    modulePreload: { polyfill: false },
+  },
 })

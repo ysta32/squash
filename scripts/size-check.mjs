@@ -3,10 +3,12 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
-// 2026-10-07 gzipSync baseline: entry 71.944 kB, total JS 173.185 kB.
-// Budgets are ~15% above baseline, rounded up; 1 kB = 1000 bytes.
+// Budgets are measured on a build WITH Supabase env set (CI passes non-secret placeholders), because
+// without it the Supabase client is dead-code-eliminated and the total under-reports what users
+// download by ~55 kB. v2.0.0 baseline (real build): entry 68.8 kB, total JS 258.5 kB gzip.
+// Budgets are ~10% above that, rounded; 1 kB = 1000 bytes. See .orch/DECISIONS.md D-15.
 export const BUDGET_ENTRY_KB = 83
-export const BUDGET_TOTAL_KB = 200
+export const BUDGET_TOTAL_KB = 285
 
 /** @param {number} entryBytes @param {number} totalJsBytes */
 export function checkBudgets(entryBytes, totalJsBytes) {
