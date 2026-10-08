@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceMember } from '../lib/types'
 import { PresenceAvatars } from './PresenceAvatars'
 
@@ -23,9 +23,25 @@ function member(name: string): WorkspaceMember {
 const members = ['Ada', 'Grace', 'Linus', 'Margaret', 'Ken', 'Barbara', 'Me'].map(member)
 const presence = (id: string) => ({ user_id: id, viewing: null, online_at: '2026-10-01T10:00:00Z' })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('PresenceAvatars', () => {
+  it('hides presence while the browser is offline and brings it back on reconnect', () => {
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    render(
+      <PresenceAvatars online={['ada', 'grace'].map(presence)} members={members} selfId="me" />,
+    )
+    expect(screen.queryByRole('group', { name: /online/ })).not.toBeInTheDocument()
+    onLine.mockReturnValue(true)
+    act(() => {
+      window.dispatchEvent(new Event('online'))
+    })
+    expect(screen.getByRole('group', { name: '2 online: Ada, Grace' })).toBeInTheDocument()
+  })
+
   it('renders nothing when only self is online', () => {
     const { container } = render(
       <PresenceAvatars online={[presence('me')]} members={members} selfId="me" />,

@@ -441,7 +441,7 @@ function BugBody({
     <div className="@container h-full min-w-0 overflow-y-auto [scrollbar-gutter:stable]">
       <article
         aria-label={`${KIND_LABEL[bug.kind].one} ${bug.optimistic ? '' : `#${bug.number}`}`.trim()}
-        className="w-full max-w-[808px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[48px] @xl:pt-8 sm:pb-16"
+        className="mx-auto w-full max-w-[856px] min-w-0 px-[16px] pt-4 pb-32 @xl:px-[48px] @xl:pt-8 sm:pb-16"
       >
         <header className="border-b border-line pb-6">
           <button
@@ -996,7 +996,7 @@ export function BugDetailSkeleton() {
   return (
     <div role="status" aria-label="Loading bug" className="@container h-full min-w-0">
       <span className="sr-only">Loading…</span>
-      <div className="w-full max-w-[760px] px-[16px] pt-4 @xl:px-[32px] @xl:pt-8 @min-[1200px]:mx-auto">
+      <div className="mx-auto w-full max-w-[856px] px-[16px] pt-4 @xl:px-[48px] @xl:pt-8">
         <div className="border-b border-line pb-6">
           <div className="w-72 max-w-full rounded-xs border border-line-2 bg-surface-1">
             <div className="border-b border-line px-3 py-[9px]">

@@ -140,7 +140,7 @@ function Notification({
       {item.action && (
         <button
           type="button"
-          className="t focus-ring h-8 shrink-0 rounded-md px-2.5 font-medium text-accent hover:bg-surface-3 pointer-coarse:h-11"
+          className="t focus-ring h-8 shrink-0 rounded-md px-2.5 font-medium text-accent hover:bg-surface-3 pointer-coarse:h-[3.1429rem]"
           onClick={() => activate(item)}
         >
           {item.action.label}
@@ -150,7 +150,7 @@ function Notification({
         type="button"
         aria-label="Dismiss notification"
         onClick={() => dismiss(item.id)}
-        className="t focus-ring flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:size-11"
+        className="t focus-ring flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem]"
       >
         <X size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
       </button>
@@ -285,8 +285,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         }}
         aria-live="polite"
         role="status"
-        // Clears the phone bug-detail action bar, which publishes its height as --bottom-bar-h.
-        className="pointer-events-none fixed bottom-[calc(1rem+var(--bottom-bar-h,0px)+env(safe-area-inset-bottom))] left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+        // Clears what is pinned to the bottom of the screen: the phone bug-detail action bar
+        // (--bottom-bar-h) and the bug list footer under the bottom-left corner (--list-footer-h,
+        // then 8px of air). Each publishes its height only while it is shown.
+        className="pointer-events-none fixed bottom-[calc(max(1rem,var(--list-footer-h,0px)+8px)+var(--bottom-bar-h,0px)+env(safe-area-inset-bottom))] left-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
       >
         {items.map((item) => (
           <Notification key={item.id} item={item} dismiss={dismiss} activate={activate} />

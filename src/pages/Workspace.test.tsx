@@ -14,6 +14,7 @@ const NOW = new Date().toISOString()
 
 const mocks = vi.hoisted(() => ({
   bugs: [] as BugWithMeta[],
+  loading: false,
   notFound: false,
   error: null as string | null,
   reload: vi.fn(),
@@ -102,13 +103,14 @@ vi.mock('../hooks/useBugs', async (importOriginal) => {
   const actual = await importOriginal<typeof UseBugsModule>()
   return {
     filterBugs: actual.filterBugs,
+    hasActiveFilters: actual.hasActiveFilters,
     sortBugs: actual.sortBugs,
     countBugs: actual.countBugs,
     useBugs: (_ws: string, opts?: { onRemoteInsert?: (bug: Bug) => void }) => {
       mocks.onRemoteInsert = opts?.onRemoteInsert ?? null
       return {
         bugs: mocks.bugs,
-        loading: false,
+        loading: mocks.loading,
         error: mocks.error,
         reload: mocks.reload,
         counts: { open: mocks.bugs.length, resolved: 0, all: mocks.bugs.length },
@@ -247,6 +249,7 @@ beforeEach(() => {
   // jsdom has no layout; BugRow scrolls the selected row into view.
   Element.prototype.scrollIntoView = vi.fn()
   mocks.bugs = [makeBug(3), makeBug(2), makeBug(1)]
+  mocks.loading = false
   mocks.notFound = false
   mocks.error = null
   mocks.onRemoteInsert = null
@@ -266,6 +269,12 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.useRealTimers()
 })
+
+/** Picks a status from the list's "Open ⌄" status menu. */
+function pickStatus(label: 'Open' | 'Resolved' | 'All') {
+  fireEvent.click(screen.getByRole('button', { name: /^Status: / }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: new RegExp(`^${label}`) }))
+}
 
 describe('Workspace', () => {
   it('undoes a severity change without touching other fields', async () => {
@@ -329,24 +338,14 @@ describe('Workspace', () => {
     fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })
     expect(screen.getByRole('group', { name: 'Bulk actions' })).toHaveTextContent('1 selected')
 
-    if (change === 'tab')
-      fireEvent.click(
-        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
-          name: /^Resolved/,
-        }),
-      )
+    if (change === 'tab') pickStatus('Resolved')
     else
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
         target: { value: 'number 3' },
       })
     expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument()
 
-    if (change === 'tab')
-      fireEvent.click(
-        within(screen.getByRole('group', { name: 'Bug status' })).getByRole('button', {
-          name: /^Open/,
-        }),
-      )
+    if (change === 'tab') pickStatus('Open')
     else
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search bugs' }), {
         target: { value: '' },
@@ -810,5 +809,56 @@ describe('Workspace', () => {
     mocks.notFound = true
     show('/app/ws')
     expect(screen.getByText("You're not a member of this workspace")).toBeInTheDocument()
+  })
+})
+
+describe('Workspace detail pane with nothing open (desktop)', () => {
+  const original = window.matchMedia
+  beforeEach(() => {
+    localStorage.clear()
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(min-width: 1024px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+  })
+  afterEach(() => {
+    window.matchMedia = original
+  })
+
+  const detailPane = () =>
+    document.getElementById('bug-list-pane')!.nextElementSibling!.nextElementSibling as HTMLElement
+
+  it('shows the bug skeleton while the list loads, not a prompt to pick a bug', () => {
+    mocks.loading = true
+    mocks.bugs = []
+    show('/app/ws')
+    expect(within(detailPane()).getByRole('status', { name: 'Loading bug' })).toBeInTheDocument()
+    expect(screen.queryByText('No bug open')).not.toBeInTheDocument()
+  })
+
+  it('leaves the pane blank when a filter matches nothing', () => {
+    show('/app/ws?q=zzz-no-such-bug')
+    expect(screen.getByRole('heading', { name: 'No matches' })).toBeInTheDocument()
+    expect(detailPane()).toBeEmptyDOMElement()
+  })
+
+  it('puts the onboarding in the detail pane of an empty workspace, once', () => {
+    mocks.bugs = []
+    show('/app/ws')
+    const pane = detailPane()
+    expect(within(pane).getByRole('list', { name: 'Getting started' })).toBeInTheDocument()
+    expect(within(pane).getByRole('list', { name: 'How to file' })).toBeInTheDocument()
+    expect(screen.getAllByText(/File your first bug/)).toHaveLength(1)
+    expect(screen.queryByText('No bug open')).not.toBeInTheDocument()
+    const list = screen.getByRole('region', { name: 'Bug list' })
+    expect(within(list).queryByRole('list', { name: 'Getting started' })).not.toBeInTheDocument()
+    expect(within(list).getByText('No bugs yet.')).toBeInTheDocument()
+  })
+
+  it('still invites picking a bug when there are bugs to pick', () => {
+    show('/app/ws')
+    expect(within(detailPane()).getByText('No bug open')).toBeInTheDocument()
   })
 })

@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
   type RefObject,
@@ -22,6 +23,7 @@ import {
   Search,
   SearchX,
   SquarePen,
+  Trash2,
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -32,13 +34,15 @@ import { Header } from '../components/Header'
 import { InviteDialog } from '../components/InviteDialog'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { HINT_ROW, StatePanel } from '../components/EmptyState'
+import { Onboarding } from '../components/GettingStarted'
+import { isFirstItemView, onboardingSteps } from '../lib/onboarding'
 import { PaneSplitter } from '../components/PaneSplitter'
 import { useListWidth } from '../lib/listWidth'
 import { Skeleton } from '../components/Skeleton'
 import { Button, ButtonLink, Kbd } from '../components/ui'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import { useToast } from '../components/Toast'
-import { countBugs, filterBugs, sortBugs, useBugs } from '../hooks/useBugs'
+import { countBugs, filterBugs, hasActiveFilters, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
 import { CommandPalette, type Command } from '../components/CommandPalette'
@@ -81,6 +85,24 @@ async function lastAssigner(bugId: string, userId: string): Promise<string | nul
 function isDesktop(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches
 }
+
+function subscribeDesktop(onChange: () => void): () => void {
+  if (typeof window.matchMedia !== 'function') return () => {}
+  const query = window.matchMedia('(min-width: 1024px)')
+  query.addEventListener('change', onChange)
+  return () => query.removeEventListener('change', onChange)
+}
+
+/** isDesktop() as state, for what renders differently side by side (follows window resizes). */
+function useDesktop(): boolean {
+  return useSyncExternalStore(subscribeDesktop, isDesktop, () => false)
+}
+
+/**
+ * The bug detail column (BugDetail's article): 760px of content between 48px gutters, centred in
+ * the detail pane. Detail-pane empty states use it too, so they sit where a bug would.
+ */
+const DETAIL_COLUMN = 'mx-auto w-full max-w-[856px]'
 
 export default function Workspace() {
   const { workspaceId = '', number: numberParam } = useParams<{
@@ -309,7 +331,8 @@ export default function Workspace() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const { theme, setTheme } = useTheme()
-  const [listWidth, setListWidth] = useListWidth()
+  const [listWidth, setListWidth, resetListWidth] = useListWidth()
+  const desktop = useDesktop()
   const captureRef = useRef<HTMLTextAreaElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -443,7 +466,12 @@ export default function Workspace() {
         next.delete(id)
         return next
       })
-      if (bug) toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`)
+      // No Undo: a delete is final (the row and its screenshots are gone; the deletion log in
+      // Settings only records it). The icon matches the other confirmation toasts.
+      if (bug)
+        toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`, {
+          icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
+        })
       if (neighbour) {
         focusRowOf.current = neighbour.id
         select(neighbour.id, { replace: true })
@@ -886,7 +914,10 @@ export default function Workspace() {
         <span className="sr-only">Loading…</span>
         <div className="h-[3.4286rem] shrink-0 border-b border-line" />
         <div className="h-[4rem] shrink-0 border-b border-line" />
-        <div className="min-h-0 flex-1 bg-surface-1 lg:w-[440px] lg:border-r lg:border-line">
+        <div
+          className="min-h-0 flex-1 bg-surface-1 lg:w-(--list-w) lg:border-r lg:border-line"
+          style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+        >
           <div className="h-[6.2857rem] border-b border-line" />
           <Skeleton />
         </div>
@@ -895,6 +926,15 @@ export default function Workspace() {
   }
 
   const workspace = ws.workspace
+  const firstItem = isFirstItemView({
+    loading,
+    error: error ?? null,
+    total: bugs.length,
+    kindTotal: counts.all,
+    visible: visible.length,
+    filtered: hasActiveFilters(filters),
+    tab: filters.tab,
+  })
 
   let detail: ReactNode
   if (selected) {
@@ -919,10 +959,32 @@ export default function Workspace() {
         claudeRun={!selected.optimistic ? claude.runs.get(selected.number) : undefined}
       />
     )
+  } else if (!hasNumberParam && loading) {
+    // The list is still loading: the detail pane holds the shape of a bug, not a prompt to pick one.
+    detail = <BugDetailSkeleton />
+  } else if (!hasNumberParam && firstItem && desktop) {
+    // Nothing filed yet: the onboarding is the screen's focal point here, not in the narrow list.
+    detail = (
+      <div className={DETAIL_COLUMN}>
+        <Onboarding
+          variant="pane"
+          workspaceId={workspaceId}
+          kind={filters.kind}
+          tab={filters.tab}
+          steps={onboardingSteps(bugs, ws.members.length, claude.connected)}
+          onInvite={() => setInviteOpen(true)}
+          onClaudeSetup={claude.openSetup}
+        />
+      </div>
+    )
+  } else if (!hasNumberParam && visible.length === 0) {
+    // Nothing to pick (a filter matched nothing, an empty tab, a load error): the list says why.
+    detail = null
   } else if (!hasNumberParam) {
     const one = filters.kind === 'feature' ? 'feature request' : 'bug'
     detail = (
       <StatePanel
+        className={DETAIL_COLUMN}
         inset="deep"
         icon={MousePointerClick}
         title={`No ${one} open`}
@@ -949,6 +1011,7 @@ export default function Workspace() {
   } else if (notFound) {
     detail = (
       <StatePanel
+        className={DETAIL_COLUMN}
         inset="deep"
         icon={SearchX}
         title={`Bug #${numberParam} not found`}
@@ -984,7 +1047,12 @@ export default function Workspace() {
         role={ws.role}
       />
       <ConnectionStatus />
-      <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col"
+        style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+      >
         <h1 className="sr-only">{workspace.name}</h1>
         <section
           aria-label="File a bug"
@@ -993,19 +1061,21 @@ export default function Workspace() {
             showDetail && 'hidden lg:block',
           )}
         >
-          {/* Full width of list + detail (DESIGN.md "App shell"); the bar styles itself. */}
-          <CaptureBar
-            workspaceId={workspaceId}
-            onSubmit={fileAndSelect}
-            kind={filters.kind}
-            onToast={toast}
-            focusRef={captureRef}
-          />
+          {/* Spans the list and the detail column (DESIGN.md "App shell"); the bar styles itself.
+              From 1440px, where the detail column is centred in a wide pane, the bar ends at the
+              column's text edge, (pane width + list + 760px column + 1px rule) / 2, instead of
+              running the full window width over empty paper. */}
+          <div className="min-[1440px]:max-w-[calc((100%+var(--list-w)+761px)/2)]">
+            <CaptureBar
+              workspaceId={workspaceId}
+              onSubmit={fileAndSelect}
+              kind={filters.kind}
+              onToast={toast}
+              focusRef={captureRef}
+            />
+          </div>
         </section>
-        <div
-          className="min-h-0 flex-1 lg:grid lg:grid-cols-[var(--list-w)_1px_minmax(0,1fr)]"
-          style={{ '--list-w': `${listWidth}px` } as CSSProperties}
-        >
+        <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[var(--list-w)_1px_minmax(0,1fr)]">
           <div id="bug-list-pane" className={cn('h-full min-h-0 lg:block', showDetail && 'hidden')}>
             <BugList
               bugs={sorted}
@@ -1036,11 +1106,13 @@ export default function Workspace() {
               onClaudeSetup={claude.openSetup}
               claudeConnected={claude.connected}
               claudeRuns={claude.runs}
+              onboardingInDetail={desktop && !showDetail}
             />
           </div>
           <PaneSplitter
             width={listWidth}
             onWidth={setListWidth}
+            onReset={resetListWidth}
             controls="bug-list-pane"
             className="hidden lg:block"
           />

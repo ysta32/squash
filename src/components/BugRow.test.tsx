@@ -75,7 +75,7 @@ afterEach(cleanup)
 describe('BugRow', () => {
   it('skips rendering for equivalent viewers but renders when row props change', () => {
     const props: BugRowProps = {
-      bug: bug(),
+      bug: bug({ assignee_id: 'grace' }),
       selected: false,
       onSelect: vi.fn(),
       members,
@@ -108,7 +108,7 @@ describe('BugRow', () => {
       )
     }
 
-    // One Avatar (the filer) renders per row render; viewers show as an eye and count.
+    // One Avatar (the assignee) renders per row render; viewers show as an eye and count.
     onRowRender.mockClear()
     const { rerender } = render(<Parent revision={0} />)
     expect(onRowRender).toHaveBeenCalledTimes(1)
@@ -148,12 +148,15 @@ describe('BugRow', () => {
     expect(screen.queryByLabelText('Ada')).not.toBeInTheDocument()
   })
 
-  it('shows the filer when the bug is unassigned', () => {
+  it('shows an empty dashed disc when the bug is unassigned, never the filer', () => {
     row(bug())
     expect(screen.queryByTitle(/Assigned to/)).not.toBeInTheDocument()
-    const filer = screen.getByTitle('Filed by Ada')
-    expect(filer).toContainElement(screen.getByLabelText('Ada'))
-    expect(filer.previousElementSibling).toBe(screen.getByRole('option').querySelector('time'))
-    expect(filer.nextElementSibling).toBeNull()
+    expect(screen.queryByTitle(/Filed by/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Ada')).not.toBeInTheDocument()
+    const empty = screen.getByRole('img', { name: 'Unassigned' })
+    expect(empty).toBeEmptyDOMElement()
+    expect(empty).toHaveClass('size-[20px]', 'rounded-full', 'border-dashed')
+    expect(empty.previousElementSibling).toBe(screen.getByRole('option').querySelector('time'))
+    expect(empty.nextElementSibling).toBeNull()
   })
 })

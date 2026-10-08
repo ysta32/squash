@@ -257,7 +257,7 @@ export function ActiveFilters({
       {chips.map((chip) => (
         <span
           key={chip.label}
-          className="inline-flex h-[1.7143rem] max-w-full items-center rounded-sm border border-line-2 bg-surface-2 pl-1.5 text-xs pointer-coarse:h-[2.2857rem]"
+          className="inline-flex h-[1.7143rem] max-w-full items-center rounded-sm border border-line-2 bg-surface-2 pl-1.5 text-xs pointer-coarse:h-[3.1429rem]"
         >
           {chip.icon && (
             <span aria-hidden="true" className="mr-1 inline-flex shrink-0 [&_*]:size-4">
@@ -273,7 +273,7 @@ export function ActiveFilters({
             aria-label={`Clear ${chip.label} filter`}
             title={`Clear ${chip.label.toLowerCase()} filter`}
             onClick={() => onFilters(chip.clear)}
-            className="t focus-ring ml-0.5 inline-flex h-full w-6 shrink-0 items-center justify-center rounded-r-sm text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:w-9"
+            className="t focus-ring ml-0.5 inline-flex h-full w-6 shrink-0 items-center justify-center rounded-r-sm text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:w-[3.1429rem]"
           >
             <X size={12} aria-hidden="true" />
           </button>
@@ -283,7 +283,7 @@ export function ActiveFilters({
         <Button
           variant="ghost"
           size="sm"
-          className="h-[1.7143rem] px-1.5 text-xs pointer-coarse:h-[2.2857rem]"
+          className="h-[1.7143rem] px-1.5 text-xs pointer-coarse:h-[3.1429rem]"
           onClick={() => onFilters(clearedFilters(filters))}
         >
           Clear
@@ -466,7 +466,7 @@ function ActionsMenu({ actions }: { actions: ListAction[] }) {
               type="button"
               role="menuitem"
               autoFocus={index === 0}
-              className={cn(menuItemClass, 'pointer-coarse:h-[3.1429rem]')}
+              className={menuItemClass}
               onClick={() => {
                 close(true)
                 action.onSelect()
@@ -494,6 +494,29 @@ const STATUS_TABS: { value: StatusTab; label: string }[] = [
  * Open / Resolved / All as one "Open ⌄" menu button, for narrow lists (below 480px) where a
  * segmented control would crowd the Bugs / Features tabs.
  */
+/**
+ * A count in mono text-3. Until counts are known (first load) it is a skeleton block of the same
+ * 2ch minimum width, so nothing beside it shifts when the numbers arrive.
+ */
+export function Count({ value, pending = false }: { value: number; pending?: boolean }) {
+  return pending ? (
+    <span
+      aria-hidden="true"
+      data-testid="count-pending"
+      className="inline-block h-2.5 w-[2ch] animate-skeleton rounded-xs bg-surface-3 font-mono text-xs"
+    />
+  ) : (
+    <span className="inline-block min-w-[2ch] font-mono text-xs font-normal text-ink-3 tabular-nums">
+      {value}
+    </span>
+  )
+}
+
+/**
+ * Open / Resolved / All as one compact "Open 6 ⌄" menu at every width: status is a filter on the
+ * list, so it reads as a quiet control beside the Bugs / Features tabs rather than as a second
+ * row of tabs.
+ */
 export function StatusMenu({
   tab,
   counts,
@@ -519,9 +542,9 @@ export function StatusMenu({
             variant="ghost"
             size="sm"
             aria-label={`Status: ${current.label}`}
-            className="px-2 text-ink pointer-coarse:h-[3.1429rem]"
+            className="gap-1.5 px-2 text-ink pointer-coarse:h-[3.1429rem]"
           >
-            {current.label}
+            {current.label} <Count value={counts[tab]} pending={countsPending} />
             <ChevronDown size={14} strokeWidth={1.5} aria-hidden="true" className="text-ink-3" />
           </Button>
         )}
@@ -537,7 +560,7 @@ export function StatusMenu({
                   role="menuitemradio"
                   aria-checked={checked}
                   autoFocus={checked}
-                  className={cn(menuItemClass, 'pointer-coarse:h-[3.1429rem]')}
+                  className={menuItemClass}
                   onClick={() => {
                     close(true)
                     if (!checked) onTab(option.value)
@@ -548,12 +571,8 @@ export function StatusMenu({
                     aria-hidden="true"
                     className={cn('text-accent', !checked && 'invisible')}
                   />
-                  <span className="flex-1">{option.label}</span>
-                  {!countsPending && (
-                    <span className="font-mono text-xs text-ink-3 tabular-nums">
-                      {counts[option.value]}
-                    </span>
-                  )}
+                  <span className="flex-1">{option.label}</span>{' '}
+                  <Count value={counts[option.value]} pending={countsPending} />
                 </button>
               )
             })}

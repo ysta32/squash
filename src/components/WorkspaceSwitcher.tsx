@@ -45,7 +45,7 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
         aria-expanded={open}
         title="Switch workspace"
         className={cn(
-          't focus-ring flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-ink hover:bg-surface-3 pointer-coarse:h-11',
+          't focus-ring flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-ink hover:bg-surface-3 pointer-coarse:h-[3.1429rem]',
           open && 'bg-surface-3',
         )}
       >

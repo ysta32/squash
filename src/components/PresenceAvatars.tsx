@@ -1,5 +1,6 @@
 import type { WorkspaceMember } from '../lib/types'
 import type { PresenceUser } from '../hooks/usePresence'
+import { useBrowserOnline } from '../hooks/useBrowserOnline'
 import { Avatar } from './Avatar'
 
 const MAX_SHOWN = 4
@@ -10,15 +11,20 @@ export interface PresenceAvatarsProps {
   selfId: string
 }
 
-/** Stack of other members currently online, followed by a divider separating it from header actions. */
+/**
+ * Stack of other members currently online, followed by a divider separating it from header
+ * actions. Hidden while this browser is offline: presence cannot update then, and a green
+ * "2 online" beside the Offline banner would contradict it.
+ */
 export function PresenceAvatars({ online, members, selfId }: PresenceAvatarsProps) {
+  const connected = useBrowserOnline()
   const byId = new Map(members.map((m) => [m.user_id, m]))
   const seen = new Set<string>()
   const others = online
     .filter((u) => u.user_id !== selfId && !seen.has(u.user_id) && seen.add(u.user_id))
     .map((u) => byId.get(u.user_id))
     .filter((m): m is WorkspaceMember => m !== undefined)
-  if (others.length === 0) return null
+  if (!connected || others.length === 0) return null
   const shown = others.slice(0, MAX_SHOWN)
   const hidden = others.slice(MAX_SHOWN)
   const names = others.map((m) => m.profile.display_name).join(', ')

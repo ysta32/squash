@@ -60,9 +60,12 @@ export const proseLinkClass =
 /** Popover / menu / dropdown surface. Same look as the `.panel` utility in index.css. */
 export const panelClass = 'rounded-lg border border-line bg-surface-2 shadow-elev-2'
 
-/** A row inside a panelClass menu. Pair with aria-selected / data-active for the highlighted row. */
+/**
+ * A row inside a panelClass menu: 32px, 44px on touch screens (DESIGN.md). Pair with aria-selected
+ * / data-active for the highlighted row.
+ */
 export const menuItemClass =
-  't flex h-8 w-full cursor-default items-center gap-2 rounded-md px-2 text-left text-sm text-ink outline-none select-none hover:bg-surface-3 focus-visible:bg-surface-3 aria-selected:bg-surface-3 data-[active=true]:bg-surface-3 disabled:text-ink-3 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-ink-3'
+  't flex h-8 w-full pointer-coarse:h-[3.1429rem] cursor-default items-center gap-2 rounded-md px-2 text-left text-sm text-ink outline-none select-none hover:bg-surface-3 focus-visible:bg-surface-3 aria-selected:bg-surface-3 data-[active=true]:bg-surface-3 disabled:text-ink-3 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-ink-3'
 
 /** Dialog chrome shared by modal sheets: the blurred scrim and the panel (DESIGN.md section 5). */
 export const dialogOverlayClass = 'fixed inset-0 z-50 glass-scrim animate-fade'

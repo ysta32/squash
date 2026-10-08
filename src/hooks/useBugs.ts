@@ -120,6 +120,11 @@ export function friendlyError(err: unknown, fallback = 'Something went wrong. Tr
   return message || fallback
 }
 
+/** Whether any search or filter narrows the list (sort and status tab do not count). */
+export function hasActiveFilters(f: BugFilters): boolean {
+  return Boolean(f.query.trim() || f.filedBy || f.resolvedBy || f.assignee || f.severity)
+}
+
 /** Pure list filter used by the bug list (kind, tabs, people, severity, free-text and `#<number>`). */
 export function filterBugs(bugs: BugWithMeta[], f: BugFilters): BugWithMeta[] {
   const q = f.query.trim().toLowerCase()

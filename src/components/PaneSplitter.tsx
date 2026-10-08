@@ -14,11 +14,14 @@ const BIG_STEP = 40
 export function PaneSplitter({
   width,
   onWidth,
+  onReset,
   controls,
   className,
 }: {
   width: number
   onWidth: (width: number, commit?: boolean) => void
+  /** Double-click: back to the default width (else the 440px initial width). */
+  onReset?: () => void
   /** id of the pane being resized. */
   controls: string
   className?: string
@@ -77,7 +80,7 @@ export function PaneSplitter({
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onDoubleClick={() => onWidth(LIST_WIDTH.initial)}
+      onDoubleClick={() => (onReset ? onReset() : onWidth(LIST_WIDTH.initial))}
       onKeyDown={onKeyDown}
       className={cn(
         'group/split relative z-10 w-px cursor-col-resize touch-none bg-line outline-none select-none',

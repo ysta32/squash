@@ -44,7 +44,7 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
         aria-expanded={open}
         title={profile?.display_name ?? 'Profile'}
         className={cn(
-          't focus-ring flex size-8 items-center justify-center rounded-md hover:bg-surface-3 pointer-coarse:size-11',
+          't focus-ring flex size-8 items-center justify-center rounded-md hover:bg-surface-3 pointer-coarse:size-[3.1429rem]',
           open && 'bg-surface-3',
         )}
       >

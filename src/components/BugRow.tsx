@@ -52,7 +52,6 @@ export const BugRow = memo(function BugRow({
   const attachmentCount = savedCount + pendingCount
   const uploadFailed = bug.pending?.some((upload) => upload.error !== undefined) ?? false
   const num = bug.optimistic ? '…' : String(bug.number)
-  const filer = members.find((member) => member.user_id === bug.filed_by)?.profile ?? null
   const resolver = members.find((member) => member.user_id === bug.resolved_by)?.profile ?? null
   const assignee = bug.assignee_id
     ? (members.find((member) => member.user_id === bug.assignee_id)?.profile ?? null)
@@ -222,12 +221,14 @@ export const BugRow = memo(function BugRow({
             <Avatar profile={assignee} size="xs" />
           </span>
         ) : (
+          // The person slot only ever means the assignee: unassigned is an empty dashed disc of
+          // the same size, never the filer standing in (one person, one meaning, one colour).
           <span
-            className="inline-flex opacity-70"
-            title={`Filed by ${filer?.display_name ?? 'Unknown user'}`}
-          >
-            <Avatar profile={filer} size="xs" />
-          </span>
+            role="img"
+            aria-label="Unassigned"
+            title="Unassigned"
+            className="inline-flex size-[20px] shrink-0 rounded-full border border-dashed border-line-input"
+          />
         )}
       </span>
     </button>

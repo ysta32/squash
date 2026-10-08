@@ -5,7 +5,7 @@ import { GettingStarted } from './GettingStarted'
 import { BugList, type BugListProps } from './BugList'
 import { isMac } from '../lib/utils'
 
-const PASTE = isMac ? '⌘V' : 'Ctrl+V'
+const PASTE = isMac ? '⌘V' : 'Ctrl V'
 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 
@@ -22,7 +22,7 @@ describe('GettingStarted', () => {
   it('renders the four unfinished steps, hints, and count', () => {
     render(<GettingStarted workspaceId="one" steps={undone} />)
     const list = screen.getByRole('list', { name: 'Getting started' })
-    expect(within(list).getAllByRole('listitem')).toHaveLength(4)
+    expect(list.querySelectorAll(':scope > li')).toHaveLength(4)
     expect(within(list).getAllByText('To do')).toHaveLength(4)
     for (const label of [
       'File your first bug',
@@ -33,9 +33,18 @@ describe('GettingStarted', () => {
       expect(within(list).getByText(label)).not.toHaveClass('line-through')
     }
     expect(screen.getByText('0 of 4')).toBeInTheDocument()
-    for (const key of [PASTE, 'Enter', 'R']) {
-      expect(within(list).getByText(key).tagName).toBe('KBD')
-    }
+    // The first step carries the how-to: paste, describe, submit with ↵ (never "Enter").
+    const guide = within(list).getByRole('list', { name: 'How to file' })
+    expect(within(list).getByText('File your first bug').closest('li')).toContainElement(guide)
+    expect(Array.from(guide.querySelectorAll('kbd'), (key) => key.textContent)).toEqual([
+      PASTE,
+      'N',
+      '↵',
+    ])
+    expect(within(list).queryByText('Enter')).not.toBeInTheDocument()
+    const resolve = within(list).getByText('Resolve a bug').closest('li')!
+    expect(resolve).toHaveTextContent(/Press R$/)
+    expect(within(resolve).getByText('R').tagName).toBe('KBD')
   })
 
   it('marks completed steps and updates the count as progress changes', () => {
@@ -138,21 +147,32 @@ function RoutedList(props: Partial<BugListProps>) {
 }
 
 describe('BugList getting started integration', () => {
-  it('shows the checklist above the empty state and forwards actions', () => {
+  it('makes the checklist the only onboarding in an empty workspace and forwards actions', () => {
     const onInvite = vi.fn()
     const onClaudeSetup = vi.fn()
     render(<RoutedList onInvite={onInvite} onClaudeSetup={onClaudeSetup} />)
     const list = screen.getByRole('list', { name: 'Getting started' })
-    expect(list.compareDocumentPosition(screen.getByRole('status'))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    )
     expect(screen.getByText('0 of 4')).toBeInTheDocument()
+    // "File your first bug" appears once: as the checklist step, not again as an empty state.
+    expect(screen.getAllByText(/File your first bug/)).toHaveLength(1)
+    expect(screen.queryByRole('heading', { name: 'File your first bug' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('list', { name: 'How to file' })).toHaveLength(1)
     fireEvent.click(within(list).getByRole('button', { name: 'Invite' }))
     fireEvent.click(within(list).getByRole('button', { name: 'Set up' }))
     expect(onInvite).toHaveBeenCalledTimes(1)
     expect(onClaudeSetup).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss getting started' }))
     expect(localStorage.getItem('squash:getting-started:one')).toBe('true')
+    // Dismissed: the plain empty state takes over, with the same how-to.
+    expect(screen.getByRole('heading', { name: 'File your first bug' })).toBeInTheDocument()
+    expect(screen.getAllByRole('list', { name: 'How to file' })).toHaveLength(1)
+  })
+
+  it('leaves the onboarding to the detail pane when it shows there', () => {
+    render(<RoutedList onboardingInDetail />)
+    expect(screen.queryByRole('list', { name: 'Getting started' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/File your first bug/)).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('No bugs yet.')
   })
 
   it('derives progress from membership and the Claude connection', () => {

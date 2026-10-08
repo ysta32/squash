@@ -1,13 +1,20 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Check, X } from 'lucide-react'
-import { cn, isMac } from '../lib/utils'
+import type { BugFilters } from '../hooks/useBugs'
+import type { OnboardingSteps } from '../lib/onboarding'
+import { cn } from '../lib/utils'
+import { EmptyState, FileGuide } from './EmptyState'
 import { Button, Kbd } from './ui'
 
 export interface GettingStartedProps {
   workspaceId: string
-  steps: { filed: boolean; invited: boolean; claude: boolean; resolved: boolean }
+  steps: OnboardingSteps
   onInvite?: () => void
   onClaudeSetup?: () => void
+  /** `pane`: the focal point of the empty detail pane, on the detail column's gutter. */
+  variant?: 'list' | 'pane'
+  /** Shown instead when the checklist is dismissed or complete. */
+  fallback?: ReactNode
 }
 
 /** Step actions read as quiet accent links, not as bare words. */
@@ -17,7 +24,14 @@ export function GettingStarted(props: GettingStartedProps) {
   return <Checklist key={props.workspaceId} {...props} />
 }
 
-function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStartedProps) {
+function Checklist({
+  workspaceId,
+  steps,
+  onInvite,
+  onClaudeSetup,
+  variant = 'list',
+  fallback = null,
+}: GettingStartedProps) {
   const storageKey = `squash:getting-started:${workspaceId}`
   const [dismissed, setDismissed] = useState(() => {
     try {
@@ -28,18 +42,11 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
   })
   const completed = Object.values(steps).filter(Boolean).length
 
-  if (dismissed || completed === 4) return null
+  if (dismissed || completed === 4) return fallback
 
   const items = [
-    {
-      id: 'filed',
-      label: 'File your first bug',
-      action: (
-        <span>
-          <Kbd>{isMac ? '⌘V' : 'Ctrl+V'}</Kbd> a screenshot, then <Kbd>Enter</Kbd>
-        </span>
-      ),
-    },
+    // Its how-to is spelled out under the step (FileGuide) rather than squeezed beside it.
+    { id: 'filed', label: 'File your first bug', action: null },
     {
       id: 'invited',
       label: 'Invite a teammate',
@@ -62,8 +69,8 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
       id: 'resolved',
       label: 'Resolve a bug',
       action: (
-        <span>
-          press <Kbd>R</Kbd>
+        <span className="flex items-center gap-1">
+          Press <Kbd>R</Kbd>
         </span>
       ),
     },
@@ -71,7 +78,15 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
 
   return (
     // A ruled section at the head of the list, not a card (DESIGN.md: hairline rules over cards).
-    <section aria-label="Get started" className="border-b border-line px-4 pt-3 pb-1.5">
+    <section
+      aria-label="Get started"
+      className={cn(
+        variant === 'pane'
+          ? // Lines up with the detail column and its empty states (StatePanel inset="deep").
+            'max-w-[calc(30rem+96px)] px-4 pt-[72px] pb-[48px] sm:px-6 lg:px-[48px]'
+          : 'border-b border-line px-4 pt-3 pb-1.5',
+      )}
+    >
       <div className="flex items-center gap-2">
         <h2 className="font-mono text-label font-medium tracking-[0.06em] text-ink-2 uppercase">
           Get started
@@ -119,12 +134,47 @@ function Checklist({ workspaceId, steps, onInvite, onClaudeSetup }: GettingStart
             </span>
             <span className="sr-only">{steps[id] ? 'Done' : 'To do'}</span>
             <span className={cn(steps[id] ? 'text-muted line-through' : 'text-ink')}>{label}</span>
-            {!steps[id] && (
+            {!steps[id] && action && (
               <span className="ml-auto flex items-center gap-1 text-xs text-ink-3">{action}</span>
+            )}
+            {id === 'filed' && !steps.filed && (
+              // Indented to the step label: the 16px mark plus the row's 10px gap.
+              <FileGuide className="mb-1.5 basis-full pl-[26px]" />
             )}
           </li>
         ))}
       </ol>
     </section>
   )
+}
+
+export interface OnboardingProps extends Omit<GettingStartedProps, 'fallback' | 'workspaceId'> {
+  /** Without one (no workspace route) there is no checklist to keep, only the empty state. */
+  workspaceId?: string
+  kind: BugFilters['kind']
+  tab: BugFilters['tab']
+}
+
+/**
+ * What an empty kind shows in place of its list: the getting-started checklist while nothing has
+ * been filed anywhere (its first step carries the how-to), otherwise, or once the checklist is
+ * dismissed, the "File your first …" empty state. Never both, so the call to action appears once.
+ */
+export function Onboarding({
+  workspaceId,
+  kind,
+  tab,
+  variant = 'list',
+  ...props
+}: OnboardingProps) {
+  const first = (
+    <EmptyState
+      kind={kind}
+      tab={tab}
+      filtered={false}
+      inset={variant === 'pane' ? 'deep' : 'default'}
+    />
+  )
+  if (props.steps.filed || !workspaceId) return first
+  return <GettingStarted {...props} workspaceId={workspaceId} variant={variant} fallback={first} />
 }
