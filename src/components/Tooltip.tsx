@@ -62,11 +62,14 @@ export function Tooltip({
 
   useEffect(() => {
     if (!open) return
-    // Capture phase, so the tip is dismissed before global Esc shortcuts see the key; the event is
-    // consumed only because a visible tip was what Escape closed.
+    // Window capture phase, so the tip sees Escape first. A visible tip is the topmost layer, so
+    // that Escape closes only the tip: it is stopped here and never reaches document-level
+    // dismissers (useDismiss popovers, global shortcuts) or the focused control. The next
+    // Escape, with the tip gone, goes through as usual.
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       event.preventDefault()
+      event.stopPropagation()
       setDismissed(true)
     }
     window.addEventListener('keydown', onKey, true)

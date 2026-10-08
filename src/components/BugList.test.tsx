@@ -508,14 +508,17 @@ describe('BugList', () => {
       'Start Claude Code on 2 bugs?',
     )
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(send()).toHaveFocus()
     fireEvent.click(send())
     fireEvent.keyDown(screen.getByRole('button', { name: 'Send' }), { key: 'Escape' })
     expect(screen.queryByText(/Start Claude Code on/)).not.toBeInTheDocument()
+    expect(send()).toHaveFocus()
     expect(onSend).not.toHaveBeenCalled()
     fireEvent.click(send())
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(onSend).toHaveBeenCalledTimes(1)
     expect(onSend.mock.calls[0][0]).toHaveLength(2)
+    expect(send()).toHaveFocus()
     // The footer only labels the view when it differs from the tab count.
     expect(screen.queryByText(/in view/)).not.toBeInTheDocument()
   })
@@ -528,8 +531,18 @@ describe('BugList', () => {
     expect(onSend).toHaveBeenCalledWith([expect.objectContaining({ id: 'resolved' })])
   })
 
-  it('switches status from the narrow-screen status menu', () => {
+  it('switches status from the narrow-pane status menu', () => {
     render(<Harness />)
+    // The segmented control and the menu swap on the list pane's width (a container query), not
+    // the viewport's: the desktop pane is 400–480px wide at any window size.
+    expect(screen.getByRole('region', { name: 'Bug list' })).toHaveClass('@container')
+    expect(screen.getByRole('group', { name: 'Bug status' })).toHaveClass(
+      'hidden',
+      '@min-[440px]:flex',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Status: Open' }).parentElement?.parentElement,
+    ).toHaveClass('@min-[440px]:hidden')
     fireEvent.click(screen.getByRole('button', { name: 'Status: Open' }))
     const menu = screen.getByRole('menu', { name: 'Status' })
     const open = within(menu).getByRole('menuitemradio', { name: /^Open/ })

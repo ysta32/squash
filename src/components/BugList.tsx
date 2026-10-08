@@ -214,6 +214,12 @@ export function BugList({
   // explicit pick (or a single bug) sends straight away.
   const needsConfirm = picked.length === 0 && exportable.length > 1
   const [confirmSend, setConfirmSend] = useState(false)
+  // Leaving the confirm removes the focused button; focus goes back to the send trigger.
+  const refocusSend = useRef(false)
+  function closeConfirm(): void {
+    refocusSend.current = true
+    setConfirmSend(false)
+  }
   const viewLabel =
     picked.length > 0
       ? `${picked.length} picked`
@@ -243,7 +249,12 @@ export function BugList({
   const countsPending = loading && bugs.length === 0 && counts.all === 0
 
   return (
-    <section aria-label="Bug list" className="flex h-full min-h-0 flex-col bg-surface-1 text-ink">
+    // A size container: the list pane is 400–480px on desktop whatever the viewport, so the
+    // status control switches on the pane's width, not the window's.
+    <section
+      aria-label="Bug list"
+      className="@container flex h-full min-h-0 flex-col bg-surface-1 text-ink"
+    >
       <div className="shrink-0 border-b border-line">
         <div className="flex h-[2.8571rem] items-stretch justify-between gap-3 border-b border-line px-4 pointer-coarse:h-[3.1429rem]">
           <KindTabs
@@ -252,12 +263,12 @@ export function BugList({
             countsPending={countsPending}
             onChange={(kind) => onFilters({ ...filters, kind })}
           />
-          {/* A quiet segmented control (the underline belongs to the kind tabs only); below
-              480px it becomes the "Open ⌄" menu in the search row. */}
+          {/* A quiet segmented control (the underline belongs to the kind tabs only); when the
+              pane is under 440px it becomes the "Open ⌄" menu in the search row. */}
           <div
             role="group"
             aria-label="Bug status"
-            className="flex shrink-0 items-center self-center rounded-md bg-surface-3 p-[2px] max-[479px]:hidden"
+            className="hidden shrink-0 items-center self-center rounded-md bg-surface-3 p-[2px] @min-[440px]:flex"
           >
             {(['open', 'resolved', 'all'] as const).map((tab) => {
               const active = filters.tab === tab
@@ -323,7 +334,7 @@ export function BugList({
             counts={counts}
             countsPending={countsPending}
             onTab={(tab) => onFilters({ ...filters, tab })}
-            className="min-[480px]:hidden"
+            className="@min-[440px]:hidden"
           />
           <BugFilters
             filters={filters}
@@ -441,7 +452,7 @@ export function BugList({
               event.preventDefault()
               event.stopPropagation()
               event.nativeEvent.stopImmediatePropagation()
-              setConfirmSend(false)
+              closeConfirm()
             }
           }}
         >
@@ -455,7 +466,7 @@ export function BugList({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setConfirmSend(false)}
+                  onClick={closeConfirm}
                   className="pointer-coarse:h-[3.1429rem]"
                 >
                   Cancel
@@ -465,7 +476,7 @@ export function BugList({
                   size="sm"
                   autoFocus
                   onClick={() => {
-                    setConfirmSend(false)
+                    closeConfirm()
                     onSend(exportable)
                   }}
                   className="text-ink pointer-coarse:h-[3.1429rem]"
@@ -499,6 +510,12 @@ export function BugList({
                   </Tooltip>
                 )}
                 <Button
+                  ref={(node: HTMLButtonElement | null) => {
+                    if (node && refocusSend.current) {
+                      refocusSend.current = false
+                      node.focus()
+                    }
+                  }}
                   variant="ghost"
                   size="sm"
                   onClick={() => (needsConfirm ? setConfirmSend(true) : onSend(exportable))}

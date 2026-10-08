@@ -1,6 +1,24 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useRef } from 'react'
+import { useDismiss } from '../hooks/useDismiss'
 import { Tooltip, TOOLTIP_DELAY } from './Tooltip'
+
+/** An open useDismiss popover (like Stats) next to a control with a tooltip (like Theme). */
+function PopoverWithTooltip({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDismiss(ref, onClose)
+  return (
+    <>
+      <div ref={ref}>Stats panel</div>
+      <Tooltip label="Theme">
+        <button type="button" aria-label="Theme">
+          icon
+        </button>
+      </Tooltip>
+    </>
+  )
+}
 
 function setup(props: { disabled?: boolean } = {}) {
   const onWindowKey = vi.fn((event: KeyboardEvent) => event.defaultPrevented)
@@ -65,7 +83,8 @@ describe('Tooltip', () => {
     hover(wrapper)
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(tip).toHaveAttribute('data-state', 'closed')
-    expect(onWindowKey).toHaveReturnedWith(true)
+    // Consumed: later listeners never see this Escape.
+    expect(onWindowKey).not.toHaveBeenCalled()
     // Still hovered, still dismissed; a fresh hover brings it back.
     act(() => vi.advanceTimersByTime(TOOLTIP_DELAY))
     expect(tip).toHaveAttribute('data-state', 'closed')
@@ -73,6 +92,19 @@ describe('Tooltip', () => {
     hover(wrapper)
     expect(tip).toHaveAttribute('data-state', 'open')
     cleanupKey()
+  })
+
+  it('closes only itself on Escape when a dismissable popover is also open', () => {
+    const onClose = vi.fn()
+    render(<PopoverWithTooltip onClose={onClose} />)
+    const wrapper = screen.getByRole('button', { name: 'Theme' }).parentElement as HTMLElement
+    const tip = screen.getByText('Theme').parentElement as HTMLElement
+    hover(wrapper)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(tip).toHaveAttribute('data-state', 'closed')
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('leaves Escape alone when no tip is showing', () => {
