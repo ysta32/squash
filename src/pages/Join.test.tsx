@@ -48,14 +48,14 @@ describe('Join', () => {
   it('shows the invalid-invite state when the preview RPC returns null data', async () => {
     rpc.mockResolvedValue({ data: null, error: null })
     renderJoin()
-    expect(await screen.findByRole('alert')).toHaveTextContent("That invite code doesn't exist.")
+    expect(await screen.findByRole('alert')).toHaveTextContent('That invite code doesn’t exist.')
     expect(rpc).toHaveBeenCalledWith('workspace_preview', { p_code: 'abcd1234' })
   })
 
   it('shows the invalid-invite state for an empty result', async () => {
     rpc.mockResolvedValue({ data: [], error: null })
     renderJoin()
-    expect(await screen.findByRole('alert')).toHaveTextContent("That invite code doesn't exist.")
+    expect(await screen.findByRole('alert')).toHaveTextContent('That invite code doesn’t exist.')
   })
 
   it('previews the workspace and offers sign-in when signed out', async () => {

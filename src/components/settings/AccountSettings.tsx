@@ -1,4 +1,4 @@
-import { Button, Field, Section, inputClass } from '../ui'
+import { Button, Field, Input, inputClass } from '../ui'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
@@ -6,6 +6,42 @@ import { supabase } from '../../lib/supabase'
 import { removeScreenshots } from '../../lib/storageCleanup'
 import { useWorkspace, useWorkspaces } from '../../hooks/useWorkspaces'
 import type { Workspace } from '../../lib/types'
+import { cn } from '../../lib/utils'
+import { LedgerRow, TOUCH, confirmDialogClass, dangerFillClass } from './Ledger'
+
+/** Ends the session and returns to the home page. Errors show next to the button. */
+export function SignOutButton() {
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-1">
+      <Button
+        disabled={busy}
+        className={TOUCH}
+        onClick={async () => {
+          setBusy(true)
+          setError(null)
+          try {
+            await signOut()
+            navigate('/', { replace: true })
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'Could not sign out.')
+            setBusy(false)
+          }
+        }}
+      >
+        {busy ? 'Signing out…' : 'Sign out'}
+      </Button>
+      {error && (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
 
 function OwnershipTransfer({
   workspace,
@@ -29,7 +65,7 @@ function OwnershipTransfer({
     )
   if (loading)
     return (
-      <p role="status" className="text-sm text-muted">
+      <p role="status" className="text-sm text-ink-3">
         Loading members of {workspace.name}…
       </p>
     )
@@ -41,7 +77,7 @@ function OwnershipTransfer({
     )
   if (role !== 'owner' || candidates.length === 0) return null
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-bg p-3">
+    <div className="space-y-3 rounded-lg border border-line bg-surface-1 p-3">
       <Field label={`New owner for ${workspace.name}`}>
         {({ id, describedBy }) => (
           <select
@@ -78,7 +114,10 @@ function OwnershipTransfer({
   )
 }
 
-export function AccountSettings() {
+/** Typed into the confirm dialog before an account can be deleted. */
+export const DELETE_ACCOUNT_PHRASE = 'delete my account'
+
+export function DeleteAccount() {
   const { user, signOut } = useAuth()
   const { workspaces, loading, error: workspaceError, refresh } = useWorkspaces()
   const navigate = useNavigate()
@@ -87,6 +126,8 @@ export function AccountSettings() {
   const [deleted, setDeleted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [typed, setTyped] = useState('')
+  const confirmed = typed.trim().toLowerCase() === DELETE_ACCOUNT_PHRASE
 
   async function run(action: () => Promise<void>) {
     if (busy) return
@@ -149,48 +190,29 @@ export function AccountSettings() {
   }
 
   return (
-    <section className="space-y-6">
-      <Section
-        title="Account"
-        description="Manage your sign-in session."
-        footer={
-          <>
-            {error && !open && (
-              <p role="alert" className="mr-auto text-sm text-danger">
-                {error}
-              </p>
-            )}
-            <Button size="sm" disabled={busy} onClick={() => void run(finishSignOut)}>
-              Sign out
-            </Button>
-          </>
-        }
+    <>
+      <LedgerRow
+        label="Delete account"
+        description="Deletes your account and the workspaces you own alone. Shared workspaces need a new owner first."
       >
-        {user?.email && (
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-fg">Email</p>
-            <p className="text-sm break-all text-muted">{user.email}</p>
-          </div>
-        )}
-      </Section>
-      <Section
-        title="Delete account"
-        tone="danger"
-        description="Permanently delete your account and workspaces you own alone. This cannot be undone."
-        footer={
-          <Button
-            size="sm"
-            variant="danger"
-            disabled={busy}
-            onClick={() => {
-              setError(null)
-              setOpen(true)
-            }}
-          >
-            Delete account
-          </Button>
-        }
-      />
+        <Button
+          variant="danger"
+          disabled={busy}
+          className={TOUCH}
+          onClick={() => {
+            setError(null)
+            setTyped('')
+            setOpen(true)
+          }}
+        >
+          Delete account
+        </Button>
+      </LedgerRow>
+      {error && !open && (
+        <p role="alert" className="pt-3 text-sm text-danger">
+          {error}
+        </p>
+      )}
       {open && (
         <dialog
           ref={(node) => {
@@ -201,22 +223,45 @@ export function AccountSettings() {
             if (!busy) setOpen(false)
           }}
           aria-labelledby="delete-account-title"
-          className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-md space-y-4 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-5 text-fg shadow-elevated backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
+          className={cn(confirmDialogClass, 'space-y-4')}
         >
-          <h3 id="delete-account-title" className="text-base font-semibold">
-            Delete account permanently?
+          <h3 id="delete-account-title" className="text-lg font-semibold">
+            Delete your account?
           </h3>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-ink-2">
             This deletes your account and workspaces where you are the only member. This cannot be
             undone. Shared workspaces must have ownership transferred first.
           </p>
+          {!deleted && (
+            <Field label={`Type “${DELETE_ACCOUNT_PHRASE}” to confirm`}>
+              {({ id, describedBy }) => (
+                <Input
+                  id={id}
+                  aria-describedby={describedBy}
+                  autoFocus
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  disabled={busy}
+                  value={typed}
+                  onChange={(event) => setTyped(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && confirmed) {
+                      event.preventDefault()
+                      void deleteAccount()
+                    }
+                  }}
+                />
+              )}
+            </Field>
+          )}
           {needsTransfer && (
             <div className="space-y-3">
               <p role="status" className="text-sm">
                 Transfer ownership of each shared workspace below, then retry deleting your account.
               </p>
               {loading && (
-                <p role="status" className="text-sm text-muted">
+                <p role="status" className="text-sm text-ink-3">
                   Loading workspaces…
                 </p>
               )}
@@ -247,11 +292,16 @@ export function AccountSettings() {
               {error}
             </p>
           )}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button autoFocus type="button" disabled={busy} onClick={() => setOpen(false)}>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" disabled={busy} onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={busy} onClick={() => void deleteAccount()} variant="danger">
+            <button
+              type="button"
+              disabled={busy || (!deleted && !confirmed)}
+              onClick={() => void deleteAccount()}
+              className={dangerFillClass}
+            >
               {busy
                 ? 'Working…'
                 : deleted
@@ -259,10 +309,10 @@ export function AccountSettings() {
                   : needsTransfer
                     ? 'Retry deleting account'
                     : 'Delete account'}
-            </Button>
+            </button>
           </div>
         </dialog>
       )}
-    </section>
+    </>
   )
 }

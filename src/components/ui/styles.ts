@@ -5,10 +5,12 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'touch'
 
 // Specimen buttons (DESIGN.md sections 3 and 5). Primary is the accent fill and the only filled
 // button on a screen; secondary is a hairline outline; danger is outlined until a confirm dialog.
-// Disabled states are neutral (no opacity wash) so they read as "unavailable", not "faded accent".
+// A disabled primary keeps its accent fill at reduced strength, so the screen's one primary
+// action still reads as the focal point while it waits for valid input (a grey primary reads as
+// a secondary button). Other variants go neutral.
 const VARIANT: Record<ButtonVariant, string> = {
   primary:
-    'border border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong disabled:border-line-2 disabled:bg-surface-3 disabled:text-ink-3 disabled:shadow-none aria-disabled:hover:bg-accent',
+    'border border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong disabled:bg-accent/45 disabled:text-accent-fg/90 disabled:shadow-none aria-disabled:hover:bg-accent',
   secondary:
     'border border-line-2 bg-transparent text-ink hover:border-line-input hover:bg-surface-3 disabled:border-line disabled:bg-transparent disabled:text-ink-3',
   ghost:

@@ -35,7 +35,7 @@ describe('friendlyError', () => {
   it('maps known codes', () => {
     expect(friendlyError({ message: 'member_limit' })).toBe('This workspace is full (10 members).')
     expect(friendlyError(new Error('workspace_limit'))).toBe('You can own up to 5 workspaces.')
-    expect(friendlyError({ message: 'invalid_code' })).toBe("That invite code doesn't exist.")
+    expect(friendlyError({ message: 'invalid_code' })).toBe('That invite code doesn’t exist.')
     expect(friendlyError('P0001: not_owner')).toBe('Only the owner can do that.')
   })
 

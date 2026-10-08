@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { WorkspaceSettings } from './WorkspaceSettings'
+import { WorkspaceSettings, type WorkspaceSection } from './WorkspaceSettings'
+import { resetAutosaveLines } from './useAutosave'
 
 const mocks = vi.hoisted(() => {
   const profile = (id: string, name: string) => ({
@@ -40,6 +41,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../../hooks/useWorkspaces', () => ({
   LAST_WORKSPACE_KEY: 'squash:lastWorkspace',
+  inviteUrl: (code: string) => `http://localhost/join/${code}`,
   useWorkspace: () => ({
     workspace: mocks.state.notFound ? null : mocks.workspace,
     members: mocks.members,
@@ -57,11 +59,14 @@ vi.mock('../../lib/storageCleanup', () => ({
   removeScreenshots: (...args: unknown[]) => mocks.removeScreenshots(...args),
 }))
 
-function show() {
+function show(section: WorkspaceSection = 'workspace') {
   render(
     <MemoryRouter initialEntries={['/app/ws/settings']}>
       <Routes>
-        <Route path="/app/ws/settings" element={<WorkspaceSettings workspaceId="ws" />} />
+        <Route
+          path="/app/ws/settings"
+          element={<WorkspaceSettings workspaceId="ws" section={section} />}
+        />
         <Route path="/app" element={<p>Workspace picker</p>} />
       </Routes>
     </MemoryRouter>,
@@ -70,6 +75,7 @@ function show() {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  resetAutosaveLines()
   mocks.state.role = 'owner'
   mocks.state.loading = false
   mocks.state.notFound = false
@@ -107,36 +113,55 @@ describe('WorkspaceSettings', () => {
     mocks.state.role = 'member'
     show()
     expect(screen.getByText('Only the owner can change workspace settings')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Workspace name')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete workspace' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Workspace name' })).not.toBeInTheDocument()
+    for (const section of ['workspace', 'members', 'danger'] as const) {
+      cleanup()
+      show(section)
+      expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Delete workspace' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
+    }
   })
 
-  it('renames with a trimmed name; Save is disabled until the name changes', async () => {
+  it('renames with a trimmed name when the field is left, and confirms inline', async () => {
     show()
-    const save = screen.getByRole('button', { name: 'Save' })
-    expect(save).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: '  Beta  ' } })
-    expect(save).toBeEnabled()
-    fireEvent.click(save)
+    const name = screen.getByLabelText('Workspace name')
+    fireEvent.change(name, { target: { value: '  Beta  ' } })
+    fireEvent.blur(name)
     await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith('Beta'))
-    expect(await screen.findByText('Workspace renamed.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeDisabled()
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect(name).toHaveValue('Beta')
   })
 
   it('does not rename to a blank name', () => {
     show()
     fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: '   ' } })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.blur(screen.getByLabelText('Workspace name'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Workspace name cannot be empty.')
     expect(mocks.rename).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed rename after Escape and rolls the field back', async () => {
+    let fail: (error: Error) => void = () => {}
+    mocks.rename.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+    show()
+    const name = screen.getByLabelText('Workspace name')
+    fireEvent.change(name, { target: { value: 'Beta' } })
+    fireEvent.blur(name)
+    await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith('Beta'))
+    fireEvent.change(name, { target: { value: 'Gamma' } })
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(name).toHaveValue('Beta')
+    fail(new Error('Name taken'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Name taken')
+    expect(name).toHaveValue('Acme')
   })
 
   it('surfaces rename errors', async () => {
     mocks.rename.mockRejectedValue(new Error('Name taken'))
     show()
     fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: 'Beta' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.blur(screen.getByLabelText('Workspace name'))
     expect(await screen.findByRole('alert')).toHaveTextContent('Name taken')
   })
 
@@ -153,9 +178,18 @@ describe('WorkspaceSettings', () => {
     confirm.mockRestore()
   })
 
+  it('copies the full invite link and confirms it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }))
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledWith('http://localhost/join/OLDCODE')
+  })
+
   it('removes a member only after confirmation', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    show()
+    show('members')
     expect(screen.queryByRole('button', { name: 'Remove Ada' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Remove Grace' }))
     expect(mocks.removeMember).not.toHaveBeenCalled()
@@ -167,7 +201,7 @@ describe('WorkspaceSettings', () => {
   })
 
   it('requires typing the exact workspace name before deleting, then cleans up and redirects', async () => {
-    show()
+    show('danger')
     fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
     const dialog = screen.getByRole('dialog')
     const confirmBtn = dialog.querySelector('button[type="submit"]') as HTMLButtonElement
@@ -188,7 +222,7 @@ describe('WorkspaceSettings', () => {
   })
 
   it('cancel closes the delete dialog without deleting', () => {
-    show()
+    show('danger')
     fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -197,7 +231,7 @@ describe('WorkspaceSettings', () => {
 
   it('shows the error in the dialog and keeps the workspace when deletion fails', async () => {
     mocks.deleteWorkspace.mockRejectedValue(new Error('Delete failed'))
-    show()
+    show('danger')
     fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
     fireEvent.change(screen.getByLabelText('Type Acme to confirm'), { target: { value: 'Acme' } })
     fireEvent.submit(screen.getByRole('dialog').querySelector('form') as HTMLFormElement)

@@ -33,18 +33,19 @@ export const profiles: Profile[] = [
   },
 ]
 
+// Invite codes follow gen_invite_code (0001_init.sql): 8 of A-Z and 2-9 without I, O, 0, 1.
 export const workspaces: Workspace[] = [
   {
     id: WORKSPACE_ID,
     name: 'Lumen',
-    invite_code: 'k3x9-lumen',
+    invite_code: 'K3X9LMNP',
     owner_id: ME,
     created_at: ago(60 * 24 * 40),
   },
   {
     id: 'ws-side',
     name: 'Side project',
-    invite_code: 'p2q8-side',
+    invite_code: 'P2Q8SDHW',
     owner_id: ME,
     created_at: ago(60 * 24 * 10),
   },

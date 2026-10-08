@@ -54,11 +54,16 @@ const settingsState = (tab) => ({
   path: `${WS}/settings?tab=${tab}`,
   run: (page) =>
     page
-      .getByRole('navigation', { name: 'Settings tabs' })
-      .getByRole('button', { name: tab, exact: true })
-      .and(page.locator('[aria-current="page"]'))
+      // The active section's nav link carries aria-current.
+      .locator('nav [aria-current="page"]')
+      .first()
       .waitFor({ timeout: SHORT }),
 })
+async function createWorkspace(page) {
+  await page.getByRole('textbox', { name: 'Workspace name' }).fill('Lumen', { timeout: SHORT })
+  await page.getByRole('button', { name: 'Create workspace' }).click()
+  await page.getByRole('button', { name: 'Continue' }).waitFor({ timeout: SHORT })
+}
 const STATES = {
   palette: {
     path: WS,
@@ -263,7 +268,41 @@ const STATES = {
   'settings-profile': settingsState('profile'),
   'settings-appearance': settingsState('appearance'),
   'settings-workspace': settingsState('workspace'),
-  'settings-account': settingsState('account'),
+  'settings-members': settingsState('members'),
+  'settings-notifications': settingsState('notifications'),
+  'settings-claude': settingsState('claude'),
+  'settings-danger': settingsState('danger'),
+  // The inline "Saved" tick after a field autosaves on blur.
+  'settings-saved': {
+    path: `${WS}/settings?tab=profile`,
+    run: async (page) => {
+      const field = page.getByRole('textbox', { name: 'Display name' })
+      await field.fill('Sam Rivera', { timeout: SHORT })
+      await field.press('Tab')
+      await page.getByRole('status').getByText('Saved').waitFor({ timeout: SHORT })
+    },
+  },
+  // The type-to-confirm delete-account dialog, with the phrase typed.
+  'settings-delete-dialog': {
+    path: `${WS}/settings?tab=danger`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Delete account' }).click({ timeout: SHORT })
+      const dialog = page.getByRole('dialog')
+      await dialog.getByRole('textbox').fill('delete my account', { timeout: SHORT })
+    },
+  },
+  // Onboarding step 02 (invite) and 03 (first bug), reached by creating a workspace.
+  'onboarding-invite': { path: '/app?new=1', run: createWorkspace },
+  'onboarding-first-bug': {
+    path: '/app?new=1',
+    run: async (page) => {
+      await createWorkspace(page)
+      await page.getByRole('button', { name: 'Continue' }).click({ timeout: SHORT })
+      await page
+        .getByRole('button', { name: 'Continue' })
+        .waitFor({ state: 'detached', timeout: SHORT })
+    },
+  },
 }
 
 const requested = list('routes', null)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Profile } from '../lib/types'
-import { readableAvatarColor } from '../lib/avatarColor'
+import { avatarDarkColor, avatarPaletteColor } from '../lib/avatarColor'
 import { cn, initials } from '../lib/utils'
 
 export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg'
@@ -50,10 +50,15 @@ export function Avatar({ profile, size = 'md', ring = false, className }: Avatar
     )
   }
 
+  const color = avatarPaletteColor(profile.avatar_color)
   return (
     <span
-      className={cn(base, 'text-white')}
-      style={{ backgroundColor: readableAvatarColor(profile.avatar_color) }}
+      // A 1px inset hairline keeps the disc's edge on any page; darkroom swaps in the lifted ink.
+      className={cn(
+        base,
+        'text-white shadow-[inset_0_0_0_1px_rgb(28_27_24/0.12)] dark:bg-(--avatar-dark)! dark:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.16)]',
+      )}
+      style={{ backgroundColor: color, ['--avatar-dark' as string]: avatarDarkColor(color) }}
       aria-label={profile.display_name}
     >
       {initials(profile.display_name)}

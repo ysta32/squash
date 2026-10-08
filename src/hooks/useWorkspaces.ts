@@ -29,7 +29,7 @@ export function inviteUrl(code: string): string {
 const ERROR_MESSAGES: Record<string, string> = {
   member_limit: 'This workspace is full (10 members).',
   workspace_limit: 'You can own up to 5 workspaces.',
-  invalid_code: "That invite code doesn't exist.",
+  invalid_code: 'That invite code doesn’t exist.',
   not_owner: 'Only the owner can do that.',
 }
 

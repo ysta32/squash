@@ -8,15 +8,23 @@ describe('Avatar', () => {
   afterEach(cleanup)
 
   it('renders initials fallback on avatar_color', () => {
-    render(<Avatar profile={{ ...base, avatar_color: '#b91c1c', avatar_url: null }} />)
+    render(<Avatar profile={{ ...base, avatar_color: '#b42318', avatar_url: null }} />)
     const el = screen.getByText('AL')
-    expect(el.style.backgroundColor).toBe('rgb(185, 28, 28)')
+    expect(el.style.backgroundColor).toBe('rgb(180, 35, 24)')
   })
 
-  it('darkens a low-contrast avatar_color behind the white initials', () => {
+  it('maps an off-palette avatar_color onto the curated palette behind the white initials', () => {
     render(<Avatar profile={{ ...base, avatar_url: null }} />)
     const el = screen.getByText('AL')
-    expect(el.style.backgroundColor).toBe('rgb(237, 0, 0)')
+    // #ff0000 lands on Vermilion (#b42318), the nearest-hue palette ink.
+    expect(el.style.backgroundColor).toBe('rgb(180, 35, 24)')
+  })
+
+  it('hands dark mode the lifted ink for the same palette color', () => {
+    render(<Avatar profile={{ ...base, avatar_color: '#57534b', avatar_url: null }} />)
+    const el = screen.getByText('AL')
+    expect(el.style.getPropertyValue('--avatar-dark')).toBe('#787267')
+    expect(el.className).toContain('dark:bg-(--avatar-dark)!')
   })
 
   it('renders an image when avatar_url is set', () => {
