@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { sessionEpoch } from '../../lib/sessionEpoch'
 
 /** How long the inline "Saved" tick stays before the row goes quiet again. */
 export const SAVED_MS = 2500
@@ -18,6 +19,10 @@ export type SaveState =
  * teammate edited the field) the server value wins again.
  */
 interface SaveLine {
+  /** The session epoch the line belongs to; lines from an earlier session are dropped. */
+  epoch: number
+  /** Sequence number of the newest queued save (identity, not value: A → B → A is two saves). */
+  seq: number
   /** The server value when the line started. */
   server: unknown
   /** True when every queued save has finished. */
@@ -30,6 +35,17 @@ interface SaveLine {
   written: { value: unknown } | null
 }
 const lines = new Map<string, SaveLine>()
+/** Drained lines kept at most; the oldest idle ones are evicted first (Map keeps insertion order). */
+const MAX_LINES = 64
+let nextSeq = 0
+
+function evictIdle() {
+  if (lines.size <= MAX_LINES) return
+  for (const [key, line] of lines) {
+    if (lines.size <= MAX_LINES) break
+    if (line.idle) lines.delete(key)
+  }
+}
 
 export interface CommitOptions {
   /** Runs when this save fails and it was still the newest one queued for the field. */
@@ -47,6 +63,10 @@ export interface CommitOptions {
  */
 function lineFor(key: string, server: unknown): SaveLine | undefined {
   const line = lines.get(key)
+  if (line && line.epoch !== sessionEpoch()) {
+    lines.delete(key)
+    return undefined
+  }
   if (line && line.idle && !Object.is(line.server, server)) {
     lines.delete(key)
     return undefined
@@ -87,6 +107,8 @@ export function useAutosave<T>(key: string, server: T, fallbackError: string) {
       const line = lineFor(key, server)
       if (Object.is(value, line ? line.queued : server)) return Promise.resolve()
       const current: SaveLine = line ?? {
+        epoch: sessionEpoch(),
+        seq: 0,
         server,
         idle: true,
         tail: Promise.resolve(),
@@ -94,19 +116,24 @@ export function useAutosave<T>(key: string, server: T, fallbackError: string) {
         written: null,
       }
       const baseline = current.server
+      const seq = ++nextSeq
+      current.seq = seq
       current.queued = value
       current.idle = false
       lines.set(key, current)
+      evictIdle()
 
       const id = ++latest.current
       setState({ status: 'saving' })
       const step = async () => {
+        // Queued under a session that has since ended (sign-out, account switch): never run it.
+        if (current.epoch !== sessionEpoch()) return false
         const before = current.written ? current.written.value : baseline
         if (Object.is(value, before)) return false
         try {
           await write(value)
         } catch (cause) {
-          const newest = Object.is(current.queued, value)
+          const newest = current.seq === seq
           // Let the same value be retried, and roll the field back to what the server has.
           if (newest) current.queued = before
           if (newest && mounted.current) options.onFail?.(before)
