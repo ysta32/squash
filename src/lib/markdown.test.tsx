@@ -22,6 +22,15 @@ describe('Markdown', () => {
     expect(c.querySelector('code')?.textContent).toBe('x < y')
   })
 
+  it('keeps short inline code on one line and lets long code wrap inside itself', () => {
+    const c = html('Raise the `z-index` above `src/components/checkout/CookieBannerOverlay.tsx`')
+    const [short, long] = Array.from(c.querySelectorAll('code'))
+    expect(short).toHaveTextContent('z-index')
+    expect(short).toHaveClass('font-mono', 'whitespace-nowrap')
+    expect(long).toHaveClass('font-mono', '[overflow-wrap:anywhere]')
+    expect(long).not.toHaveClass('whitespace-nowrap')
+  })
+
   it('renders fenced code blocks without interpreting contents', () => {
     const c = html('```\n**not bold**\n<b>x</b>\n```')
     expect(c.querySelector('pre code')?.textContent).toBe('**not bold**\n<b>x</b>')

@@ -108,22 +108,27 @@ function PopoverBody({ mode, onClose, onConfirm, placement }: Omit<ResolvePopove
           <Button
             variant="ghost"
             size="sm"
-            className={cn('pointer-coarse:h-11', sheet && 'max-sm:h-[44px]')}
+            className={cn('pointer-coarse:h-[3.1429rem]', sheet && 'max-sm:h-[44px]')}
             onClick={() => confirm(false)}
           >
-            {verb} without note
+            {/* Short enough to sit beside the primary on a 320px phone sheet. */}
+            Skip note
           </Button>
           <Button
             variant="primary"
             size="sm"
-            className={cn('pointer-coarse:h-11', sheet && 'max-sm:h-[44px] max-sm:flex-1')}
+            className={cn('pointer-coarse:h-[3.1429rem]', sheet && 'max-sm:h-[44px] max-sm:flex-1')}
             onClick={() => confirm(true)}
             title={`${isMac ? '⌘' : 'Ctrl'}+Enter`}
           >
             {verb}
             <span
               aria-hidden="true"
-              className="-mr-0.5 font-mono text-[11px] opacity-80 pointer-coarse:hidden"
+              // The shortcut means nothing on touch, or on the phone sheet.
+              className={cn(
+                '-mr-0.5 font-mono text-[11px] opacity-80 pointer-coarse:hidden',
+                sheet && 'max-sm:hidden',
+              )}
             >
               {isMac ? '⌘↵' : 'Ctrl↵'}
             </span>

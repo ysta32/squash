@@ -128,42 +128,55 @@ describe('FixRecord', () => {
     expect(link.getAttribute('rel')?.split(' ')).toContain('noopener')
   })
 
-  it('shows a running run with its progress state and start time', () => {
-    show([
-      run({
-        status: 'running',
-        commit_sha: null,
-        pr_url: null,
-        files_changed: null,
-        finished_at: null,
-        started_at: ago(2),
-      }),
+  it('renders nothing until a run has a commit: a run in flight is the Claude panel’s', () => {
+    const running = run({
+      status: 'running',
+      commit_sha: null,
+      pr_url: null,
+      files_changed: null,
+      finished_at: null,
+      started_at: ago(2),
+    })
+    const live = show([running])
+    expect(live.container).toBeEmptyDOMElement()
+    live.unmount()
+    const failed = show([
+      run({ status: 'failed', commit_sha: null, pr_url: null, files_changed: null }),
+      run({ id: 'r2', status: 'cancelled', commit_sha: null, pr_url: null }),
     ])
+    expect(failed.container).toBeEmptyDOMElement()
+  })
+
+  it('shows a committed run still in flight with its progress state and start time', () => {
+    show([run({ status: 'running', pr_url: null, finished_at: null, started_at: ago(2) })])
     const region = label()
     expect(within(region).getByText('Running')).toBeInTheDocument()
-    expect(within(region).getByText('No commit yet')).toBeInTheDocument()
+    expect(within(region).getByText('e3f9a12')).toBeInTheDocument()
     expect(within(region).getByText(/^Started/)).toBeInTheDocument()
     expect(within(region).getByText('2m ago')).toBeInTheDocument()
     expect(region.querySelector('.animate-indeterminate')).not.toBeNull()
-    expect(within(region).queryByRole('link')).toBeNull()
   })
 
-  it('says "No commit" for a finished run that left none', () => {
-    show([run({ status: 'failed', commit_sha: null, pr_url: null, files_changed: null })])
+  it('leads with the committed run, folding newer finished runs and leaving out runs in flight', () => {
+    show([
+      run({ id: 'r0', status: 'running', commit_sha: null, finished_at: null }),
+      run({ id: 'r1', status: 'cancelled', commit_sha: null, pr_url: null, files_changed: null }),
+      run({ id: 'r2' }),
+    ])
     const region = label()
-    expect(within(region).getByText('Failed')).toBeInTheDocument()
-    expect(within(region).getByText('No commit')).toBeInTheDocument()
-    expect(within(region).queryByText(/files/)).toBeNull()
+    expect(within(region).getByText('Succeeded')).toBeInTheDocument()
+    expect(within(region).queryByText('Running')).toBeNull()
     expect(region.querySelector('.animate-indeterminate')).toBeNull()
+    fireEvent.click(screen.getByText('1 other run'))
+    const items = within(screen.getByRole('list', { name: 'Other fix runs' })).getAllByRole(
+      'listitem',
+    )
+    expect(items).toHaveLength(1)
+    expect(within(items[0]).getByText('Cancelled')).toBeInTheDocument()
+    expect(within(items[0]).getByText('No commit')).toBeInTheDocument()
   })
 
-  it('shows a cancelled run', () => {
-    show([run({ status: 'cancelled', commit_sha: null, pr_url: null })])
-    expect(within(label()).getByText('Cancelled')).toBeInTheDocument()
-    expect(within(label()).getByText('No commit')).toBeInTheDocument()
-  })
-
-  it('folds earlier runs under a collapsed "N earlier runs" toggle', () => {
+  it('folds other runs under a collapsed "N other runs" toggle', () => {
     show([
       run(),
       run({ id: 'r2', status: 'failed', commit_sha: null, pr_url: null, files_changed: null }),
@@ -174,11 +187,11 @@ describe('FixRecord', () => {
         pr_url: 'https://github.com/acme/app/pull/7',
       }),
     ])
-    const toggle = screen.getByText('2 earlier runs')
+    const toggle = screen.getByText('2 other runs')
     const details = toggle.closest('details')!
     expect(details).not.toHaveAttribute('open')
     fireEvent.click(toggle)
-    const list = screen.getByRole('list', { name: 'Earlier fix runs' })
+    const list = screen.getByRole('list', { name: 'Other fix runs' })
     const items = within(list).getAllByRole('listitem')
     expect(items).toHaveLength(2)
     expect(within(items[0]).getByText('Failed')).toBeInTheDocument()
@@ -189,12 +202,12 @@ describe('FixRecord', () => {
     expect(link.getAttribute('rel')?.split(' ')).toContain('noopener')
   })
 
-  it('says "1 earlier run" in the singular and nothing with a single run', () => {
+  it('says "1 other run" in the singular and nothing with a single run', () => {
     const one = show([run(), run({ id: 'r2' })])
-    expect(screen.getByText('1 earlier run')).toBeInTheDocument()
+    expect(screen.getByText('1 other run')).toBeInTheDocument()
     one.unmount()
     show([run()])
-    expect(screen.queryByText(/earlier run/)).toBeNull()
+    expect(screen.queryByText(/other run/)).toBeNull()
   })
 
   it('shows a load error inline', () => {

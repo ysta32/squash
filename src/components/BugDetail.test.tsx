@@ -298,7 +298,7 @@ describe('BugDetail', () => {
   it('confirms with Cmd+Enter and resolves without note', async () => {
     const { onResolve } = setup(makeBug())
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
     expect(onResolve).toHaveBeenLastCalledWith('b1', null)
 
@@ -332,7 +332,7 @@ describe('BugDetail', () => {
     )
     expect(screen.getByText('“Fixed it”')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Reopen without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
     expect(onReopen).toHaveBeenCalledWith('b1', null)
   })
@@ -412,7 +412,7 @@ describe('BugDetail', () => {
       .mockResolvedValueOnce()
     setup(makeBug(), { onResolve })
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent('Could not resolve #42.')
@@ -485,8 +485,15 @@ describe('BugDetail', () => {
     const thumbs = screen.getAllByRole('button', { name: /^Open screenshot/ })
     expect(within(thumbs[0]).queryByTestId('annotation-overlay')).toBeNull()
     const overlay = within(thumbs[1]).getByTestId('annotation-overlay')
-    expect(overlay).toHaveAttribute('preserveAspectRatio', 'xMinYMin slice')
+    // The thumb is framed on its marks: image and overlay share one positioned box.
+    expect(overlay).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet')
     expect(overlay.querySelector('[data-pin="1"]')).not.toBeNull()
+    const framed = overlay.parentElement as HTMLElement
+    expect(framed.querySelector('img')).not.toBeNull()
+    expect(framed.style.left).toBe('0%')
+    expect(framed.style.top).toBe('0%')
+    expect(framed.style.width).toBe('100%')
+    expect(parseFloat(framed.style.height)).toBeCloseTo(133.333, 2)
 
     const checklist = screen.getByRole('list', { name: 'Pinned issues' })
     expect(checklist).toHaveTextContent('Pin 1: Banner overlaps Pay now')

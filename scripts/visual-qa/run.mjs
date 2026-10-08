@@ -154,6 +154,20 @@ const STATES = {
         )
     },
   },
+  // The viewer zoomed in on pin 1: a transform zoom on wide screens, a scrollable pan on phones.
+  'lightbox-zoom': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: 'Open screenshot 1' }).click({ timeout: SHORT })
+      const image = page.getByRole('dialog', { name: 'Screenshot viewer' }).locator('img').first()
+      await image.evaluate((img) =>
+        Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 5_000))]),
+      )
+      const box = await image.boundingBox()
+      if (box) await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.35)
+      await page.waitForTimeout(300)
+    },
+  },
   // The bug detail scrolls inside its own pane, so a full-page shot never reaches the Claude panel,
   // timeline and comments; this scrolls that pane to the end first.
   'detail-timeline': {
@@ -171,13 +185,13 @@ const STATES = {
     },
   },
   // Proof of fix on the resolved #18: the fix record scrolled to the top of the detail pane, its
-  // earlier runs expanded and the before/after slider moved off centre with the keyboard.
+  // other runs expanded and the before/after slider moved off centre with the keyboard.
   'fix-record': {
     path: `${WS}/bug/18`,
     run: async (page) => {
       const slider = page.getByRole('slider', { name: /^Before and after/ })
       await slider.waitFor({ timeout: SHORT })
-      await page.getByText('2 earlier runs', { exact: true }).click({ timeout: SHORT })
+      await page.getByText('2 other runs', { exact: true }).click({ timeout: SHORT })
       await slider.focus()
       await slider.press('ArrowLeft')
       for (const alt of ['Before the fix', 'After the fix']) {
@@ -192,13 +206,14 @@ const STATES = {
         .evaluate((el) => el.scrollIntoView({ block: 'start' }))
     },
   },
-  // A run still in progress on #24 (next to the live Claude panel).
+  // A run still in progress on #24: only the live Claude panel shows it (no fix record until a
+  // run has a commit).
   'fix-running': {
     path: `${WS}/bug/24`,
     run: async (page) => {
-      const record = page.getByRole('region', { name: 'Fix record' })
-      await record.getByText('Running', { exact: true }).waitFor({ timeout: SHORT })
-      await record.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      const panel = page.getByRole('region', { name: 'Claude progress' })
+      await panel.waitFor({ timeout: SHORT })
+      await panel.evaluate((el) => el.scrollIntoView({ block: 'center' }))
     },
   },
   'resolve-popover': {

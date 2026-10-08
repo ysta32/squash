@@ -5,8 +5,10 @@ import type { UseFixRunsResult } from '../hooks/useFixRuns'
 import {
   FIX_EVIDENCE_LABEL,
   diffCells,
+  fixRecordRuns,
   prLabel,
   shortSha,
+  type CommittedFixRun,
   type FixRun,
   type FixRunStatus,
 } from '../lib/fixRuns'
@@ -34,11 +36,6 @@ const STATUS: Record<FixRunStatus, { label: string; tone: string }> = {
   cancelled: { label: 'Cancelled', tone: 'text-ink-3' },
 }
 
-/** A run left no commit when it finished without one (the helper's noCommit, or no sha at all). */
-function noCommit(run: FixRun): boolean {
-  return run.status !== 'running' && run.commit_sha === null
-}
-
 /** Re-renders every 30s while a run is in flight so "started 2m ago" stays current. */
 function useNow(live: boolean): Date {
   const [now, setNow] = useState(() => new Date())
@@ -58,15 +55,17 @@ function frameStyle(before: BugAttachment): CSSProperties {
 }
 
 /**
- * Proof of fix (DESIGN.md section 2a #1): the Claude Code runs recorded on this bug. The latest is
- * a specimen label (`FIX · sha · branch`, status, diff, PR, time); earlier ones fold away beneath
- * it. The evidence is self-reported by the local helper, and says so. Renders nothing until the
- * bug has a run, and nothing at all on servers without the fix_runs table.
+ * Proof of fix (DESIGN.md section 2a #1): the Claude Code runs recorded on this bug. The newest
+ * run with a commit is a specimen label (`FIX · sha · branch`, status, diff, PR, time, and that the
+ * helper reported it: the evidence is self-reported); other finished runs fold away beneath it.
+ * Renders nothing until a run has a commit (a run in flight shows in the Claude panel), and
+ * nothing at all on servers without the fix_runs table.
  */
 export function FixRecord({ bugId, fix, attachments }: FixRecordProps) {
   const { runs, available, error } = fix
-  const latest = runs[0]
-  const now = useNow(runs.some((r) => r.status === 'running'))
+  const record = fixRecordRuns(runs)
+  const latest = record?.lead
+  const now = useNow(latest?.status === 'running')
 
   if (!available || (!latest && !error)) return null
 
@@ -75,7 +74,7 @@ export function FixRecord({ bugId, fix, attachments }: FixRecordProps) {
   const before = attachments.find((a) => !afterIds.has(a.id))
   const proof = runs.find((r) => r.after_attachment_id && byId.has(r.after_attachment_id))
   const after = proof?.after_attachment_id ? byId.get(proof.after_attachment_id) : undefined
-  const earlier = runs.slice(1)
+  const others = record?.others ?? []
   const headingId = `fix-record-${bugId}`
 
   return (
@@ -102,7 +101,6 @@ export function FixRecord({ bugId, fix, attachments }: FixRecordProps) {
       {latest && (
         <>
           <FixLabel run={latest} now={now} />
-          <p className="mt-2 text-xs text-ink-3">{FIX_EVIDENCE_LABEL}</p>
 
           {latest.summary && (
             <p
@@ -134,7 +132,7 @@ export function FixRecord({ bugId, fix, attachments }: FixRecordProps) {
             </figure>
           )}
 
-          {earlier.length > 0 && <EarlierRuns runs={earlier} now={now} />}
+          {others.length > 0 && <OtherRuns runs={others} now={now} />}
         </>
       )}
     </section>
@@ -190,7 +188,7 @@ function Comparison({
           <button
             type="button"
             onClick={retry}
-            className="t focus-ring rounded-sm font-medium text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink pointer-coarse:min-h-11"
+            className="t focus-ring rounded-sm font-medium text-ink underline decoration-line-input underline-offset-2 hover:decoration-ink pointer-coarse:min-h-[3.1429rem]"
           >
             Retry
           </button>
@@ -222,8 +220,11 @@ const SEP = (
   </span>
 )
 
-/** The latest run as a specimen label: identity and status on top, the evidence under a hairline. */
-function FixLabel({ run, now }: { run: FixRun; now: Date }) {
+/**
+ * The lead run as a specimen label: identity and status on top, the evidence under a hairline,
+ * ending with who reported it.
+ */
+function FixLabel({ run, now }: { run: CommittedFixRun; now: Date }) {
   const status = STATUS[run.status]
   const running = run.status === 'running'
   const when = running ? run.started_at : (run.finished_at ?? run.started_at)
@@ -234,13 +235,9 @@ function FixLabel({ run, now }: { run: FixRun; now: Date }) {
         <p className="min-w-0 truncate">
           <span className="font-medium text-ink">Fix</span>
           {SEP}
-          {run.commit_sha ? (
-            <span title={run.commit_sha} className="font-medium text-ink normal-case">
-              {shortSha(run.commit_sha)}
-            </span>
-          ) : (
-            <span>{running ? 'No commit yet' : 'No commit'}</span>
-          )}
+          <span title={run.commit_sha} className="font-medium text-ink normal-case">
+            {shortSha(run.commit_sha)}
+          </span>
           {run.branch && (
             <>
               {SEP}
@@ -289,6 +286,8 @@ function FixLabel({ run, now }: { run: FixRun; now: Date }) {
             {ago(when, now)}
           </time>
         </span>
+        {SEP}
+        <span className="whitespace-nowrap text-ink-3">{FIX_EVIDENCE_LABEL}</span>
       </p>
     </div>
   )
@@ -356,12 +355,12 @@ function RunGlyph({ status, className }: { status: FixRunStatus; className?: str
   )
 }
 
-/** Earlier runs, collapsed: one hairline-ruled line each. */
-function EarlierRuns({ runs, now }: { runs: FixRun[]; now: Date }) {
-  const count = `${runs.length} earlier ${runs.length === 1 ? 'run' : 'runs'}`
+/** The other finished runs, newest first and collapsed: one hairline-ruled line each. */
+function OtherRuns({ runs, now }: { runs: FixRun[]; now: Date }) {
+  const count = `${runs.length} other ${runs.length === 1 ? 'run' : 'runs'}`
   return (
     <details className="group mt-6">
-      <summary className="t focus-ring flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-sm text-ink-2 select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+      <summary className="t focus-ring flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-sm text-ink-2 select-none hover:text-ink pointer-coarse:min-h-[3.1429rem] [&::-webkit-details-marker]:hidden">
         <ChevronRight
           size={14}
           strokeWidth={1.5}
@@ -371,11 +370,10 @@ function EarlierRuns({ runs, now }: { runs: FixRun[]; now: Date }) {
         />
         {count}
       </summary>
-      <ol aria-label="Earlier fix runs" className="mt-2 border-t border-line">
+      <ol aria-label="Other fix runs" className="mt-2 border-t border-line">
         {runs.map((run) => {
           const status = STATUS[run.status]
-          const when =
-            run.status === 'running' ? run.started_at : (run.finished_at ?? run.started_at)
+          const when = run.finished_at ?? run.started_at
           return (
             <li
               key={run.id}
@@ -391,9 +389,7 @@ function EarlierRuns({ runs, now }: { runs: FixRun[]; now: Date }) {
                     {shortSha(run.commit_sha)}
                   </span>
                 ) : (
-                  <span className="text-ink-2">
-                    {noCommit(run) ? 'No commit' : 'No commit yet'}
-                  </span>
+                  <span className="text-ink-2">No commit</span>
                 )}
                 {run.branch && (
                   <span title={run.branch} className="font-mono text-ink-3">

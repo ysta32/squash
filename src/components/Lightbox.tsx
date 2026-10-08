@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
@@ -73,7 +73,8 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
       aria-modal="true"
       aria-label="Screenshot viewer"
       // One dark glass scrim in both themes: a screenshot reads best on a dim surround.
-      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] px-4 py-16 backdrop-blur-[14px] sm:px-20"
+      // Phones: the image runs edge to edge, with the caption and then prev/next right under it.
+      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] py-16 backdrop-blur-[14px] sm:px-20"
       onClick={onClose}
     >
       <button
@@ -88,8 +89,36 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
       >
         <X size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
       </button>
+      <ZoomImage
+        key={`${safeIndex}:${url}`}
+        url={url}
+        alt={`Screenshot ${safeIndex + 1} of ${count}`}
+        markup={markup?.[safeIndex] ?? null}
+      />
+      <p
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-full shrink-0 text-center font-mono max-sm:px-4 text-[12px] tracking-[0.06em] text-balance text-white/72 uppercase sm:truncate"
+      >
+        Fig.{' '}
+        <span>
+          {safeIndex + 1} / {count}
+        </span>
+        {/* A no-break space ties each dot to the field before it, so a wrapped line never starts
+            with one. On phones the file name takes its own line, cut with an ellipsis. */}
+        {detail && (
+          <span className="normal-case [overflow-wrap:anywhere]">{`\u00a0· ${detail.replaceAll(' · ', '\u00a0· ')}`}</span>
+        )}
+        {file && (
+          <>
+            <span className="normal-case max-sm:hidden">{'\u00a0· '}</span>
+            <span className="normal-case max-sm:block max-sm:truncate">{file}</span>
+          </>
+        )}
+      </p>
       {count > 1 && (
-        <>
+        // Beside the image from `sm` up (positioned on the viewer); on phones a row in the flow
+        // under the caption, in thumb reach and never over the screenshot.
+        <div className="contents max-sm:flex max-sm:shrink-0 max-sm:gap-6">
           <button
             type="button"
             aria-label="Previous screenshot"
@@ -114,48 +143,25 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
           >
             <ChevronRight size={20} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           </button>
-        </>
+        </div>
       )}
-      <ZoomImage
-        key={`${safeIndex}:${url}`}
-        url={url}
-        alt={`Screenshot ${safeIndex + 1} of ${count}`}
-        markup={markup?.[safeIndex] ?? null}
-      />
-      <p
-        onClick={(e) => e.stopPropagation()}
-        className="max-w-full shrink-0 text-center font-mono text-[12px] tracking-[0.06em] text-balance text-white/72 uppercase sm:truncate"
-      >
-        Fig.{' '}
-        <span>
-          {safeIndex + 1} / {count}
-        </span>
-        {/* A no-break space ties each dot to the field before it, so a wrapped line never starts
-            with one. On phones the file name takes its own line, cut with an ellipsis. */}
-        {detail && (
-          <span className="normal-case [overflow-wrap:anywhere]">{`\u00a0· ${detail.replaceAll(' · ', '\u00a0· ')}`}</span>
-        )}
-        {file && (
-          <>
-            <span className="normal-case max-sm:hidden">{'\u00a0· '}</span>
-            <span className="normal-case max-sm:block max-sm:truncate">{file}</span>
-          </>
-        )}
-      </p>
     </div>,
     document.body,
   )
 }
 
-/** Prev/next: beside the image from `sm` up; on phones they sit under it, in thumb reach, so they
- *  never cover the screenshot. */
-const SIDE_NAV =
-  'bottom-[max(1rem,env(safe-area-inset-bottom))] sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2'
+/** Prev/next: beside the image from `sm` up; on phones in the flow under the caption. */
+const SIDE_NAV = 'max-sm:static sm:top-1/2 sm:-translate-y-1/2'
 
 /** One control style in both themes, a true 44px: paper at 90% with a light hairline, so it
  *  stays visible on the dark scrim. */
 const CHROME_BUTTON =
   't focus-ring absolute z-10 inline-flex size-[44px] items-center justify-center rounded-full border border-white/12 bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'
+
+/** Phones (Tailwind's `max-sm`): tap zooms into a natively scrollable, pannable image. */
+function isPhone(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(width < 40rem)').matches
+}
 
 function ZoomImage({
   url,
@@ -168,23 +174,51 @@ function ZoomImage({
 }) {
   const [zoomed, setZoomed] = useState(false)
   const [origin, setOrigin] = useState('50% 50%')
+  // Phone zoom: the image laid out at twice its fitted width, centred on the tapped point.
+  const [pan, setPan] = useState<{ width: number; x: number; y: number } | null>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!pan || !scroller) return
+    scroller.scrollLeft = pan.x * scroller.scrollWidth - scroller.clientWidth / 2
+    scroller.scrollTop = pan.y * scroller.scrollHeight - scroller.clientHeight / 2
+  }, [pan])
+
+  function pointAt(e: ReactMouseEvent<HTMLImageElement>): { x: number; y: number } {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return { x: 0.5, y: 0.5 }
+    const clamp = (v: number) => Math.min(1, Math.max(0, v))
+    return {
+      x: clamp((e.clientX - rect.left) / rect.width),
+      y: clamp((e.clientY - rect.top) / rect.height),
+    }
+  }
 
   function originAt(e: ReactMouseEvent<HTMLImageElement>): string {
-    const rect = e.currentTarget.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return '50% 50%'
-    const x = ((e.clientX - rect.left) / rect.width) * 100
-    const y = ((e.clientY - rect.top) / rect.height) * 100
-    const clamp = (v: number) => Math.min(100, Math.max(0, v))
-    return `${clamp(x)}% ${clamp(y)}%`
+    const { x, y } = pointAt(e)
+    return `${x * 100}% ${y * 100}%`
   }
 
   function onClick(e: ReactMouseEvent<HTMLImageElement>) {
     e.stopPropagation()
+    if (pan) {
+      setPan(null)
+      return
+    }
+    if (!zoomed && isPhone()) {
+      const width = e.currentTarget.getBoundingClientRect().width
+      if (width > 0) {
+        setPan({ width: width * 2, ...pointAt(e) })
+        return
+      }
+    }
     if (!zoomed) setOrigin(originAt(e))
     setZoomed((z) => !z)
   }
 
   function onWheel(e: ReactWheelEvent<HTMLImageElement>) {
+    if (pan) return
     if (e.deltaY < 0 && !zoomed) {
       setOrigin(originAt(e))
       setZoomed(true)
@@ -193,31 +227,48 @@ function ZoomImage({
     }
   }
 
+  const zoomedIn = zoomed || pan !== null
   // The wrapper shrinks to the image, so the markup overlay covers exactly its pixels and
-  // zooms with it.
+  // zooms with it. On a phone zoom the scroller pans it natively (both axes).
   return (
     <div
-      style={{ transform: zoomed ? 'scale(2)' : 'scale(1)', transformOrigin: origin }}
-      className="relative min-h-0 max-w-full animate-dialog transition-transform duration-150"
-    >
-      <img
-        src={url}
-        alt={alt}
-        draggable={false}
-        onClick={onClick}
-        onWheel={onWheel}
-        className={cn(
-          'block max-h-[calc(100dvh-10rem)] max-w-full rounded-lg object-contain shadow-elev-3 select-none',
-          zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in',
-        )}
-      />
-      {markup && (
-        <AnnotationOverlay
-          annotations={markup.annotations}
-          width={markup.width}
-          height={markup.height}
-        />
+      ref={scrollerRef}
+      className={cn(
+        'relative min-h-0 max-w-full animate-dialog',
+        pan && 'w-full shrink overflow-auto overscroll-contain',
       )}
+    >
+      <div
+        style={
+          pan
+            ? { width: pan.width }
+            : { transform: zoomed ? 'scale(2)' : 'scale(1)', transformOrigin: origin }
+        }
+        className={cn(
+          'relative transition-transform duration-150',
+          pan ? 'max-w-none' : 'max-w-full',
+        )}
+      >
+        <img
+          src={url}
+          alt={alt}
+          draggable={false}
+          onClick={onClick}
+          onWheel={onWheel}
+          className={cn(
+            'block rounded-lg object-contain shadow-elev-3 select-none max-sm:rounded-none',
+            pan ? 'h-auto w-full' : 'max-h-[calc(100dvh-10rem)] max-w-full',
+            zoomedIn ? 'cursor-zoom-out' : 'cursor-zoom-in',
+          )}
+        />
+        {markup && (
+          <AnnotationOverlay
+            annotations={markup.annotations}
+            width={markup.width}
+            height={markup.height}
+          />
+        )}
+      </div>
     </div>
   )
 }

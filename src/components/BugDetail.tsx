@@ -41,6 +41,7 @@ import { Lightbox, type LightboxMarkup } from './Lightbox'
 import { AnnotationChecklist } from './AnnotationChecklist'
 import { AnnotationOverlay } from './AnnotationOverlay'
 import { pinChecklist, parseAnnotations } from '../lib/annotations'
+import { thumbCrop } from '../lib/thumbCrop'
 import { ResolvePopover } from './ResolvePopover'
 import { Kbd, buttonClass, menuItemClass } from './ui'
 
@@ -968,7 +969,7 @@ function MoreMenu({ items }: { items: MenuItem[] }) {
                 }}
                 className={cn(
                   menuItemClass,
-                  'focus-ring-inset pointer-coarse:h-11',
+                  'focus-ring-inset pointer-coarse:h-[3.1429rem]',
                   // `!`: menuItemClass sets text-ink, which would otherwise win on source order.
                   item.danger && !item.disabled && 'text-danger! [&>svg]:text-danger!',
                   item.className,
@@ -1100,14 +1101,7 @@ function DeleteDialog({
           >
             Cancel
           </button>
-          <button
-            disabled={busy}
-            className={buttonClass(
-              'danger',
-              'md',
-              'border-danger bg-danger text-bg hover:bg-danger hover:opacity-90',
-            )}
-          >
+          <button disabled={busy} className={buttonClass('destructive')}>
             {busy ? 'Deleting…' : `Delete ${noun}`}
           </button>
         </div>
@@ -1119,6 +1113,9 @@ function DeleteDialog({
 /** A screenshot laid on paper: 4:3, 8px radius, specimen-drawer shadow and a 1px inner edge. */
 const THUMB_CLASS =
   't focus-ring group relative block aspect-[4/3] w-full overflow-hidden rounded-lg bg-surface-3 shadow-elev-3 after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--border-1)] hover:-translate-y-0.5'
+
+/** Pin radius on thumbnails, as a fraction of the shot's longer side: legible at 4:3 thumb size. */
+const THUMB_PIN_SIZE = 0.04
 
 function FigureCaption({
   figure,
@@ -1168,6 +1165,13 @@ function AttachmentThumb({
   onOpen: () => void
 }) {
   const url = useSignedUrl(attachment.storage_path)
+  const crop = thumbCrop(
+    attachment.annotations,
+    attachment.width,
+    attachment.height,
+    4 / 3,
+    THUMB_PIN_SIZE,
+  )
   useLayoutEffect(() => {
     onSigned(attachment.storage_path, url)
   }, [attachment.storage_path, url, onSigned])
@@ -1185,18 +1189,28 @@ function AttachmentThumb({
             'cursor-zoom-in disabled:cursor-default disabled:hover:translate-y-0',
           )}
         >
-          {url ? (
-            <>
-              <img src={url} alt="" className="h-full w-full object-cover object-left-top" />
+          {url && crop ? (
+            // Marked shots are framed on their marks; the overlay shares the image's exact box.
+            <span
+              className="absolute"
+              style={{
+                left: `${crop.left}%`,
+                top: `${crop.top}%`,
+                width: `${crop.width}%`,
+                height: `${crop.height}%`,
+              }}
+            >
+              <img src={url} alt="" className="block h-full w-full" />
               <AnnotationOverlay
                 annotations={attachment.annotations}
                 width={attachment.width}
                 height={attachment.height}
-                fit="cover"
-                align="top-left"
-                pinSize={0.04}
+                pinSize={THUMB_PIN_SIZE}
+                className="overflow-visible"
               />
-            </>
+            </span>
+          ) : url ? (
+            <img src={url} alt="" className="h-full w-full object-cover object-left-top" />
           ) : (
             <span className="absolute inset-0 animate-skeleton bg-surface-3" />
           )}
@@ -1295,7 +1309,7 @@ function PendingThumb({
           aria-label="Retry upload"
           title="Retry upload"
           onClick={onRetry}
-          className="t focus-ring absolute top-2 right-2 inline-flex h-7 items-center gap-1 rounded-md bg-surface-2 px-2 text-xs font-medium text-ink shadow-elev-2 hover:text-accent pointer-coarse:h-11"
+          className="t focus-ring absolute top-2 right-2 inline-flex h-7 items-center gap-1 rounded-md bg-surface-2 px-2 text-xs font-medium text-ink shadow-elev-2 hover:text-accent pointer-coarse:h-[3.1429rem]"
         >
           <RotateCw size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           Retry

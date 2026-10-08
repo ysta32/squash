@@ -278,7 +278,7 @@ export const comments: Comment[] = [
     id: 'c-1',
     bug_id: 'bug-24',
     author_id: ME,
-    body: 'Reproduced on iPhone 15 and the Pixel 8 too. The banner is position: fixed with z-index 9999.',
+    body: 'Reproduced on iPhone 15 and the Pixel 8 too. The banner is `position: fixed` with `z-index: 9999`.',
     created_at: ago(4),
   },
   {

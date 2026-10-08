@@ -56,6 +56,8 @@
   --success: #2e772a;
   --warning: #985a00;
   --danger: #b42318;
+  /* text and icons on a --danger fill (the confirm dialog's destructive button) */
+  --on-danger: #ffffff;
   /* motif */
   --highlight: #f9e27d;
   --markup: #e0321c;
@@ -110,6 +112,7 @@
   --success: #6cc46a;
   --warning: #e9a23b;
   --danger: #ff7a70;
+  --on-danger: #141412;
   --highlight: #4a4116;
   --scrim: rgb(0 0 0 / 0.6);
   /* slate grain: pale noise, about 2% average opacity */
@@ -207,6 +210,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
   --color-highlight: var(--highlight);
   --color-markup: var(--markup);
   --color-scrim: var(--scrim);

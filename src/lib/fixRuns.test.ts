@@ -4,12 +4,14 @@ import {
   FIX_EVIDENCE_SOURCE,
   FIX_SUMMARY_MAX,
   buildFixRunInsert,
+  fixRecordRuns,
   formatDiffStat,
   isBranchName,
   isCommitSha,
   isMissingRelation,
   isPrUrl,
   parseFixReport,
+  type FixRun,
 } from './fixRuns'
 
 const SHA = 'a'.repeat(40)
@@ -236,5 +238,34 @@ describe('formatDiffStat', () => {
       '1 file, +0 −0',
     )
     expect(formatDiffStat({ files_changed: null, additions: 1, deletions: 1 })).toBeNull()
+  })
+})
+
+describe('fixRecordRuns', () => {
+  const r = (id: string, status: FixRun['status'], commit_sha: string | null) =>
+    ({ id, status, commit_sha }) as FixRun
+
+  it('is null until a run has a commit, so a run in flight never makes a record', () => {
+    expect(fixRecordRuns([])).toBeNull()
+    expect(fixRecordRuns([r('a', 'running', null)])).toBeNull()
+    expect(fixRecordRuns([r('a', 'failed', null), r('b', 'cancelled', null)])).toBeNull()
+  })
+
+  it('leads with the newest committed run and keeps the other finished runs in order', () => {
+    const runs = [
+      r('new', 'running', null),
+      r('fail', 'failed', null),
+      r('fix', 'succeeded', 'e3f9a12'),
+      r('old', 'succeeded', 'abcdef1'),
+    ]
+    const record = fixRecordRuns(runs)!
+    expect(record.lead.id).toBe('fix')
+    expect(record.others.map((x) => x.id)).toEqual(['fail', 'old'])
+  })
+
+  it('leads with a run still in flight once it has committed', () => {
+    const record = fixRecordRuns([r('live', 'running', 'e3f9a12')])!
+    expect(record.lead.id).toBe('live')
+    expect(record.others).toEqual([])
   })
 })

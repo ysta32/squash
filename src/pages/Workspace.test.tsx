@@ -281,7 +281,7 @@ describe('Workspace', () => {
     mocks.resolveBug.mockRejectedValueOnce(new Error('Resolve denied'))
     show('/app/ws/bug/2')
     press('r')
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
     expect(mocks.resolveBug).toHaveBeenCalledExactlyOnceWith('b2', null)
     expect(screen.getAllByText('Resolve denied').length).toBeGreaterThan(0)
@@ -292,7 +292,7 @@ describe('Workspace', () => {
     mocks.bugs = [makeBug(2, { resolution_note: 'Previous reopen' }), makeBug(1)]
     show('/app/ws/bug/2')
     press('r')
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await screen.findByText('Resolved #2')
     expect(mocks.resolveBug).toHaveBeenCalledWith('b2', null)
     press('j')
@@ -308,7 +308,7 @@ describe('Workspace', () => {
     mocks.bugs = [makeBug(2, { status: 'resolved', resolution_note: 'Original fix' })]
     show('/app/ws/bug/2')
     press('o')
-    fireEvent.click(screen.getByRole('button', { name: 'Reopen without note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
     expect(mocks.resolveBug).toHaveBeenCalledExactlyOnceWith('b2', 'Original fix')
   })

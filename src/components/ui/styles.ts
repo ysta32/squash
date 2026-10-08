@@ -4,7 +4,8 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'dest
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'touch'
 
 // Specimen buttons (DESIGN.md sections 3 and 5). Primary is the accent fill and the only filled
-// button on a screen; secondary is a hairline outline; danger is outlined until a confirm dialog.
+// button on a screen; secondary is a hairline outline; danger is outlined until a confirm dialog,
+// where `destructive` (the --danger fill) is the dialog's confirm button.
 // A disabled primary keeps its accent fill at reduced strength, so the screen's one primary
 // action still reads as the focal point while it waits for valid input (a grey primary reads as
 // a secondary button). Other variants go neutral.
@@ -18,7 +19,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   danger:
     'border border-danger/45 bg-transparent text-danger hover:border-danger hover:bg-danger/8 disabled:border-line disabled:text-ink-3',
   destructive:
-    'border border-transparent bg-danger text-bg hover:opacity-90 disabled:bg-surface-3 disabled:text-ink-3',
+    'border border-transparent bg-danger text-on-danger shadow-elev-1 hover:opacity-90 disabled:opacity-60 disabled:shadow-none',
 }
 
 // Heights: sm 28px, md 31.5px, lg 40px (Tailwind's 0.25rem step is 3.5px at the 14px root).

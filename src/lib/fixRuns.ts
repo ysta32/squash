@@ -207,3 +207,19 @@ export function diffCells(additions: number, deletions: number): ('add' | 'del' 
     ...Array<'none'>(CELLS - filled).fill('none'),
   ]
 }
+
+/** A run that left a commit: the only kind the fix record leads with. */
+export type CommittedFixRun = FixRun & { commit_sha: string }
+
+/**
+ * What the fix record shows, from a bug's runs (newest first). It leads with the newest run that
+ * left a commit; until one has, there is no record (a run in flight is the Claude panel's to
+ * show). The rest are the other finished runs, newest first; runs in flight are left out.
+ */
+export function fixRecordRuns(
+  runs: readonly FixRun[],
+): { lead: CommittedFixRun; others: FixRun[] } | null {
+  const lead = runs.find((r): r is CommittedFixRun => r.commit_sha !== null)
+  if (!lead) return null
+  return { lead, others: runs.filter((r) => r !== lead && r.status !== 'running') }
+}

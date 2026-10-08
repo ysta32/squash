@@ -174,7 +174,7 @@ export function CommentThread({
             onClick={() => void send()}
             title="Send comment (Enter)"
             // Empty: plain unavailable text with no outline; a secondary button once there is text.
-            className="pointer-coarse:h-11 pointer-coarse:px-4 disabled:border-transparent!"
+            className="pointer-coarse:h-[3.1429rem] pointer-coarse:px-4 disabled:border-transparent!"
           >
             Comment
           </Button>
@@ -369,6 +369,6 @@ function CommentItem({
 }
 
 const COMMENT_ACTION =
-  't focus-ring inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:h-11 pointer-coarse:w-11'
+  't focus-ring inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]'
 
 const SECTION_HEADING = 'specimen-label mb-4 text-ink-3'

@@ -176,7 +176,6 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
             className="absolute inset-0 h-full w-full object-cover object-left-top"
           />
         )}
-        <span className={cn(CHIP, 'right-2')}>After</span>
         <div
           className={cn('absolute inset-0', motion)}
           style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
@@ -190,7 +189,6 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
               className="absolute inset-0 h-full w-full object-cover object-left-top"
             />
           )}
-          <span className={cn(CHIP, 'left-2')}>Before</span>
         </div>
         {ready && (
           // Full-width layer moved by transform: translateX(pos%) of the frame's own width.
@@ -213,7 +211,7 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
               aria-valuenow={shown}
               aria-valuetext={`${shown}% before, ${100 - shown}% after`}
               onKeyDown={onKeyDown}
-              className="t focus-ring pointer-events-auto absolute top-1/2 left-0 inline-flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-line-2 bg-surface-2 text-ink shadow-elev-2 pointer-coarse:h-11 pointer-coarse:w-11"
+              className="t focus-ring pointer-events-auto absolute top-1/2 left-0 inline-flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-line-2 bg-surface-2 text-ink shadow-elev-2 pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]"
             >
               <ChevronsLeftRight
                 size={16}
@@ -235,6 +233,3 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
     </div>
   )
 }
-
-const CHIP =
-  'specimen-label pointer-events-none absolute top-2 rounded-xs border border-line-2 bg-surface-2 px-1.5 py-0.5 text-ink shadow-elev-1'

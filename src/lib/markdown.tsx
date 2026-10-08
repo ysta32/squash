@@ -37,6 +37,19 @@ function closing(text: string, marker: string, from: number): number {
   return at
 }
 
+/** Inline code up to this many characters never wraps, so `z-index` never splits at its hyphen. */
+const NOWRAP_CODE_MAX = 32
+
+/**
+ * Inline code is mono and kept on one line. A longer span (a path, a long call) could not fit a
+ * phone column, so it wraps anywhere inside its own box instead of overflowing the text.
+ */
+function inlineCodeClass(code: string): string {
+  return `rounded bg-bg-subtle px-1 font-mono text-xs ${
+    [...code].length <= NOWRAP_CODE_MAX ? 'whitespace-nowrap' : '[overflow-wrap:anywhere]'
+  }`
+}
+
 /** Inline constructs: code, bold, italic, links, @mentions and #123 refs. Unclosed markers stay literal. */
 // eslint-disable-next-line react-refresh/only-export-components -- frozen contract exports a helper beside the component
 export function renderInline(text: string): ReactNode[] {
@@ -71,9 +84,10 @@ function inline(text: string, inLink: boolean): ReactNode[] {
         continue
       }
       {
+        const code = text.slice(i + run.length, end)
         push(
-          <code key={key++} className="rounded bg-bg-subtle px-1 font-mono text-xs">
-            {text.slice(i + run.length, end)}
+          <code key={key++} className={inlineCodeClass(code)}>
+            {code}
           </code>,
         )
         i = end + run.length
