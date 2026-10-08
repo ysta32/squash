@@ -21,10 +21,17 @@ export async function recordFixRun(input: FixRunInput): Promise<FixRun | null> {
   throw new Error(error.message || 'Could not record the fix.')
 }
 
-/** Upserts rows by id, newest run first. */
+/**
+ * Upserts rows by id, newest run first. A finished run never goes back to 'running' (the server
+ * forbids it), so a stale copy of a run that is still running never replaces a finished one.
+ */
 export function mergeFixRuns(current: FixRun[], rows: FixRun[]): FixRun[] {
   const byId = new Map(current.map((r) => [r.id, r]))
-  for (const r of rows) byId.set(r.id, r)
+  for (const r of rows) {
+    const known = byId.get(r.id)
+    if (known && known.status !== 'running' && r.status === 'running') continue
+    byId.set(r.id, r)
+  }
   return [...byId.values()].sort(
     (a, b) => b.started_at.localeCompare(a.started_at) || b.id.localeCompare(a.id),
   )
@@ -57,6 +64,11 @@ export function useFixRuns(bugId: string | null): UseFixRunsResult {
     let active = true
     let channel: RealtimeChannel | null = null
     let latest = 0
+    /**
+     * Realtime rows received while a load is in flight. They are applied at once and replayed on top
+     * of the load's snapshot, which may have been read before them.
+     */
+    let pending: FixRun[] | null = null
     const fresh = (): State => ({ bugId, runs: [], loaded: false, available: true, error: null })
     const apply = (fn: (s: State) => State) => {
       if (active) setState((s) => fn(s?.bugId === bugId ? s : fresh()))
@@ -65,6 +77,7 @@ export function useFixRuns(bugId: string | null): UseFixRunsResult {
     /** Resolves true while the table exists. */
     const load = async (): Promise<boolean> => {
       const seq = ++latest
+      pending ??= []
       try {
         const { data, error } = await supabase
           .from(TABLE)
@@ -73,6 +86,8 @@ export function useFixRuns(bugId: string | null): UseFixRunsResult {
           .order('started_at', { ascending: false })
           .limit(LIMIT)
         if (seq !== latest) return true
+        const replay = pending ?? []
+        pending = null
         if (error && isMissingRelation(error, TABLE)) {
           apply((s) => ({ ...s, runs: [], loaded: true, available: false, error: null }))
           return false
@@ -80,10 +95,16 @@ export function useFixRuns(bugId: string | null): UseFixRunsResult {
         apply((s) =>
           error
             ? { ...s, loaded: true, error: error.message }
-            : { ...s, runs: mergeFixRuns(s.runs, data ?? []), loaded: true, error: null },
+            : {
+                ...s,
+                runs: mergeFixRuns(mergeFixRuns(s.runs, data ?? []), replay),
+                loaded: true,
+                error: null,
+              },
         )
       } catch (err) {
         if (seq === latest) {
+          pending = null
           apply((s) => ({
             ...s,
             loaded: true,
@@ -97,6 +118,7 @@ export function useFixRuns(bugId: string | null): UseFixRunsResult {
     const subscribe = () => {
       const onRow = (payload: { new: FixRun }) => {
         if (!active || payload.new?.bug_id !== bugId) return
+        pending?.push(payload.new)
         apply((s) => ({ ...s, runs: mergeFixRuns(s.runs, [payload.new]) }))
       }
       const filter = `bug_id=eq.${bugId}`

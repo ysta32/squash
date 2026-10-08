@@ -855,13 +855,17 @@ export async function startSha(cwd, run = execQuiet) {
 
 /**
  * What a run left behind in the repo at `cwd`: the new HEAD, its branch, the diff since `start`
- * and the branch's pull request (when `gh` is installed and finds one). Null outside a git repo.
+ * and the branch's pull request (when `gh` is installed and finds one). When HEAD is still `start`
+ * the run made no commit: commitSha is null, noCommit is true and the diff is empty (zero counts).
+ * Null outside a git repo.
  * Every output is validated; a step that fails just leaves its fields null.
  */
 export async function collectGitReport(cwd, start, { run = execQuiet, startedAt = null } = {}) {
-  const commitSha = parseSha(await headSha(cwd, run))
-  if (!commitSha) return null
+  const head = parseSha(await headSha(cwd, run))
+  if (!head) return null
   const begin = parseSha(start)
+  // HEAD did not move: the run made no commit, and the old HEAD is no proof of anything.
+  const noCommit = begin !== null && head === begin
   const branch = parseBranch(
     await run('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd }),
   )
@@ -877,18 +881,23 @@ export async function collectGitReport(cwd, start, { run = execQuiet, startedAt 
             '--shortstat',
             '--no-ext-diff',
             '--no-textconv',
-            `${begin}..${commitSha}`,
+            `${begin}..${head}`,
           ],
           { cwd },
         ),
       )
     : null
-  const prUrl = branch
-    ? parsePrUrl(await run('gh', ['pr', 'view', '--json', 'url'], { cwd, timeout: GH_TIMEOUT_MS }))
-    : null
+  // Without a new commit an existing PR on the branch is not this run's work either.
+  const prUrl =
+    branch && !noCommit
+      ? parsePrUrl(
+          await run('gh', ['pr', 'view', '--json', 'url'], { cwd, timeout: GH_TIMEOUT_MS }),
+        )
+      : null
   return {
     startSha: begin,
-    commitSha,
+    commitSha: noCommit ? null : head,
+    noCommit,
     branch,
     prUrl,
     filesChanged: stat?.filesChanged ?? null,

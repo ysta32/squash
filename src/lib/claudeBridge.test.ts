@@ -57,7 +57,8 @@ interface ExecOptions {
 type Exec = (file: string, args: string[], options?: ExecOptions) => Promise<string | null>
 interface GitReport {
   startSha: string | null
-  commitSha: string
+  commitSha: string | null
+  noCommit: boolean
   branch: string | null
   prUrl: string | null
   filesChanged: number | null
@@ -662,6 +663,7 @@ describe('proof of fix', () => {
     expect(report).toEqual({
       startSha: A,
       commitSha: B,
+      noCommit: false,
       branch: 'fix/bug-12',
       prUrl: 'https://github.com/o/r/pull/9',
       filesChanged: 2,
@@ -702,12 +704,37 @@ describe('proof of fix', () => {
     expect(report).toMatchObject({
       startSha: null,
       commitSha: B,
+      noCommit: false,
       branch: null,
       prUrl: null,
       filesChanged: null,
     })
     // No diff without a trusted start, and no gh without a branch.
     expect(calls).toHaveLength(2)
+  })
+
+  it('reports no commit, never the old HEAD, when HEAD did not move', async () => {
+    const calls: string[][] = []
+    const run: Exec = async (file, args) => {
+      calls.push([file, ...args])
+      if (args[0] === 'rev-parse') return A
+      if (args[0] === 'symbolic-ref') return 'main'
+      if (file === 'git') return ''
+      return '{"url":"https://github.com/o/r/pull/1"}'
+    }
+    expect(await bridge.collectGitReport('/x', A, { run })).toEqual({
+      startSha: A,
+      commitSha: null,
+      noCommit: true,
+      branch: 'main',
+      prUrl: null,
+      filesChanged: 0,
+      additions: 0,
+      deletions: 0,
+      startedAt: null,
+    })
+    expect(calls.some(([file]) => file === 'gh')).toBe(false)
+    expect(calls).toContainEqual(expect.arrayContaining([`${A}..${A}`]))
   })
 
   it('execQuiet resolves null for a missing command and never uses a shell', async () => {
@@ -753,6 +780,17 @@ describe('proof of fix', () => {
     })
     expect(report?.commitSha).toMatch(/^[0-9a-f]{40}$/)
     expect(report?.commitSha).not.toBe(start)
+    expect(report?.noCommit).toBe(false)
+    // A second run that commits nothing reports no commit and an empty diff.
+    const head = await bridge.startSha(dir)
+    writeFileSync(join(dir, 'a.txt'), 'uncommitted\n')
+    expect(await bridge.collectGitReport(dir, head, { run })).toMatchObject({
+      commitSha: null,
+      noCommit: true,
+      filesChanged: 0,
+      additions: 0,
+      deletions: 0,
+    })
     expect(await bridge.startSha(tmpdir())).toBeNull()
   })
 })

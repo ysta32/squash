@@ -28,12 +28,23 @@ const RUN_ID = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
 const BRANCH = /^[^\s\p{Cc}]+$/u
 const PR_URL = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?\/[!-~]*$/
 
+/**
+ * Where fix evidence comes from. It is self-reported by the local helper (git and gh on the
+ * developer's machine) and not verified against the git host, so the UI must say so.
+ */
+export const FIX_EVIDENCE_SOURCE = 'helper'
+export const FIX_EVIDENCE_LABEL = 'Reported by the Claude Code helper'
+
 /** The git evidence for one run, as reported by the helper (bridge v7+). */
 export interface FixReport {
+  /** Always 'helper': self-reported, unverified (see FIX_EVIDENCE_LABEL). */
+  source: typeof FIX_EVIDENCE_SOURCE
   /** HEAD when the run began, or null outside a git repo / before the first commit. */
   startSha: string | null
-  /** HEAD when the run ended. */
+  /** HEAD when the run ended; null when the run made no commit (see noCommit). */
   commitSha: string | null
+  /** True when HEAD never moved: the run committed nothing. */
+  noCommit: boolean
   /** The checked-out branch, or null when detached. */
   branch: string | null
   prUrl: string | null
@@ -89,19 +100,28 @@ function timestamp(value: unknown): string | null {
 export function parseFixReport(value: unknown): FixReport | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const v = value as Record<string, unknown>
+  const startSha = sha(v.startSha)
+  const reported = sha(v.commitSha)
+  // The start commit is never proof of a fix, whatever the helper claims.
+  const noCommit =
+    v.noCommit === true || (reported !== null && startSha !== null && startSha.startsWith(reported))
   const report: FixReport = {
-    startSha: sha(v.startSha),
-    commitSha: sha(v.commitSha),
+    source: FIX_EVIDENCE_SOURCE,
+    startSha,
+    commitSha: noCommit ? null : reported,
+    noCommit,
     branch: isBranchName(v.branch) ? v.branch : null,
-    prUrl: isPrUrl(v.prUrl) ? v.prUrl : null,
+    prUrl: !noCommit && isPrUrl(v.prUrl) ? v.prUrl : null,
     filesChanged: count(v.filesChanged),
     additions: count(v.additions),
     deletions: count(v.deletions),
     startedAt: timestamp(v.startedAt),
   }
-  const { startedAt: _when, ...evidence } = report
+  const { source: _source, startedAt: _when, noCommit: _none, ...evidence } = report
+  void _source
   void _when
-  return Object.values(evidence).some((x) => x !== null) ? report : null
+  void _none
+  return noCommit || Object.values(evidence).some((x) => x !== null) ? report : null
 }
 
 export interface FixRunInput {

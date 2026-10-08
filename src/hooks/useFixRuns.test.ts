@@ -8,6 +8,8 @@ type Result = { data: unknown; error: { code?: string; message: string } | null 
 const h = vi.hoisted(() => ({
   state: {
     load: { data: [], error: null } as Result,
+    deferLoad: false,
+    resolveLoad: null as null | ((r: Result) => void),
     insert: { data: null, error: null } as Result,
     inserted: [] as unknown[],
     queries: [] as string[][],
@@ -35,6 +37,11 @@ vi.mock('../lib/supabase', () => {
       limit: (n: number) => {
         calls.push(`limit ${n}`)
         state.queries.push(calls)
+        if (state.deferLoad) {
+          return new Promise<Result>((resolve) => {
+            state.resolveLoad = resolve
+          })
+        }
         return Promise.resolve(state.load)
       },
       insert: (row: unknown) => {
@@ -97,6 +104,8 @@ function emit(event: string, row: FixRun) {
 beforeEach(() => {
   Object.assign(h.state, {
     load: { data: [], error: null },
+    deferLoad: false,
+    resolveLoad: null,
     insert: { data: null, error: null },
     inserted: [],
     queries: [],
@@ -154,6 +163,13 @@ describe('mergeFixRuns', () => {
     )
     expect(merged.map((r) => r.id)).toEqual(['f3', 'f2', 'f1'])
     expect(merged[2].status).toBe('failed')
+  })
+
+  it('never moves a finished run back to running', () => {
+    const done = run('f1', { status: 'succeeded' })
+    const stale = run('f1', { status: 'running', finished_at: null })
+    expect(mergeFixRuns([done], [stale])[0].status).toBe('succeeded')
+    expect(mergeFixRuns([stale], [done])[0].status).toBe('succeeded')
   })
 })
 
@@ -219,5 +235,31 @@ describe('useFixRuns', () => {
     const { result } = renderHook(() => useFixRuns(null))
     expect(result.current).toEqual({ runs: [], loading: false, available: true, error: null })
     expect(h.state.queries).toHaveLength(0)
+  })
+
+  it('replays realtime rows that arrive during a reload over its older snapshot', async () => {
+    const running = (branch: string) => run('f1', { status: 'running', finished_at: null, branch })
+    h.state.load = { data: [running('old')], error: null }
+    const { result } = renderHook(() => useFixRuns('b1'))
+    await waitFor(() => expect(h.state.subscribed).toBe(1))
+    h.state.deferLoad = true
+    act(() => h.state.status?.('SUBSCRIBED'))
+    await waitFor(() => expect(h.state.resolveLoad).not.toBeNull())
+    act(() => {
+      emit('UPDATE', running('new'))
+      emit('UPDATE', run('f2', { status: 'succeeded', started_at: '2026-10-07T11:00:00Z' }))
+    })
+    // The query read its snapshot before those updates.
+    await act(async () => h.state.resolveLoad?.({ data: [running('old')], error: null }))
+    expect(result.current.runs.map((r) => [r.id, r.branch])).toEqual([
+      ['f1', 'new'],
+      ['f2', 'main'],
+    ])
+    // Rows after the reload are no longer buffered: a later snapshot wins again.
+    h.state.resolveLoad = null
+    act(() => h.state.status?.('SUBSCRIBED'))
+    await waitFor(() => expect(h.state.resolveLoad).not.toBeNull())
+    await act(async () => h.state.resolveLoad?.({ data: [running('newest')], error: null }))
+    expect(result.current.runs[0].branch).toBe('newest')
   })
 })

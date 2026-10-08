@@ -20,7 +20,10 @@
 --     future) and finished_at (set when the run leaves 'running').
 --   * after_attachment_id (the "after" screenshot, a later UI task) must be an
 --     attachment of the same bug; it is cleared if that attachment is deleted.
---   * At most 50 runs per bug.
+--   * At most 50 runs per bug (a retry of an already recorded run is not counted:
+--     it fails on the unique (bug_id, run_id) constraint instead).
+--   * The evidence is self-reported by the local helper, not verified against
+--     the git host; the client labels it as such.
 --
 -- Error codes added (see the list in 0001_init.sql):
 --   fix_run_limit    the bug already has 50 fix runs (only raised for a member
@@ -98,7 +101,11 @@ begin
     if auth.uid() is not null and new.created_by is not distinct from auth.uid()
        and new.workspace_id is not null and public.is_member(new.workspace_id) then
       perform pg_advisory_xact_lock(hashtext('squash:fix_runs:' || new.bug_id::text));
-      if (select count(*) from public.fix_runs f where f.bug_id = new.bug_id) >= 50 then
+      -- A retry of a recorded (bug, run) pair is left to the unique constraint, so it fails with
+      -- 23505 (which the client treats as already recorded) and never with fix_run_limit.
+      if not exists (select 1 from public.fix_runs f
+                     where f.bug_id = new.bug_id and f.run_id = new.run_id)
+         and (select count(*) from public.fix_runs f where f.bug_id = new.bug_id) >= 50 then
         raise exception using message = 'fix_run_limit', errcode = 'P0001';
       end if;
     end if;

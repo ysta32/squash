@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FIX_EVIDENCE_LABEL,
+  FIX_EVIDENCE_SOURCE,
   FIX_SUMMARY_MAX,
   buildFixRunInsert,
   formatDiffStat,
@@ -26,8 +28,10 @@ describe('parseFixReport', () => {
         startedAt: '2026-10-07T12:00:00.000Z',
       }),
     ).toEqual({
+      source: 'helper',
       startSha: 'b'.repeat(40),
       commitSha: SHA,
+      noCommit: false,
       branch: 'fix/bug-12',
       prUrl: 'https://github.com/o/r/pull/12',
       filesChanged: 3,
@@ -50,8 +54,10 @@ describe('parseFixReport', () => {
         startedAt: 'yesterday',
       }),
     ).toEqual({
+      source: 'helper',
       startSha: null,
       commitSha: SHA,
+      noCommit: false,
       branch: null,
       prUrl: null,
       filesChanged: null,
@@ -59,6 +65,39 @@ describe('parseFixReport', () => {
       deletions: null,
       startedAt: null,
     })
+  })
+
+  it('never takes the start commit as proof: no commit means no sha and no PR', () => {
+    const start = 'b'.repeat(40)
+    const none = {
+      startSha: start,
+      commitSha: null,
+      noCommit: true,
+      prUrl: 'https://github.com/o/r/pull/1',
+      filesChanged: 0,
+      additions: 0,
+      deletions: 0,
+    }
+    expect(parseFixReport(none)).toMatchObject({
+      commitSha: null,
+      noCommit: true,
+      prUrl: null,
+      filesChanged: 0,
+    })
+    // A helper that sends the old HEAD anyway (full or abbreviated) is overruled.
+    for (const commitSha of [start, start.slice(0, 7)]) {
+      expect(parseFixReport({ startSha: start, commitSha, branch: 'main' })).toMatchObject({
+        commitSha: null,
+        noCommit: true,
+      })
+    }
+    expect(parseFixReport({ noCommit: true })).toMatchObject({ noCommit: true, commitSha: null })
+  })
+
+  it('labels the evidence as self-reported by the helper', () => {
+    expect(FIX_EVIDENCE_SOURCE).toBe('helper')
+    expect(FIX_EVIDENCE_LABEL).toBe('Reported by the Claude Code helper')
+    expect(parseFixReport({ commitSha: SHA })?.source).toBe('helper')
   })
 
   it('is null for anything that is not a report or carries no evidence', () => {

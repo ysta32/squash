@@ -1017,11 +1017,25 @@ do $$ declare ws text := current_setting('t.ws1'); b text := current_setting('t.
     values (ob, ws || '/' || ob || '/other.webp', 1, 1, 1) returning id into a2;
   perform set_config('t.att_after', a1::text, true);
   perform set_config('t.att_other', a2::text, true);
+  insert into public.bug_attachments (bug_id, storage_path, width, height, size_bytes)
+    values (current_setting('t.bug_c')::uuid,
+            current_setting('t.ws_c') || '/' || current_setting('t.bug_c') || '/c.webp', 1, 1, 1)
+    returning id into a2;
+  perform set_config('t.att_c', a2::text, true);
 end $$;
 :as_a
 -- [98] creator updates a running run: an attachment of another bug is refused, its own bug's is kept;
 -- identity columns are not client-writable; finishing sets finished_at; a finished run is final
-do $$ declare n int; r public.fix_runs; begin
+do $$ declare n int; r public.fix_runs; att text; begin
+  -- inserting with an "after" screenshot of another bug (same workspace) or another workspace is denied
+  foreach att in array array[current_setting('t.att_other'), current_setting('t.att_c')] loop
+    begin
+      insert into public.fix_runs (bug_id, run_id, after_attachment_id)
+        values (current_setting('t.context_bug')::uuid, 'run-att', att::uuid);
+      raise exception 'FAIL[98]: insert with after_attachment_id % from another bug accepted', att;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
   begin
     update public.fix_runs set after_attachment_id = current_setting('t.att_other')::uuid
       where id = current_setting('t.fr1')::uuid;
@@ -1101,6 +1115,12 @@ do $$ declare bid uuid; i int; begin
     raise exception 'FAIL[101]: 51st fix run on a bug accepted';
   exception when others then if sqlerrm <> 'fix_run_limit' then raise; end if;
   end;
+  -- retrying an already recorded run at the cap is a duplicate, not a limit error
+  begin
+    insert into public.fix_runs (bug_id, run_id, status) values (bid, 'lim-1', 'failed');
+    raise exception 'FAIL[101]: duplicate run at the cap accepted';
+  exception when unique_violation then null;
+  end;
   -- [102] deleting the bug (as its filer) cascades its fix runs
   delete from public.bugs where id = bid;
 end $$;
@@ -1124,6 +1144,26 @@ do $$ begin
   if (select count(*) from pg_trigger where tgrelid = 'public.fix_runs'::regclass and not tgisinternal) <> 1
      or (select count(*) from pg_policies where schemaname = 'public' and tablename = 'fix_runs') <> 3 then
     raise exception 'FAIL[104]: fix_runs trigger / policies duplicated'; end if;
+end $$;
+:as_b
+-- [105] a creator removed from the workspace can no longer update their running run
+insert into public.fix_runs (bug_id, run_id) values (current_setting('t.context_bug')::uuid, 'run-b');
+:as_a
+select public.remove_member(current_setting('t.ws1')::uuid, '10000000-0000-0000-0000-000000000002');
+:as_b
+do $$ declare n int; begin
+  update public.fix_runs set status = 'succeeded', summary = 'after removal'
+    where bug_id = current_setting('t.context_bug')::uuid and run_id = 'run-b';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL[105]: removed creator updated their run'; end if;
+  if exists (select 1 from public.fix_runs where workspace_id = current_setting('t.ws1')::uuid) then
+    raise exception 'FAIL[105]: removed member still reads fix runs'; end if;
+end $$;
+:as_pg
+do $$ begin
+  if (select status from public.fix_runs
+      where bug_id = current_setting('t.context_bug')::uuid and run_id = 'run-b') <> 'running' then
+    raise exception 'FAIL[105]: run changed after its creator was removed'; end if;
 end $$;
 
 :as_pg
