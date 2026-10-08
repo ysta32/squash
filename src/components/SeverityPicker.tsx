@@ -156,7 +156,7 @@ export function SeverityPicker({
         className={cn(
           't focus-ring inline-flex shrink-0 items-center gap-2 rounded-md font-medium text-ink hover:bg-surface-3 disabled:pointer-events-none disabled:text-ink-3',
           size === 'quiet'
-            ? 'h-8 px-2 text-sm pointer-coarse:h-11'
+            ? 'h-8 px-2 text-sm pointer-coarse:h-[3.1429rem]'
             : cn(
                 'border border-line-2 bg-transparent text-xs hover:border-line-input',
                 size === 'sm' ? 'h-7 px-2' : 'h-8 px-2.5',
@@ -201,7 +201,7 @@ export function SeverityPicker({
                 onPointerMove={() => setActive(i)}
                 onClick={() => pick(s)}
                 className={cn(
-                  'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-11',
+                  'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-[3.1429rem]',
                   i === active && 'bg-surface-3',
                 )}
               >

@@ -190,7 +190,7 @@ export function ClaudeSetupDialog({
                   aria-expanded={showInstall}
                   aria-controls={installId}
                   onClick={() => setShowInstall((v) => !v)}
-                  className="t focus-ring -mx-1 -my-0.5 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left font-medium text-ink hover:text-accent pointer-coarse:min-h-11"
+                  className="t focus-ring -mx-1 -my-0.5 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left font-medium text-ink hover:text-accent pointer-coarse:min-h-[3.1429rem]"
                 >
                   Helper installed
                   <span className="font-normal text-ink-2">

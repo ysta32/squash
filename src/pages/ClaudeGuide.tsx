@@ -250,11 +250,16 @@ export default function ClaudeGuide() {
             <Logo />
           </Link>
           <div className="flex items-center gap-1">
-            <ButtonLink to="/" variant="ghost" size="sm" className="pointer-coarse:h-11">
+            <ButtonLink to="/" variant="ghost" size="sm" className="pointer-coarse:h-[3.1429rem]">
               <ArrowLeft className="size-4" strokeWidth={1.5} absoluteStrokeWidth aria-hidden />
               Home
             </ButtonLink>
-            <ButtonLink to="/signin" variant="secondary" size="sm" className="pointer-coarse:h-11">
+            <ButtonLink
+              to="/signin"
+              variant="secondary"
+              size="sm"
+              className="pointer-coarse:h-[3.1429rem]"
+            >
               Sign in
             </ButtonLink>
           </div>

@@ -165,7 +165,7 @@ export function AssigneePicker({
         className={cn(
           't focus-ring inline-flex items-center rounded-md hover:bg-surface-3 disabled:pointer-events-none disabled:opacity-60',
           variant === 'toolbar'
-            ? 'h-8 gap-2 px-2 text-sm font-medium pointer-coarse:h-11'
+            ? 'h-8 gap-2 px-2 text-sm font-medium pointer-coarse:h-[3.1429rem]'
             : '-mx-1 h-6 gap-1.5 px-1 text-xs',
           open && 'bg-surface-3',
         )}
@@ -245,7 +245,7 @@ export function AssigneePicker({
                   onPointerMove={() => setActive(index)}
                   onClick={() => pick(option)}
                   className={cn(
-                    'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-11',
+                    'flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-[3.1429rem]',
                     index === activeIndex && 'bg-surface-3',
                   )}
                 >

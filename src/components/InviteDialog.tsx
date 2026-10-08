@@ -16,7 +16,7 @@ import {
 } from './dialogStyles'
 
 /** Full-width 44px buttons on phones; regular height from 480px unless the pointer is coarse. */
-const TOUCH = 'max-[479px]:h-11 max-[479px]:w-full pointer-coarse:h-11'
+const TOUCH = 'max-[479px]:h-11 max-[479px]:w-full pointer-coarse:h-[3.1429rem]'
 /** Footer actions stack (primary on top) below 480px. */
 const STACK = 'max-[479px]:flex-col-reverse max-[479px]:items-stretch'
 

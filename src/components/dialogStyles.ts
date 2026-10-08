@@ -37,7 +37,7 @@ export const eyebrowClass = 'specimen-label'
 
 /** 32px icon-only close button in the dialog's top-right corner; 44px on touch screens. */
 export const closeButtonClass =
-  't focus-ring -mt-1 -mr-2 flex size-8 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:-mt-2.5 pointer-coarse:-mr-3.5 pointer-coarse:size-11'
+  't focus-ring -mt-1 -mr-2 flex size-8 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:-mt-2.5 pointer-coarse:-mr-3.5 pointer-coarse:size-[3.1429rem]'
 
 /** Header row: eyebrow + title (+ optional lede) on the left, close X on the right. */
 export const dialogHeaderClass = 'flex items-start justify-between gap-4'
@@ -51,4 +51,4 @@ export const popoverClass =
 
 /** A row inside a popover menu: 32px on desktop, 44px on touch; inset focus ring for dense lists. */
 export const menuRowClass =
-  't focus-ring-inset flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-3 focus-visible:bg-surface-3 pointer-coarse:h-11'
+  't focus-ring-inset flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-3 focus-visible:bg-surface-3 pointer-coarse:h-[3.1429rem]'

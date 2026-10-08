@@ -356,7 +356,7 @@ export function AnnotateDialog({
               aria-pressed={color === entry.value}
               disabled={saving || discard}
               onClick={() => setColor(entry.value)}
-              className="focus-ring flex h-7 w-7 items-center justify-center rounded-full border border-line-2 aria-pressed:border-ink aria-pressed:ring-2 aria-pressed:ring-ink pointer-coarse:h-11 pointer-coarse:w-11"
+              className="focus-ring flex h-7 w-7 items-center justify-center rounded-full border border-line-2 aria-pressed:border-ink aria-pressed:ring-2 aria-pressed:ring-ink pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]"
             >
               <span
                 className="h-4 w-4 rounded-full"

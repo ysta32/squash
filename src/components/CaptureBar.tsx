@@ -26,7 +26,7 @@ const PHONE_ROW_QUERY = '(min-width: 360px) and (max-width: 639.98px)'
 
 /** 44px touch targets on phones, 36px from `sm` up (44px again on coarse pointers). */
 const ICON_BUTTON =
-  't focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink sm:size-9 pointer-coarse:size-11'
+  't focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink sm:size-9 pointer-coarse:size-[3.1429rem]'
 const ICON = { size: 16, absoluteStrokeWidth: true, strokeWidth: 1.5, 'aria-hidden': true } as const
 
 const ENTER_NAME = isMac ? 'Return' : 'Enter'
@@ -620,7 +620,7 @@ export function CaptureBar({
               title={canSubmit ? `File ${noun} (${ENTER_NAME})` : 'Type or paste to file'}
               onClick={() => void submit()}
               className={cn(
-                't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-medium whitespace-nowrap sm:h-9 sm:pr-1.5 pointer-coarse:h-11 pointer-coarse:pr-3.5',
+                't focus-ring inline-flex h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-medium whitespace-nowrap sm:h-9 sm:pr-1.5 pointer-coarse:h-[3.1429rem] pointer-coarse:pr-3.5',
                 canSubmit || filing
                   ? 'border-transparent bg-accent text-accent-fg shadow-elev-1 hover:bg-accent-strong active:translate-y-px'
                   : // Disabled reads as the same control at half strength, border and key cap kept.
@@ -664,7 +664,7 @@ export function CaptureBar({
                       removeUrl()
                     }
                   }}
-                  className="t focus-ring group inline-flex h-7 max-w-full items-center gap-2 rounded-xs border border-line-2 bg-surface-1 pr-1 pl-2 font-mono text-xs text-ink-2 hover:border-line-input pointer-coarse:h-11"
+                  className="t focus-ring group inline-flex h-7 max-w-full items-center gap-2 rounded-xs border border-line-2 bg-surface-1 pr-1 pl-2 font-mono text-xs text-ink-2 hover:border-line-input pointer-coarse:h-[3.1429rem]"
                 >
                   <span className="specimen-label">URL</span>
                   <span aria-hidden="true" className="h-3 w-px bg-line-2" />
@@ -694,7 +694,7 @@ export function CaptureBar({
                     type="button"
                     aria-label="Dismiss error"
                     onClick={() => setAttachError(null)}
-                    className="t focus-ring -my-1 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:size-11"
+                    className="t focus-ring -my-1 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem]"
                   >
                     <X size={14} absoluteStrokeWidth strokeWidth={1.5} aria-hidden="true" />
                   </button>

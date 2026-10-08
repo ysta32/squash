@@ -150,7 +150,7 @@ export function MentionInput({
                 insert(m)
               }}
               onMouseEnter={() => setActive(i)}
-              className={`flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-11 ${
+              className={`flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink pointer-coarse:h-[3.1429rem] ${
                 i === activeIndex ? 'bg-surface-3' : ''
               }`}
             >

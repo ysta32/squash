@@ -273,7 +273,7 @@ function PaletteDialog({ onClose, commands }: Omit<CommandPaletteProps, 'open'>)
                       }}
                       onClick={() => runCommand(command)}
                       className={cn(
-                        'relative flex h-9 cursor-pointer items-center gap-3 rounded-md px-2 text-sm select-none pointer-coarse:h-11',
+                        'relative flex h-9 cursor-pointer items-center gap-3 rounded-md px-2 text-sm select-none pointer-coarse:h-[3.1429rem]',
                         "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:content-['']",
                         selected ? 'bg-ink/6 text-ink before:bg-accent' : 'text-ink',
                       )}
