@@ -26,6 +26,8 @@ const DEFAULT_ROUTES = [
   '/claude',
   '/privacy',
   '/terms',
+  '/app',
+  '/app?new=1',
   '/app/ws-lumen',
   '/app/ws-lumen/bug/24',
   '/app/ws-lumen/settings',
@@ -43,6 +45,7 @@ const list = (name, fallback) => opt(name)?.split(',').filter(Boolean) ?? fallba
 const WS = '/app/ws-lumen'
 const SAMPLE_DESCRIPTION = 'Checkout button is hidden behind the cookie banner on iPhone'
 const SHORT = 15_000
+const FIXED_TIME = new Date('2026-10-06T14:30:00Z')
 
 /**
  * Scripted states. `path` is loaded first (with optional mock `delayBugs` ms), then `run` interacts
@@ -241,7 +244,7 @@ const STATES = {
   'toast-action': {
     path: `${WS}/bug/24`,
     run: async (page) => {
-      await page.getByText('#24').first().waitFor({ timeout: SHORT })
+      await page.getByRole('button', { name: 'More actions' }).waitFor({ timeout: SHORT })
       await page.keyboard.press('i')
       await page.getByRole('button', { name: 'Undo', exact: true }).waitFor({ timeout: SHORT })
     },
@@ -339,7 +342,9 @@ if (themes.some((t) => t !== 'light' && t !== 'dark')) throw new Error('--themes
 
 const slug = (route) => {
   const isPublic = route.startsWith('public:')
-  const path = isPublic ? route.slice(7) : route
+  const path = (isPublic ? route.slice(7) : route)
+    .replace(/\?new=1$/, '/new')
+    .replace(/^\/app\/[^/]+\/settings$/, '/app/settings')
   const base = path === '/' ? 'home' : path.replace(/^\/|\/$/g, '').replace(/\W+/g, '-')
   return isPublic ? `public-${base}` : base
 }
@@ -377,6 +382,8 @@ try {
         reducedMotion: 'reduce',
       })
       await context.addInitScript((t) => localStorage.setItem('squash:theme', t), theme)
+      // Freeze Date so seeded timestamps ("5m ago") are identical between runs. Timers still run.
+      await context.clock.setFixedTime(FIXED_TIME)
       // A fresh page per shot, so mock flags (signed out, delayed fetch) never leak between shots.
       const open = async (width, { signedOut = false, delayBugs = 0 } = {}) => {
         const page = await context.newPage()
