@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## v2.0.1 — 2026-10-08
+
+Polish from the third design review of 2.0.
+
+### Changed
+
+- The full-size screenshot viewer's controls are dark discs that stay visible over light screenshots; on phones the caption and arrows sit right under the image.
+- While you're offline, File is disabled with a "You're offline" note and your draft is kept (Squash doesn't queue bugs offline, so it no longer looks like it will).
+- The bug list is 480px wide from 1280px screens up. Inline code in comments has a visible chip in dark mode and no stray space after it.
+- Commands in the Claude Code guide wrap instead of scrolling sideways. Copy link is the main action in the invite dialog. The colour swatches have a round focus ring.
+- Phones get a small workspace preview on the "file your first bug" onboarding step.
+- Public pages: content is visible by default (a slow scroll observer can never leave a section hidden), small grey labels meet AA contrast even over the paper grain, the wide-screen hero is balanced, and the sign-in example is labelled as demo data.
+
+### Fixed
+
+- On notched iPhones, toasts no longer float 34px too high (the safe area was counted twice).
+- A pasted link at the end of a line no longer leaves the line break behind when it moves into the link chip.
+- A focused pin note in the markup editor is no longer cut off by the layer list.
+- Footer and sidebar links on public pages are 44px tall on touch screens.
+
 ## v2.0.0 — 2026-10-07
 
 A full redesign, "Specimen": every screen rebuilt around the way a bug is actually examined. Plus markup that stays editable after filing, and proof that a fix landed.

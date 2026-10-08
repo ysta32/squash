@@ -115,9 +115,11 @@ export function ShortcutsSheet({ open, onClose }: ShortcutsSheetProps) {
           onClose={onClose}
           className="shrink-0 border-b border-line px-6 pt-6 pb-4"
         />
+        {/* content-start: on the full-height phone sheet, spare height stays below the list
+            instead of stretching the gap between the two columns' groups. */}
         <div
           className={cn(
-            'grid min-h-0 flex-1 gap-x-10 gap-y-6 overflow-y-auto overscroll-contain px-6 pt-4 pb-6 sm:grid-cols-2',
+            'grid min-h-0 flex-1 content-start gap-x-10 gap-y-6 overflow-y-auto overscroll-contain px-6 pt-4 pb-6 sm:grid-cols-2',
             SCROLL_FADE,
           )}
         >

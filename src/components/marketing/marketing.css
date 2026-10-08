@@ -1,6 +1,7 @@
 /* Marketing motion (DESIGN.md section 8): transform and opacity only, three moments.
    1. The hero specimen label types in, then the product screenshot rises.
-   2. Sections reveal on scroll (useInView sets data-reveal="shown"), staggered by --mk-delay.
+   2. Sections below the fold reveal on scroll (useInView: idle -> hidden -> shown), staggered by
+      --mk-delay. Content is visible by default; nothing waits on JS to appear.
    3. Marker annotations draw their stroke (pathLength="1" + stroke-dashoffset).
    Under prefers-reduced-motion everything is shown at once. */
 
@@ -44,33 +45,46 @@
   animation-delay: var(--mk-delay, 0ms);
 }
 
-[data-reveal] {
+/* Visible unless measured as below the fold (`hidden`), so a slow or absent observer never
+   leaves content invisible. `idle` -> `shown` is instant; only `hidden` -> `shown` animates. */
+[data-reveal='hidden'] {
   opacity: 0;
   transform: translateY(16px);
+}
+
+[data-reveal='shown'] {
   transition:
     opacity 640ms var(--ease-out),
     transform 640ms var(--ease-out);
   transition-delay: var(--mk-delay, 0ms);
 }
 
-[data-reveal='shown'] {
-  opacity: 1;
-  transform: none;
-}
-
 .mk-stroke {
   stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+[data-reveal='hidden'] .mk-stroke {
   stroke-dashoffset: 1;
+}
+
+[data-reveal='shown'] .mk-stroke {
   transition: stroke-dashoffset 640ms var(--ease-in-out);
   transition-delay: var(--mk-delay, 360ms);
 }
 
-[data-reveal='shown'] .mk-stroke {
-  stroke-dashoffset: 0;
-}
-
 .mk-arrive {
   animation: mk-arrive 1200ms linear;
+}
+
+@media print {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .mk-stroke {
+    stroke-dashoffset: 0 !important;
+  }
 }
 
 /* Ruled lab-notebook paper, fading out at the edges. */
@@ -98,12 +112,12 @@
     transform: none;
   }
   [data-reveal] {
-    opacity: 1;
-    transform: none;
+    opacity: 1 !important;
+    transform: none !important;
     transition: none !important;
   }
   .mk-stroke {
-    stroke-dashoffset: 0;
+    stroke-dashoffset: 0 !important;
     transition: none !important;
   }
   .mk-arrive {

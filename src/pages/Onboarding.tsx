@@ -52,113 +52,142 @@ const ARRIVE = 'animate-in [animation-fill-mode:backwards]'
 const delay = (ms: number) => ({ animationDelay: `${ms}ms` })
 
 /**
- * The desktop panel during setup: the workspace being made, as it will look the first time it
- * opens. It follows the step: the name as you type it, then teammates arriving in the header once
- * there is an invite link, then the capture bar in focus and No. 001 stamped into the ledger.
+ * The workspace being made, as it will look the first time it opens. It follows the step: the name
+ * as you type it, then teammates arriving in the header once there is an invite link, then the
+ * capture bar in focus and No. 001 stamped into the ledger. `compact` is the phone-width card under
+ * the form: tighter padding and columns, so the first bug's title still has room.
  */
-function WorkspacePreview({ name, step = 0 }: { name: string; step?: 0 | 1 | 2 }) {
+function PreviewCard({
+  name,
+  step = 0,
+  compact = false,
+}: {
+  name: string
+  step?: 0 | 1 | 2
+  compact?: boolean
+}) {
   const shown = name.trim()
   const filing = step === 2
   const touch = useCoarsePointer()
+  const pad = compact ? 'px-4' : 'px-5'
+  const cols = compact
+    ? 'grid-cols-[3rem_minmax(0,1fr)_4.5rem] gap-x-2'
+    : 'grid-cols-[4.5rem_minmax(0,1fr)_6rem]'
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        'overflow-hidden rounded-xl border border-line bg-surface-2',
+        compact ? 'shadow-elev-2' : 'shadow-elev-3',
+      )}
+    >
+      <div className={cn('flex h-12 items-center gap-2 border-b border-line text-sm', pad)}>
+        <LogoMark size={18} />
+        <span className="text-line-2">/</span>
+        <span className={cn('truncate font-medium', shown ? 'text-ink' : 'text-ink-3')}>
+          {shown || 'Your workspace'}
+        </span>
+        {step >= 1 && (
+          <span className="ml-auto flex shrink-0 items-center gap-2.5">
+            {step === 1 && <span className={cn(ARRIVE, 'specimen-label text-ink-3')}>Joining</span>}
+            <span className="flex -space-x-0.5">
+              {TEAMMATES.map(({ initials, ink }, index) => (
+                <span
+                  key={initials}
+                  style={{
+                    ...delay(60 + index * 90),
+                    backgroundColor: ink.value,
+                    ['--ink-dark' as string]: ink.dark,
+                  }}
+                  className={cn(
+                    ARRIVE,
+                    'flex size-7 items-center justify-center rounded-full font-mono text-[0.7143rem] font-medium text-white ring-2 ring-surface-2 dark:bg-(--ink-dark)!',
+                  )}
+                >
+                  {initials}
+                </span>
+              ))}
+            </span>
+          </span>
+        )}
+      </div>
+      <div className={cn(pad, compact ? 'pt-4' : 'pt-5')}>
+        <div
+          className={cn(
+            't flex h-11 items-center gap-3 rounded-md border bg-surface-1 px-3.5 text-ink-3',
+            compact ? 'text-sm' : 'text-base',
+            filing ? 'border-focus ring-3 ring-focus/20' : 'border-line-input',
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {filing && (
+              <span className="mr-0.5 inline-block h-4 w-px translate-y-0.5 bg-ink motion-safe:animate-pulse" />
+            )}
+            Paste a screenshot or describe a bug
+          </span>
+          {!touch && <Keys keys={[MOD_KEY, 'V']} />}
+        </div>
+      </div>
+      <div
+        className={cn(
+          'grid border-y border-line py-2 specimen-label text-ink-3',
+          compact ? 'mt-4' : 'mt-6',
+          cols,
+          pad,
+        )}
+      >
+        <span>No.</span>
+        <span>Title</span>
+        <span>Status</span>
+      </div>
+      {(compact ? ['001', '002'] : ['001', '002', '003']).map((number, index) => (
+        <div
+          key={number}
+          className={cn('grid h-12 items-center border-b border-line last:border-b-0', cols, pad)}
+        >
+          <span
+            className={cn('font-mono text-sm nums', index === 0 ? 'text-accent' : 'text-line-2')}
+          >
+            {number}
+          </span>
+          {index === 0 && filing ? (
+            <span
+              style={delay(180)}
+              className={cn(ARRIVE, 'truncate text-sm font-medium text-ink')}
+            >
+              Checkout button hidden behind the cookie banner
+            </span>
+          ) : index === 0 ? (
+            <span className="text-sm text-ink-2">Your first bug lands here.</span>
+          ) : (
+            <span
+              className="h-2 rounded-xs bg-surface-3"
+              style={{ width: `${62 - index * 18}%` }}
+            />
+          )}
+          {index === 0 ? (
+            <span className="flex items-center gap-1.5 text-sm text-ink-2">
+              <span aria-hidden className="size-1.5 rounded-full bg-accent" />
+              Open
+            </span>
+          ) : (
+            <span />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The desktop panel during setup: the preview card under one display line. */
+function WorkspacePreview({ name, step = 0 }: { name: string; step?: 0 | 1 | 2 }) {
   return (
     <AuthPanel
       label="Preview of your new workspace"
       eyebrow="Your workspace"
       title="Every bug gets a number, a screenshot and a place in the ledger."
     >
-      <div
-        aria-hidden="true"
-        className="overflow-hidden rounded-xl border border-line bg-surface-2 shadow-elev-3"
-      >
-        <div className="flex h-12 items-center gap-2 border-b border-line px-5 text-sm">
-          <LogoMark size={18} />
-          <span className="text-line-2">/</span>
-          <span className={cn('truncate font-medium', shown ? 'text-ink' : 'text-ink-3')}>
-            {shown || 'Your workspace'}
-          </span>
-          {step >= 1 && (
-            <span className="ml-auto flex shrink-0 items-center gap-2.5">
-              {step === 1 && (
-                <span className={cn(ARRIVE, 'specimen-label text-ink-3')}>Joining</span>
-              )}
-              <span className="flex -space-x-0.5">
-                {TEAMMATES.map(({ initials, ink }, index) => (
-                  <span
-                    key={initials}
-                    style={{
-                      ...delay(60 + index * 90),
-                      backgroundColor: ink.value,
-                      ['--ink-dark' as string]: ink.dark,
-                    }}
-                    className={cn(
-                      ARRIVE,
-                      'flex size-7 items-center justify-center rounded-full font-mono text-[0.7143rem] font-medium text-white ring-2 ring-surface-2 dark:bg-(--ink-dark)!',
-                    )}
-                  >
-                    {initials}
-                  </span>
-                ))}
-              </span>
-            </span>
-          )}
-        </div>
-        <div className="px-5 pt-5">
-          <div
-            className={cn(
-              't flex h-11 items-center gap-3 rounded-md border bg-surface-1 px-3.5 text-base text-ink-3',
-              filing ? 'border-focus ring-3 ring-focus/20' : 'border-line-input',
-            )}
-          >
-            <span className="min-w-0 flex-1 truncate">
-              {filing && (
-                <span className="mr-0.5 inline-block h-4 w-px translate-y-0.5 bg-ink motion-safe:animate-pulse" />
-              )}
-              Paste a screenshot or describe a bug
-            </span>
-            {!touch && <Keys keys={[MOD_KEY, 'V']} />}
-          </div>
-        </div>
-        <div className="mt-6 grid grid-cols-[4.5rem_minmax(0,1fr)_6rem] border-y border-line px-5 py-2 specimen-label text-ink-3">
-          <span>No.</span>
-          <span>Title</span>
-          <span>Status</span>
-        </div>
-        {['001', '002', '003'].map((number, index) => (
-          <div
-            key={number}
-            className="grid h-12 grid-cols-[4.5rem_minmax(0,1fr)_6rem] items-center border-b border-line px-5 last:border-b-0"
-          >
-            <span
-              className={cn('font-mono text-sm nums', index === 0 ? 'text-accent' : 'text-line-2')}
-            >
-              {number}
-            </span>
-            {index === 0 && filing ? (
-              <span
-                style={delay(180)}
-                className={cn(ARRIVE, 'truncate text-sm font-medium text-ink')}
-              >
-                Checkout button hidden behind the cookie banner
-              </span>
-            ) : index === 0 ? (
-              <span className="text-sm text-ink-2">Your first bug lands here.</span>
-            ) : (
-              <span
-                className="h-2 rounded-xs bg-surface-3"
-                style={{ width: `${62 - index * 18}%` }}
-              />
-            )}
-            {index === 0 ? (
-              <span className="flex items-center gap-1.5 text-sm text-ink-2">
-                <span aria-hidden className="size-1.5 rounded-full bg-accent" />
-                Open
-              </span>
-            ) : (
-              <span />
-            )}
-          </div>
-        ))}
-      </div>
+      <PreviewCard name={name} step={step} />
     </AuthPanel>
   )
 }
@@ -272,6 +301,14 @@ function FirstBugStep({ workspace }: { workspace: Workspace }) {
       >
         Open {workspace.name}
       </Button>
+      {/* Below 1024px the desktop panel is hidden; a small copy fills the phone's spare height
+          and shows where the first bug will land. */}
+      <div className="mt-12 lg:hidden">
+        <p className="specimen-label text-ink-3">Your workspace</p>
+        <div className="mt-3">
+          <PreviewCard name={workspace.name} step={2} compact />
+        </div>
+      </div>
     </AuthLayout>
   )
 }

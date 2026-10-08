@@ -152,7 +152,8 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
                   aria-label={`Avatar color ${colorName}`}
                   aria-pressed={selected}
                   title={colorName}
-                  className="group focus-ring flex h-[3.1429rem] min-w-[3.1429rem] items-center justify-center rounded-md sm:w-[3.1429rem]"
+                  // The 44px button is the hit area; the round swatch inside wears the focus ring.
+                  className="group flex h-[3.1429rem] min-w-[3.1429rem] items-center justify-center rounded-full outline-none sm:w-[3.1429rem]"
                   onClick={() => commitColor(value)}
                 >
                   <span
@@ -162,7 +163,7 @@ export function ProfileSettings({ profile }: { profile: Profile }) {
                       ['--swatch-dark' as string]: avatarDarkColor(value),
                     }}
                     className={cn(
-                      't flex size-[2.2857rem] items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgb(28_27_24/0.12)] ring-offset-2 ring-offset-bg dark:bg-(--swatch-dark)! dark:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.16)]',
+                      't flex size-[2.2857rem] items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgb(28_27_24/0.12)] ring-offset-2 ring-offset-bg outline-offset-[5px] outline-focus group-focus-visible:outline-2 dark:bg-(--swatch-dark)! dark:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.16)]',
                       selected ? 'ring-2 ring-ink' : 'group-hover:ring-2 group-hover:ring-line-2',
                     )}
                   >

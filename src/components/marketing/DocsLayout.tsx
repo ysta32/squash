@@ -51,7 +51,7 @@ function Outline({ headings }: { headings: DocHeading[] }) {
           <li key={heading.id}>
             <a
               href={`#${heading.id}`}
-              className="t focus-ring block rounded-sm py-1 text-sm text-ink-2 hover:text-ink"
+              className="t focus-ring block rounded-sm py-1 text-sm text-ink-2 hover:text-ink pointer-coarse:py-3"
             >
               {heading.text}
             </a>

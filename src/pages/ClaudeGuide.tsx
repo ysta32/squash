@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Check, ChevronRight, Copy, RefreshCw } from 'lucide-react'
 import {
   BRIDGE_URL,
@@ -11,13 +11,16 @@ import {
   pingBridge,
   type BridgeStatus,
 } from '../lib/claudeExport'
-import { cn } from '../lib/utils'
+import { cn, isMac } from '../lib/utils'
 import type { DocHeading } from '../components/marketing/content-types'
 import { DocsLayout } from '../components/marketing/DocsLayout'
 import { usePageTitle } from '../components/marketing/usePageTitle'
-import { Button, Kbd, proseLinkClass } from '../components/ui'
+import { Button, Kbd, Keys, proseLinkClass } from '../components/ui'
 
 const POLL_MS = 2000
+
+/** Spotlight is a Mac shortcut, so it is ⌘ on a Mac and spelled out as Cmd elsewhere (not Ctrl). */
+const SPOTLIGHT_KEYS = [isMac ? '⌘' : 'Cmd', 'Space']
 
 /** Section outline for the docs layout (ids on the h2s below). */
 const GUIDE_HEADINGS: DocHeading[] = [
@@ -29,33 +32,13 @@ const GUIDE_HEADINGS: DocHeading[] = [
 ]
 
 /**
- * A terminal command with a copy button. Long commands scroll sideways inside the block (never
- * wrap, so they paste exactly), with a fade on whichever edge has more command beyond it.
+ * A terminal command with a copy button. Long commands wrap (at spaces first, mid-token only when one is too long) instead of scrolling
+ * sideways, so the whole command is always visible; the text has no real line breaks, so both the
+ * Copy button and a manual selection paste it as one line.
  */
 export function CommandBlock({ command, label }: { command: string; label: string }) {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const scroller = useRef<HTMLPreElement>(null)
-  const [edges, setEdges] = useState({ start: false, end: false })
-
-  const measure = useCallback(() => {
-    const node = scroller.current
-    if (!node) return
-    const max = node.scrollWidth - node.clientWidth
-    setEdges({ start: node.scrollLeft > 1, end: max - node.scrollLeft > 1 })
-  }, [])
-
-  useLayoutEffect(() => {
-    measure()
-    const node = scroller.current
-    if (!node || typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', measure)
-      return () => window.removeEventListener('resize', measure)
-    }
-    const observer = new ResizeObserver(measure)
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [measure, command])
 
   useEffect(() => {
     if (!copied) return
@@ -78,18 +61,8 @@ export function CommandBlock({ command, label }: { command: string; label: strin
     <div role="group" aria-label={`${label} block`} className="mt-3">
       <div className="flex min-w-0 items-stretch overflow-hidden rounded-md border border-line-2 bg-surface-1">
         <pre
-          ref={scroller}
-          // Focusable so keyboard users can scroll a long command.
-          tabIndex={0}
           aria-label={label}
-          onScroll={measure}
-          data-fade-start={edges.start || undefined}
-          data-fade-end={edges.end || undefined}
-          className={cn(
-            'focus-ring-inset min-w-0 flex-1 overflow-x-auto px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre text-ink [scrollbar-width:thin]',
-            '[--fade-l:black] [--fade-r:black] data-fade-end:[--fade-r:transparent] data-fade-start:[--fade-l:transparent]',
-            '[mask-image:linear-gradient(to_right,var(--fade-l),black_24px,black_calc(100%-24px),var(--fade-r))]',
-          )}
+          className="min-w-0 flex-1 px-3 py-2.5 font-mono text-xs leading-5 whitespace-pre-wrap text-ink wrap-anywhere"
         >
           <code>{command}</code>
         </pre>
@@ -311,8 +284,8 @@ export default function ClaudeGuide() {
             </Step>
             <Step n={2} title="Open Terminal">
               <p>
-                Press <Kbd>⌘ Space</Kbd>, type <strong className="text-fg">Terminal</strong> and
-                press Enter.
+                Press <Keys keys={SPOTLIGHT_KEYS} />, type{' '}
+                <strong className="text-fg">Terminal</strong> and press Enter.
               </p>
             </Step>
             <Step n={3} title="Paste this command and press Enter">

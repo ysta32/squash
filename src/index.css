@@ -416,6 +416,16 @@
     radial-gradient(120% 90% at 0% 0%, var(--surface-1) 0%, transparent 65%), var(--grain);
 }
 
+/* Public pages (marketing, legal, sign-in) set their mono micro-labels on paper grain and the
+   lamp gradient. The grain darkens the paper by up to ~7%, which takes the app's --text-3 from
+   4.9:1 to 4.3:1, so these pages use a deeper tertiary ink: 5.3:1 on --bg under 7% grain,
+   4.9:1 on --surface-3 under 7% grain. The darkroom's --text-3 already clears 5:1 with grain. */
+@utility public-ink {
+  :root:not(.dark) & {
+    --text-3: #605b52;
+  }
+}
+
 /* Translucent surface for overlays only: command palette, sticky marketing nav. */
 @utility glass {
   background-color: color-mix(in oklab, var(--surface-2) 78%, transparent);

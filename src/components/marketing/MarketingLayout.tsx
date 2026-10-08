@@ -164,7 +164,7 @@ function Header() {
 
 function Footer() {
   const footLink =
-    't focus-ring inline-flex min-h-8 items-center rounded-sm text-sm text-ink-2 hover:text-ink max-sm:min-h-11'
+    't focus-ring inline-flex min-h-8 items-center rounded-sm text-sm text-ink-2 hover:text-ink max-sm:min-h-11 pointer-coarse:min-h-11'
   return (
     <footer className="border-t border-line">
       <div className={cn(MK_CONTAINER, 'grid gap-12 py-16 lg:grid-cols-12 lg:gap-8 lg:py-24')}>
@@ -216,7 +216,7 @@ function Footer() {
 /** Shell for every public page: skip link, sticky glass nav, one `#main`, sitemap footer. */
 export function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col overflow-x-clip text-ink">
+    <div className="public-ink flex min-h-screen flex-col overflow-x-clip text-ink">
       <SkipLink />
       <Header />
       <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">

@@ -343,6 +343,46 @@ describe('CaptureBar', () => {
     }
   })
 
+  it('lifts a URL that ends the text without leaving the space or line break before it', () => {
+    const { box } = setup()
+    fireEvent.change(box, { target: { value: 'Hidden on iPhone https://shop.example.com/c' } })
+    expect(box.value).toBe('Hidden on iPhone')
+    cleanup()
+    const second = setup()
+    fireEvent.change(second.box, {
+      target: { value: 'Hidden on iPhone\nhttps://shop.example.com/c' },
+    })
+    expect(second.box.value).toBe('Hidden on iPhone')
+  })
+
+  it('offline: keeps the draft, disables File with a reason, and files once back online', async () => {
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    try {
+      const { box, onSubmit, onToast } = setup()
+      fireEvent.change(box, { target: { value: 'Pay button hidden' } })
+      const send = screen.getByRole('button', { name: 'File bug' })
+      expect(send).toHaveAttribute('aria-disabled', 'true')
+      expect(send).toHaveAccessibleDescription('You’re offline')
+      fireEvent.keyDown(box, { key: 'Enter' })
+      fireEvent.click(send)
+      expect(onSubmit).not.toHaveBeenCalled()
+      expect(box.value).toBe('Pay button hidden')
+      expect(onToast).toHaveBeenCalledWith(
+        'You’re offline. Your draft stays here; file it once you reconnect.',
+      )
+      onLine.mockReturnValue(true)
+      act(() => {
+        window.dispatchEvent(new Event('online'))
+      })
+      expect(send).not.toHaveAttribute('aria-disabled')
+      expect(screen.queryByText('You’re offline')).not.toBeInTheDocument()
+      fireEvent.click(send)
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    } finally {
+      onLine.mockRestore()
+    }
+  })
+
   it('an idle File button files nothing', () => {
     const { onSubmit } = setup()
     fireEvent.click(screen.getByRole('button', { name: 'File bug' }))

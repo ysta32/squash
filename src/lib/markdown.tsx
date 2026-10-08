@@ -45,7 +45,9 @@ const NOWRAP_CODE_MAX = 32
  * phone column, so it wraps anywhere inside its own box instead of overflowing the text.
  */
 function inlineCodeClass(code: string): string {
-  return `rounded bg-bg-subtle px-1 font-mono text-xs ${
+  // A visible chip in both themes (surface-3 plus a hairline); tight side padding so a following
+  // full stop does not read as if a space came before it.
+  return `rounded-xs border border-line bg-surface-3 px-[3px] py-px font-mono text-xs ${
     [...code].length <= NOWRAP_CODE_MAX ? 'whitespace-nowrap' : '[overflow-wrap:anywhere]'
   }`
 }

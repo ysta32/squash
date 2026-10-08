@@ -73,8 +73,9 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
       aria-modal="true"
       aria-label="Screenshot viewer"
       // One dark glass scrim in both themes: a screenshot reads best on a dim surround.
-      // Phones: the image runs edge to edge, with the caption and then prev/next right under it.
-      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] py-16 backdrop-blur-[14px] sm:px-20"
+      // Phones: the image runs edge to edge from just under the close button, with the caption
+      // and then prev/next right under it, instead of a thin strip floating mid-screen.
+      className="fixed inset-0 z-50 flex animate-fade flex-col items-center justify-center gap-4 bg-[rgb(12_12_10/0.72)] py-16 backdrop-blur-[14px] max-sm:justify-start max-sm:gap-3 max-sm:pt-[76px] max-sm:pb-6 sm:px-20"
       onClick={onClose}
     >
       <button
@@ -153,10 +154,10 @@ export function Lightbox({ urls, index, onClose, onIndex, captions, markup }: Li
 /** Prev/next: beside the image from `sm` up; on phones in the flow under the caption. */
 const SIDE_NAV = 'max-sm:static sm:top-1/2 sm:-translate-y-1/2'
 
-/** One control style in both themes, a true 44px: paper at 90% with a light hairline, so it
- *  stays visible on the dark scrim. */
+/** One control style in both themes, a true 44px: dark glass with a light hairline and white
+ *  glyph, so it holds on the dark scrim and over a near-white screenshot when zoomed in. */
 const CHROME_BUTTON =
-  't focus-ring absolute z-10 inline-flex size-[44px] items-center justify-center rounded-full border border-white/12 bg-surface-2/90 text-ink shadow-elev-2 hover:bg-surface-2 hover:text-accent'
+  't focus-ring absolute z-10 inline-flex size-[44px] items-center justify-center rounded-full border border-white/30 bg-[rgb(12_12_10/0.78)] text-white shadow-elev-2 backdrop-blur-sm hover:border-white/55 hover:bg-[rgb(12_12_10/0.92)]'
 
 /** Phones (Tailwind's `max-sm`): tap zooms into a natively scrollable, pannable image. */
 function isPhone(): boolean {
@@ -257,7 +258,10 @@ function ZoomImage({
           onWheel={onWheel}
           className={cn(
             'block rounded-lg object-contain shadow-elev-3 select-none max-sm:rounded-none',
-            pan ? 'h-auto w-full' : 'max-h-[calc(100dvh-10rem)] max-w-full',
+            pan
+              ? 'h-auto w-full'
+              : // Phones leave room under the image for the caption (two lines) and prev/next.
+                'max-h-[calc(100dvh-10rem)] max-w-full max-sm:max-h-[calc(100dvh-236px)]',
             zoomedIn ? 'cursor-zoom-out' : 'cursor-zoom-in',
           )}
         />
