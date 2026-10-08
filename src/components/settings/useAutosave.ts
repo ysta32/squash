@@ -157,7 +157,10 @@ export function useAutosave<T>(key: string, server: T, fallbackError: string) {
       )
       current.tail = next
       void next.then(() => {
-        if (current.tail === next) current.idle = true
+        if (current.tail === next) {
+          current.idle = true
+          evictIdle()
+        }
       })
       return next
     },

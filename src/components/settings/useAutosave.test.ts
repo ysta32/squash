@@ -81,4 +81,20 @@ describe('useAutosave', () => {
     const oldest = renderHook(() => useAutosave('row:0', 'x', 'Could not save'))
     expect(oldest.result.current.pending()).toBe('x')
   })
+
+  it('evicts lines that drain together, not only on the next save', async () => {
+    const write = vi.fn().mockResolvedValue(undefined)
+    const hooks = Array.from({ length: 100 }, (_, i) =>
+      renderHook(() => useAutosave(`batch:${i}`, 'x', 'Could not save')),
+    )
+    await act(async () => {
+      await Promise.all(hooks.map(({ result }, i) => result.current.commit(`y${i}`, write)))
+    })
+    hooks.forEach(({ unmount }) => unmount())
+    // All 100 were pending at once; once drained, the oldest are gone without any further save.
+    const oldest = renderHook(() => useAutosave('batch:0', 'x', 'Could not save'))
+    expect(oldest.result.current.pending()).toBe('x')
+    const newest = renderHook(() => useAutosave('batch:99', 'x', 'Could not save'))
+    expect(newest.result.current.pending()).toBe('y99')
+  })
 })
