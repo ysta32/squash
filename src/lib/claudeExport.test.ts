@@ -4,6 +4,7 @@ import {
   MAX_REGIONS_PER_SCREENSHOT,
   batchName,
   formatClaudePrompt,
+  formatShipPrompt,
   getAutoSend,
   parseClaudeResult,
   setAutoSend,
@@ -274,6 +275,32 @@ describe('unattended bridge runs', () => {
     expect(bridged.prompt.indexOf('git push')).toBeLessThan(bridged.prompt.indexOf('result.json'))
     const copied = formatClaudePrompt({ ...base, bugs: [bug()] })
     expect(copied.prompt).not.toContain('git push')
+  })
+
+  it('rebases a rejected push, resolves conflicts and checks the deploy', () => {
+    const { prompt } = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    expect(prompt).toContain('`git pull --rebase`')
+    expect(prompt).toContain('resolve any conflicts')
+    expect(prompt).toContain('whether it is live')
+  })
+
+  it('asks a ship run to land the work on main, pushed and live', () => {
+    const prompt = formatShipPrompt({
+      bugs: [bug(), bug({ id: 'b2', number: 13, kind: 'feature', title: 'Dark mode' })],
+      workspaceName: 'Acme',
+      origin: 'https://squash.test',
+      localDir: '.squash/bugs/y',
+    })
+    expect(prompt).toContain('Ship the work for these 2 items')
+    expect(prompt).toContain('default branch (usually `main`)')
+    expect(prompt).toContain('#12, #13')
+    expect(prompt).toContain('merge or rebase conflicts')
+    expect(prompt).toContain('Never force-push')
+    expect(prompt).toContain('deploy of your commit succeeded')
+    expect(prompt).toContain('`.squash/bugs/y/result.json`')
+    expect(prompt).toContain('"number":13')
+    expect(prompt).toContain('## Feature request #13: Dark mode')
+    expect(prompt).toContain('https://squash.test/app/ws/bug/12')
   })
 
   it('remembers auto-fix per workspace, off by default', () => {

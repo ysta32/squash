@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
+  Activity,
   ArrowLeft,
   Bug as BugIcon,
   CircleCheck,
@@ -386,6 +387,9 @@ export default function Workspace() {
 
   const presence = usePresence(workspaceId, selected?.id ?? null)
 
+  /** The Running tab: every Claude Code run at once, kept in the URL as `?view=running`. */
+  const running = new URLSearchParams(search).get('view') === 'running'
+
   // The list follows the open item's kind: a deep link to a feature request (or moving the open
   // item between Bugs and Features) switches the list to match.
   const selectedKind = selected?.kind ?? null
@@ -742,6 +746,35 @@ export default function Workspace() {
     opts,
   )
 
+  // Switching to Running keeps the open item. Leaving it works like a kind switch: a different
+  // kind starts fresh (no picks, nothing open).
+  const showList = (next: typeof filters) => {
+    const params = new URLSearchParams(search)
+    params.delete('view')
+    const leaveItem = next.kind !== filters.kind
+    if (leaveItem) {
+      clearPicked()
+      setPendingId(null)
+    }
+    const nextSearch = writeFilters(params, next).toString()
+    navigate(
+      leaveItem && hasNumberParam
+        ? { pathname: basePath, search: nextSearch }
+        : { search: nextSearch },
+    )
+  }
+  const switchTab = (tab: BugKind | 'running') => {
+    if (tab !== 'running') {
+      showList({ ...filters, kind: tab })
+      return
+    }
+    if (running) return
+    const params = new URLSearchParams(search)
+    params.set('view', 'running')
+    clearPicked()
+    navigate({ search: params.toString() })
+  }
+
   const applyFilters = (next: typeof filters) => {
     // Switching between Bugs, Features and Tests starts fresh: no picks, nothing open.
     if (next.kind !== filters.kind) {
@@ -879,6 +912,10 @@ export default function Workspace() {
       keywords: ['filter', 'tab', ...words],
       run: () => {
         const nextFilters = { ...filters, ...next }
+        if (running) {
+          showList(nextFilters)
+          return
+        }
         if (showDetail && !isDesktop()) {
           // On phones the open bug hides the list; go back to it, carrying the new filters.
           if (nextFilters.kind !== filters.kind) clearPicked()
@@ -892,6 +929,25 @@ export default function Workspace() {
         applyFilters(nextFilters)
       },
     })),
+    {
+      id: 'nav-running',
+      label: 'Show running Claude Code tasks',
+      group: 'Navigate',
+      icon: Activity,
+      keywords: ['claude', 'runs', 'tasks', 'progress', 'status', 'live'],
+      run: () => {
+        if (showDetail && !isDesktop()) {
+          // On phones the open item hides the list; go back to it, on the Running tab.
+          const params = new URLSearchParams(search)
+          params.set('view', 'running')
+          clearPicked()
+          setPendingId(null)
+          navigate({ pathname: basePath, search: params.toString() })
+          return
+        }
+        switchTab('running')
+      },
+    },
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,
       label: `Export visible bugs as ${format === 'csv' ? 'CSV' : 'Markdown'}`,
@@ -1037,6 +1093,7 @@ export default function Workspace() {
         onToast={toast}
         onRetryUploads={() => void retryUploads(selected.id)}
         onSend={(bug) => claude.sendBugs([bug])}
+        onShip={(bug) => claude.shipBugs([bug])}
         onCopy={(bug) => claude.copyBugs([bug])}
         claudeRun={!selected.optimistic ? claude.runs.get(selected.number) : undefined}
       />
@@ -1189,6 +1246,11 @@ export default function Workspace() {
               onClaudeSetup={claude.openSetup}
               claudeConnected={claude.connected}
               claudeRuns={claude.runs}
+              claudeRunList={claude.runList}
+              running={running}
+              onTab={switchTab}
+              selectedNumber={selected && !selected.optimistic ? selected.number : null}
+              onOpenNumber={(n) => navigate(bugPath(n))}
               onboardingInDetail={desktop && !showDetail}
             />
           </div>

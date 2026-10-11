@@ -120,7 +120,8 @@ export interface ClaudeResultItem {
 
 /**
  * Tells an unattended run to ship its work: commit it and push it, so a project that deploys from
- * its git remote goes live without anyone touching the terminal.
+ * its git remote goes live without anyone touching the terminal. A push the remote rejects is
+ * rebased (conflicts resolved) and pushed again, never forced.
  */
 function shipInstructions(noun: string): string {
   return [
@@ -128,19 +129,25 @@ function shipInstructions(noun: string): string {
     '',
     `1. Commit only the files you changed, with a message that names each ${noun} number (never commit \`.squash/\`, secrets or unrelated changes).`,
     '2. Push the commit to the current branch on its remote (`git push`; if the branch has no upstream yet, `git push -u origin HEAD`). Never force-push. A project that deploys from its remote goes live from this push.',
-    `3. If a check fails or the push is rejected, fix the cause and try again; if you cannot, leave the ${noun} open and say why in its summary.`,
+    '3. If the push is rejected because the remote has moved on, run `git pull --rebase`, resolve any conflicts so both sides keep working, run the checks again and push again.',
+    `4. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example \`gh run list\` or \`vercel ls\`) and say in your summary whether it is live.`,
+    `5. If a check fails or the push is still rejected, fix the cause and try again; if you cannot, leave the ${noun} open and say why in its summary.`,
   ].join('\n')
 }
 
-/** Tells an unattended Claude Code session how to report each bug back to Squash. */
-function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string): string {
-  const example = JSON.stringify({
+/** The JSON a run writes to report back, with one entry per item. */
+function resultExample(bugs: BugWithMeta[]): string {
+  return JSON.stringify({
     bugs: bugs.map((b) => ({
       number: b.number,
       resolved: true,
       summary: 'What you changed and how you verified it.',
     })),
   })
+}
+
+/** Tells an unattended Claude Code session how to report each bug back to Squash. */
+function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string): string {
   return [
     'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
     '',
@@ -149,7 +156,7 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
     `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
     '',
     '```json',
-    example,
+    resultExample(bugs),
     '```',
     '',
     `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. Write each summary as a short plain-language statement of what you did. The terminal closes on its own once you finish.`,
@@ -274,6 +281,67 @@ export function formatClaudePrompt({
   )
   if (localDir) intro.push('', resultInstructions(bugs, noun, localDir))
   return { prompt: [intro.join('\n'), ...sections].join('\n\n') + '\n', downloads }
+}
+
+/** Input for a "Ship to main" run: the items whose work Claude lands on the default branch. */
+export interface ShipPromptInput {
+  bugs: BugWithMeta[]
+  workspaceName: string
+  origin: string
+  /** Repo-relative batch folder the bridge made for this run; the result file goes here. */
+  localDir: string
+}
+
+/**
+ * Prompt for a "Ship to main" run: get the work for these items committed on the default branch,
+ * merged with whatever landed there meanwhile (conflicts resolved), pushed and live. When there is
+ * no work for an item yet, Claude does it first, so the button always ends with the item shipped.
+ */
+export function formatShipPrompt({
+  bugs,
+  workspaceName,
+  origin,
+  localDir,
+}: ShipPromptInput): string {
+  const kinds = KINDS.filter((k) => bugs.some((b) => b.kind === k))
+  const noun = kinds.length > 1 ? 'item' : KIND_LABEL[kinds[0] ?? 'bug'].noun
+  const refs = bugs.map((b) => `#${b.number}`).join(', ')
+  const count = bugs.length === 1 ? `this ${noun}` : `these ${bugs.length} ${noun}s`
+  const sections = bugs.map((bug) => {
+    const lines = [
+      `## ${KIND_PROMPT[bug.kind].heading} #${bug.number}: ${bug.title}`,
+      '',
+      `- Status: ${bug.status === 'open' ? 'Open' : 'Resolved'}`,
+      `- Link: ${origin}/app/${bug.workspace_id}/bug/${bug.number}`,
+    ]
+    if (bug.description.trim() && bug.description.trim() !== bug.title.trim()) {
+      lines.push('', 'Description:', indent(bug.description))
+    }
+    if (bug.resolution_note?.trim()) lines.push('', 'Resolution note:', indent(bug.resolution_note))
+    return lines.join('\n')
+  })
+  const intro = [
+    `Ship the work for ${count} from the Squash bug tracker (workspace "${workspaceName}"): get it committed on the default branch (usually \`main\`), pushed to GitHub (or whichever remote the repo uses) and live.`,
+    '',
+    'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+    '',
+    `1. Find the work for ${refs}: uncommitted changes (\`git status\`, \`git diff\`), commits on this branch that the remote default branch does not have (\`git fetch\`, then \`git log origin/main..HEAD\` or the repo's default branch), or both. If there is no work for one yet, do it now: ${KIND_PROMPT[kinds[0] ?? 'bug'].task}.`,
+    '2. Verify it: typecheck, lint, tests and a build where the project has them.',
+    `3. Commit only the files for ${refs}, with a message that names each number (never commit \`.squash/\`, secrets or unrelated changes). Leave unrelated uncommitted changes as they are.`,
+    '4. Land it on the default branch: on the default branch, `git pull --rebase`; on another branch, update it from the default branch, then switch to the default branch, pull and merge your branch in.',
+    '5. Resolve any merge or rebase conflicts so both sides keep working, then run the checks again.',
+    '6. Push the default branch to its remote. Never force-push. If the push is rejected because the remote moved on, pull with rebase, resolve, re-check and push again.',
+    '7. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example `gh run list` or `vercel ls`). If it failed, fix it and ship again.',
+    '',
+    `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
+    '',
+    '```json',
+    resultExample(bugs),
+    '```',
+    '',
+    `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write each summary as a short plain-language statement of what you shipped (the commit, the branch, whether the deploy is live). The terminal closes on its own once you finish.`,
+  ]
+  return [intro.join('\n'), ...sections].join('\n\n') + '\n'
 }
 
 /** Fetches signed screenshot URLs and comments, then formats the export prompt. */
@@ -431,16 +499,26 @@ export function batchName(bugs: BugWithMeta[], now = new Date()): string {
   return [stamp, ...numbers].join('-')
 }
 
+/**
+ * What a run asks of Claude: `fix` works on the items (and ships the result); `ship` lands work
+ * already done for them on the default branch, pushed and live.
+ */
+export type ClaudeRunMode = 'fix' | 'ship'
+
 /** Hands the bugs to the local bridge, which downloads screenshots and launches Claude Code. */
 export async function sendToBridge(
-  input: Omit<ClaudeExportInput, 'urls' | 'comments' | 'localDir'> & { workspaceId: string },
+  input: Omit<ClaudeExportInput, 'urls' | 'comments' | 'localDir'> & {
+    workspaceId: string
+    mode?: ClaudeRunMode
+  },
 ): Promise<void> {
-  const { workspaceId, ...rest } = input
+  const { workspaceId, mode = 'fix', ...rest } = input
   const batch = batchName(rest.bugs)
-  const { prompt, downloads } = await buildClaudeExport({
-    ...rest,
-    localDir: `.squash/bugs/${batch}`,
-  })
+  const localDir = `.squash/bugs/${batch}`
+  const { prompt, downloads } =
+    mode === 'ship'
+      ? { prompt: formatShipPrompt({ ...rest, localDir }), downloads: [] }
+      : await buildClaudeExport({ ...rest, localDir })
   await bridgeRequest('/claude', {
     workspaceId,
     workspaceName: rest.workspaceName,

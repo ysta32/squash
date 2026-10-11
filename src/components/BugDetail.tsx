@@ -10,6 +10,7 @@ import {
   Mic,
   MousePointerClick,
   RotateCcw,
+  Rocket,
   RotateCw,
   Trash2,
 } from 'lucide-react'
@@ -73,6 +74,11 @@ export interface BugDetailProps {
   onRetryUploads?: () => void
   /** Opens Claude Code on this bug (or the setup guide when the helper is not connected). */
   onSend?: (bug: BugWithMeta) => void
+  /**
+   * Has Claude Code ship this bug's work: commit it to main, push it, resolve merge conflicts and
+   * check the deploy is live (or the setup guide when the helper is not connected).
+   */
+  onShip?: (bug: BugWithMeta) => void
   /** Copies a ready-to-paste Claude Code prompt for this bug. */
   onCopy?: (bug: BugWithMeta) => void
   /** The latest Claude Code session sent this bug, with what it is doing. */
@@ -182,6 +188,7 @@ function BugBody({
   onToast,
   onRetryUploads,
   onSend,
+  onShip,
   onCopy,
   claudeRun,
   popover,
@@ -403,7 +410,19 @@ function BugBody({
 
   const title = titleDraft ?? bug.title
   const noun = KIND_LABEL[bug.kind].one.toLowerCase()
+  const shipTitle = `Claude Code commits this ${noun}'s work to main, pushes it, resolves any merge conflicts and checks the deploy is live`
   const menuItems: MenuItem[] = [
+    ...(onShip
+      ? [
+          {
+            key: 'ship',
+            label: 'Ship to main with Claude Code',
+            icon: <MenuIcon icon={Rocket} />,
+            onSelect: () => onShip(bug),
+            disabled: !editable,
+          },
+        ]
+      : []),
     ...(onCopy
       ? [
           {
@@ -561,6 +580,25 @@ function BugBody({
                 >
                   <SparkMark className="text-accent" />
                   <span className="max-sm:sr-only">Send to Claude Code</span>
+                </button>
+              )}
+              {/* Phones reach Ship from the … menu, so the bottom bar keeps its three controls. */}
+              {onShip && (
+                <button
+                  type="button"
+                  disabled={!editable}
+                  onClick={() => onShip(bug)}
+                  title={shipTitle}
+                  className={buttonClass('secondary', 'md', 'h-8 px-3 max-sm:hidden')}
+                >
+                  <Rocket
+                    size={16}
+                    strokeWidth={1.5}
+                    absoluteStrokeWidth
+                    aria-hidden="true"
+                    className="text-accent"
+                  />
+                  Ship to main
                 </button>
               )}
               {/* The popover hangs from the cluster's end edge (desktop) or replaces the bar

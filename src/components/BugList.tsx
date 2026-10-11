@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useParams } from 'react-router-dom'
-import { AlertTriangle, Copy, FolderCog, Search, Sparkle, X } from 'lucide-react'
+import { Activity, AlertTriangle, Copy, FolderCog, Search, Sparkle, X } from 'lucide-react'
 import { filterBugs, hasActiveFilters } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
@@ -10,7 +10,9 @@ import type { BugKind, BugWithMeta, WorkspaceMember } from '../lib/types'
 import { cn } from '../lib/utils'
 import { ActiveFilters, BugFilters, Count, StatusMenu } from './BugFilters'
 import type { ListAction } from './BugFilters'
-import type { ClaudeRun } from '../lib/claudeExport'
+import { isRunActive, type ClaudeRun } from '../lib/claudeExport'
+import { StatusGlyph } from './ClaudeProgress'
+import { RunningList } from './RunningList'
 import { BugRow } from './BugRow'
 import { EmptyState, StatePanel } from './EmptyState'
 import { Tooltip } from './Tooltip'
@@ -60,6 +62,16 @@ export interface BugListProps {
   claudeConnected?: boolean
   /** Latest Claude Code session per bug number, to mark rows Claude is working on. */
   claudeRuns?: Map<number, ClaudeRun>
+  /** Every recent Claude Code run in the workspace, for the Running tab. */
+  claudeRunList?: ClaudeRun[]
+  /** The Running tab is showing instead of a kind's list. */
+  running?: boolean
+  /** Switches to the Running tab, or back to a kind's list. */
+  onTab?: (tab: BugKind | 'running') => void
+  /** Number of the item open in the detail pane (Running marks its run). */
+  selectedNumber?: number | null
+  /** Opens an item by number (from a run on the Running tab). */
+  onOpenNumber?: (number: number) => void
   /**
    * The detail pane beside the list shows the onboarding for an empty kind (desktop), so the list
    * keeps only a quiet line instead of repeating it.
@@ -67,18 +79,30 @@ export interface BugListProps {
   onboardingInDetail?: boolean
 }
 
-/** Bugs / Features / Tests as underline tabs: one 2px accent bar that slides between them. */
+/** A tab on the Bugs / Features / Tests / Running strip. */
+type ListTab = BugKind | 'running'
+
+/**
+ * Bugs / Features / Tests (and Running, when Claude Code is set up) as underline tabs: one 2px
+ * accent bar that slides between them.
+ */
 function KindTabs({
   kind,
   openByKind,
   countsPending = false,
   onChange,
+  running,
+  runningCount,
 }: {
-  kind: BugKind
+  kind: ListTab
   openByKind?: Record<BugKind, number>
   /** Counts are not known yet (first load): keep their space but show nothing. */
   countsPending?: boolean
-  onChange: (kind: BugKind) => void
+  onChange: (tab: ListTab) => void
+  /** Shows the Running tab. */
+  running: boolean
+  /** Claude Code runs in progress, shown on the Running tab. */
+  runningCount: number
 }) {
   const listRef = useRef<HTMLDivElement>(null)
   const [bar, setBar] = useState<{ left: number; width: number } | null>(null)
@@ -97,7 +121,7 @@ function KindTabs({
     const observer = new ResizeObserver(measure)
     observer.observe(list)
     return () => observer.disconnect()
-  }, [kind, openByKind])
+  }, [kind, openByKind, running, runningCount])
 
   // The first placement jumps into position; later tab changes slide.
   useLayoutEffect(() => {
@@ -107,7 +131,7 @@ function KindTabs({
     }
   }, [bar, settled])
 
-  const kinds = KINDS
+  const kinds: ListTab[] = running ? [...KINDS, 'running'] : KINDS
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
     event.preventDefault()
@@ -126,12 +150,46 @@ function KindTabs({
     <div
       ref={listRef}
       role="tablist"
-      aria-label="Bugs, features or tests"
+      aria-label={running ? 'Bugs, features, tests or running' : 'Bugs, features or tests'}
       onKeyDown={onKeyDown}
       className="relative flex h-full shrink-0 items-stretch gap-5"
     >
       {kinds.map((k) => {
         const active = kind === k
+        if (k === 'running')
+          return (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              tabIndex={active ? 0 : -1}
+              title="Every Claude Code run in this workspace, live"
+              onClick={() => {
+                if (!active) onChange(k)
+              }}
+              className={cn(
+                't focus-ring-inset flex items-center gap-1.5 rounded-xs text-sm font-medium',
+                active ? 'text-ink' : 'text-ink-3 hover:text-ink',
+              )}
+            >
+              {/* A narrow list (phones, a 400px pane) shows the tab as an icon beside the
+                  status menu, so the strip never overflows. */}
+              <Activity
+                size={14}
+                strokeWidth={1.5}
+                aria-hidden="true"
+                className="@min-[440px]:hidden"
+              />
+              <span className="@max-[439px]:sr-only">Running</span>
+              {runningCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <StatusGlyph kind="working" className="size-3 text-status-progress" />
+                  <Count value={runningCount} />
+                </span>
+              )}
+            </button>
+          )
         return (
           <button
             key={k}
@@ -196,6 +254,11 @@ export function BugList({
   onInvite,
   claudeConnected = false,
   claudeRuns,
+  claudeRunList = [],
+  running = false,
+  onTab,
+  selectedNumber = null,
+  onOpenNumber,
   onboardingInDetail = false,
 }: BugListProps) {
   const { workspaceId } = useParams<{ workspaceId: string }>()
@@ -249,8 +312,9 @@ export function BugList({
       : exportable.length !== counts[filters.tab]
         ? `${exportable.length} ${exportable.length === 1 ? KIND_LABEL[filters.kind].one.toLowerCase() : items} in view`
         : ''
-  const showBulk = Boolean(bulkActions && picked.length > 0)
-  const showSendBar = Boolean(onSend && exportable.length > 0 && !showBulk)
+  const showBulk = Boolean(bulkActions && picked.length > 0 && !running)
+  const showSendBar = Boolean(onSend && exportable.length > 0 && !showBulk && !running)
+  const activeRuns = claudeRunList.filter(isRunActive).length
 
   const actions: ListAction[] = []
   if (onCopy && exportable.length > 0)
@@ -285,24 +349,31 @@ export function BugList({
   return (
     <section aria-label="Bug list" className="flex h-full min-h-0 flex-col bg-surface-1 text-ink">
       <div className="shrink-0 border-b border-line">
-        <div className="flex h-[2.8571rem] items-stretch justify-between gap-3 border-b border-line px-4 pointer-coarse:h-[3.1429rem]">
+        <div className="@container flex h-[2.8571rem] items-stretch justify-between gap-3 border-b border-line px-4 pointer-coarse:h-[3.1429rem]">
           <KindTabs
-            kind={filters.kind}
+            kind={running ? 'running' : filters.kind}
             openByKind={openByKind}
             countsPending={countsPending}
-            onChange={(kind) => onFilters({ ...filters, kind })}
+            onChange={(tab) => {
+              if (onTab) onTab(tab)
+              else if (tab !== 'running') onFilters({ ...filters, kind: tab })
+            }}
+            running={Boolean(onTab)}
+            runningCount={activeRuns}
           />
           {/* Status is a filter, so it is one compact menu at every width, never a second row
-              of tabs beside the Bugs / Features / Tests underline. */}
-          <StatusMenu
-            tab={filters.tab}
-            counts={counts}
-            countsPending={countsPending}
-            onTab={(tab) => onFilters({ ...filters, tab })}
-            className="-mr-2 flex shrink-0 items-center"
-          />
+              of tabs beside the Bugs / Features / Tests underline. Running has no status. */}
+          {!running && (
+            <StatusMenu
+              tab={filters.tab}
+              counts={counts}
+              countsPending={countsPending}
+              onTab={(tab) => onFilters({ ...filters, tab })}
+              className="-mr-2 flex shrink-0 items-center"
+            />
+          )}
         </div>
-        <div className="flex items-center gap-1 px-4 py-2">
+        <div className={cn('flex items-center gap-1 px-4 py-2', running && 'hidden')}>
           <div className="relative min-w-0 flex-1">
             <Search
               size={14}
@@ -363,10 +434,17 @@ export function BugList({
             actions={actions}
           />
         </div>
-        <ActiveFilters filters={filters} onFilters={onFilters} members={members} selfId={selfId} />
+        {!running && (
+          <ActiveFilters
+            filters={filters}
+            onFilters={onFilters}
+            members={members}
+            selfId={selfId}
+          />
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]" aria-busy={loading}>
-        {!loading && error && bugs.length > 0 && (
+        {!running && !loading && error && bugs.length > 0 && (
           <div
             role="status"
             className="flex h-[2rem] items-center gap-2 border-b border-line bg-surface-3 px-4 text-xs text-ink-2"
@@ -383,7 +461,7 @@ export function BugList({
           </div>
         )}
         {/* While nothing is filed anywhere the checklist is the onboarding itself (below). */}
-        {!loading && !error && workspaceId && !(firstItem && !steps.filed) && (
+        {!running && !loading && !error && workspaceId && !(firstItem && !steps.filed) && (
           <GettingStarted
             workspaceId={workspaceId}
             steps={steps}
@@ -391,7 +469,16 @@ export function BugList({
             onClaudeSetup={onClaudeSetup}
           />
         )}
-        {loading ? (
+        {running ? (
+          <RunningList
+            runs={claudeRunList}
+            bugs={bugs}
+            selectedNumber={selectedNumber}
+            onOpen={(n) => onOpenNumber?.(n)}
+            claudeConnected={claudeConnected}
+            onClaudeSetup={onClaudeSetup}
+          />
+        ) : loading ? (
           <Skeleton />
         ) : error && bugs.length === 0 ? (
           <StatePanel

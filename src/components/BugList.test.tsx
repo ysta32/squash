@@ -809,3 +809,56 @@ describe('BugList', () => {
     expect(screen.queryByLabelText('Currently viewing')).not.toBeInTheDocument()
   })
 })
+
+describe('BugList Running tab', () => {
+  afterEach(cleanup)
+
+  const liveRun = {
+    id: 'r1',
+    bugs: [1],
+    folder: '/repo',
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    state: 'working' as const,
+    activity: 'Running tests',
+    message: null,
+    todos: null,
+    steps: [],
+    stepCount: 1,
+  }
+
+  it('offers a Running tab with the live count, and shows every run there', () => {
+    const onTab = vi.fn()
+    const { rerender } = render(
+      <MemoryRouter>
+        <Harness onTab={onTab} claudeRunList={[liveRun]} claudeConnected />
+      </MemoryRouter>,
+    )
+    const tab = screen.getByRole('tab', { name: /Running/ })
+    expect(tab).toHaveAttribute('aria-selected', 'false')
+    expect(tab).toHaveTextContent('1')
+    fireEvent.click(tab)
+    expect(onTab).toHaveBeenCalledWith('running')
+
+    rerender(
+      <MemoryRouter>
+        <Harness onTab={onTab} claudeRunList={[liveRun]} claudeConnected running />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: /Running/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('list', { name: 'Claude Code runs' })).toHaveTextContent('Broken login')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Status: / })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Features/ }))
+    expect(onTab).toHaveBeenCalledWith('feature')
+  })
+
+  it('has no Running tab without a handler for it', () => {
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('tab', { name: /Running/ })).not.toBeInTheDocument()
+  })
+})

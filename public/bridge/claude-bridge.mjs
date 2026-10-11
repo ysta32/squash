@@ -41,7 +41,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 8
+const VERSION = 9
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -63,11 +63,28 @@ const ORIGINS = new Set(
     .filter(Boolean),
 )
 const EXTRA_ARGS = (process.env.SQUASH_CLAUDE_ARGS ?? '').split(/\s+/).filter(Boolean)
-// Runs ship their work (commit and push), so those git commands never wait on a permission prompt
-// nobody is there to answer. Force-pushes stay blocked.
+// Runs ship their work (commit, bring in what landed on the remote, resolve conflicts, push), so
+// those git commands never wait on a permission prompt nobody is there to answer. Force-pushes
+// stay blocked.
 const SHIP_TOOLS = [
-  '--allowedTools=Bash(git add:*),Bash(git commit:*),Bash(git push:*)',
-  '--disallowedTools=Bash(git push --force:*),Bash(git push -f:*)',
+  '--allowedTools=' +
+    [
+      'add',
+      'commit',
+      'push',
+      'fetch',
+      'pull',
+      'rebase',
+      'merge',
+      'switch',
+      'checkout',
+      'status',
+      'log',
+      'diff',
+    ]
+      .map((cmd) => `Bash(git ${cmd}:*)`)
+      .join(','),
+  '--disallowedTools=Bash(git push --force:*),Bash(git push -f:*),Bash(git push --force-with-lease:*)',
 ]
 const CLAUDE_ARGS = [
   ...(EXTRA_ARGS.some((a) => a.startsWith('--permission-mode'))

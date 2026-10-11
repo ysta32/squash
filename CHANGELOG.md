@@ -4,7 +4,9 @@
 
 ### Added
 
-- Claude Code runs ship their work: once a fix or feature is verified, Claude commits it and pushes it to the current branch (never force-pushing), so a project that deploys from git goes live without touching the terminal. Reinstall the helper (v8) so those git commands run without a permission prompt.
+- A Running tab next to Bugs, Features and Tests shows every Claude Code run in the workspace at once, updating live: what Claude is doing, how far through its plan it is, and Claude's summary once a run finishes. Click an item in a run to open it.
+- Ship to main: a button on every bug, feature and test (also in its … menu) has Claude Code commit the item's work on the default branch, merge in whatever landed there meanwhile (resolving conflicts), push it and check that the deploy is live, doing the work first if it isn't done yet.
+- Claude Code runs ship their work: once a fix or feature is verified, Claude commits it and pushes it to the current branch (never force-pushing), so a project that deploys from git goes live without touching the terminal. If a push is rejected, Claude rebases, resolves any conflicts and pushes again, then checks the deploy. Reinstall the helper (v9) so those git commands run without a permission prompt.
 - Auto-fix new items (Settings → Claude Code): when on, each bug or feature request you file goes straight to Claude Code once its screenshots upload. Off by default, per browser.
 
 ## v2.0.1 — 2026-10-08

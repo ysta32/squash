@@ -12,6 +12,7 @@ import {
   sendToBridge,
   type BridgeStatus,
   type ClaudeRun,
+  type ClaudeRunMode,
 } from '../lib/claudeExport'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 
@@ -27,6 +28,11 @@ export interface UseClaudeExportResult {
   connected: boolean
   /** Opens Claude Code on the bugs via the bridge; opens the setup guide when it is not connected. */
   sendBugs(bugs: BugWithMeta[]): void
+  /**
+   * Has Claude Code ship the bugs' work: commit it on the default branch, merge in what landed
+   * meanwhile, push and check the deploy. Opens the setup guide when the helper is not connected.
+   */
+  shipBugs(bugs: BugWithMeta[]): void
   /** Copies a ready-to-paste prompt for Claude Code. */
   copyBugs(bugs: BugWithMeta[]): void
   setupOpen: boolean
@@ -36,6 +42,8 @@ export interface UseClaudeExportResult {
   pending: BugWithMeta[]
   /** Latest Claude run per bug number, when the bridge reports progress. */
   runs: Map<number, ClaudeRun>
+  /** Every recent Claude run in this workspace (bugs, features and tests alike), newest first. */
+  runList: ClaudeRun[]
 }
 
 function label(bugs: BugWithMeta[]): string {
@@ -94,13 +102,11 @@ export function useClaudeExport(
   }, [tracksProgress, workspaceId, anyActive, runsNonce])
 
   // Runs from a bridge that has since stopped are stale: show none until it is back.
-  const runs = useMemo(
-    () => latestRunByBug(tracksProgress ? runList : []),
-    [tracksProgress, runList],
-  )
+  const liveRuns = useMemo(() => (tracksProgress ? runList : []), [tracksProgress, runList])
+  const runs = useMemo(() => latestRunByBug(liveRuns), [liveRuns])
 
-  const sendBugs = useCallback(
-    (all: BugWithMeta[]) => {
+  const run = useCallback(
+    (all: BugWithMeta[], mode: ClaudeRunMode) => {
       const bugs = all.filter((b) => !b.optimistic)
       if (bugs.length === 0) return
       if (!connected) {
@@ -108,17 +114,30 @@ export function useClaudeExport(
         setSetupOpen(true)
         return
       }
-      onToast(`Sending ${label(bugs)} to Claude Code…`)
-      const input = { bugs, members, workspaceId, workspaceName, origin: window.location.origin }
+      const ship = mode === 'ship'
+      onToast(
+        ship
+          ? `Asking Claude Code to ship ${label(bugs)}…`
+          : `Sending ${label(bugs)} to Claude Code…`,
+      )
+      const input = {
+        bugs,
+        members,
+        workspaceId,
+        workspaceName,
+        origin: window.location.origin,
+        mode,
+      }
       sendToBridge(input).then(
         () => {
           setPending([])
           setSetupOpen(false)
           setRunsNonce((n) => n + 1)
+          const doing = ship ? 'shipping' : 'fixing'
           onToast(
             tracksProgress
-              ? `Claude Code is fixing ${label(bugs)}. Follow along on the bug.`
-              : `Claude Code is fixing ${label(bugs)}. Reinstall the helper (Claude setup) to follow its progress here.`,
+              ? `Claude Code is ${doing} ${label(bugs)}. Follow along on the bug or under Running.`
+              : `Claude Code is ${doing} ${label(bugs)}. Reinstall the helper (Claude setup) to follow its progress here.`,
           )
         },
         (err: unknown) => {
@@ -146,6 +165,8 @@ export function useClaudeExport(
     },
     [connected, tracksProgress, members, workspaceId, workspaceName, onToast],
   )
+  const sendBugs = useCallback((bugs: BugWithMeta[]) => run(bugs, 'fix'), [run])
+  const shipBugs = useCallback((bugs: BugWithMeta[]) => run(bugs, 'ship'), [run])
 
   const copyBugs = useCallback(
     (all: BugWithMeta[]) => {
@@ -170,11 +191,13 @@ export function useClaudeExport(
     status,
     connected,
     sendBugs,
+    shipBugs,
     copyBugs,
     setupOpen,
     openSetup,
     closeSetup,
     pending,
     runs,
+    runList: liveRuns,
   }
 }
