@@ -3,6 +3,7 @@ import { Check, CircleCheck, Eye, Image as ImageIcon, Sparkle, SquareCheck } fro
 import type { PresenceUser } from '../hooks/usePresence'
 import type { ClaudeRunState } from '../lib/claudeExport'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
+import { KIND_LABEL } from '../lib/types'
 import { cn, relativeTime } from '../lib/utils'
 import { Avatar } from './Avatar'
 import { SeverityTicks } from './SeverityTicks'
@@ -89,7 +90,7 @@ export const BugRow = memo(function BugRow({
       'Unknown user',
   )
 
-  const kindLabel = bug.kind === 'feature' ? 'feature request' : 'bug'
+  const kindLabel = KIND_LABEL[bug.kind].noun
   const toggleLabel = resolved ? `Reopen #${num}` : `Mark #${num} resolved`
   const toggleTitle = resolved
     ? `Resolved by ${resolver?.display_name ?? 'Unknown user'}. Click to reopen`

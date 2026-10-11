@@ -19,6 +19,7 @@ import {
   Layers,
   FlaskConical,
   Lightbulb,
+  ListTodo,
   Lock,
   MousePointerClick,
   Search,
@@ -145,7 +146,7 @@ export default function Workspace() {
     if (bug.filed_by !== selfId) {
       const name =
         ws.members.find((m) => m.user_id === bug.filed_by)?.profile.display_name ?? 'Someone'
-      const title = `${name} filed ${bug.kind === 'bug' ? '' : `${bug.kind} `}#${bug.number}`
+      const title = `${name} filed ${bug.kind === 'bug' ? '' : `${KIND_LABEL[bug.kind].one.toLowerCase()} `}#${bug.number}`
       toast(title)
       notify({
         title,
@@ -527,9 +528,12 @@ export default function Workspace() {
       // No Undo: a delete is final (the row and its screenshots are gone; the deletion log in
       // Settings only records it). The icon matches the other confirmation toasts.
       if (bug)
-        toast(`Deleted ${bug.kind === 'bug' ? '' : `${bug.kind} `}#${bug.number}`, {
-          icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
-        })
+        toast(
+          `Deleted ${bug.kind === 'bug' ? '' : `${KIND_LABEL[bug.kind].one.toLowerCase()} `}#${bug.number}`,
+          {
+            icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
+          },
+        )
       if (neighbour) {
         focusRowOf.current = neighbour.id
         select(neighbour.id, { replace: true })
@@ -561,6 +565,7 @@ export default function Workspace() {
       bug: countBugs(bugs, 'bug').open,
       feature: countBugs(bugs, 'feature').open,
       test: countBugs(bugs, 'test').open,
+      todo: countBugs(bugs, 'todo').open,
     }),
     [bugs],
   )
@@ -830,6 +835,13 @@ export default function Workspace() {
           icon: FlaskConical,
           next: { kind: 'test' as const },
           words: ['kind', 'qa', 'checks'],
+        },
+        {
+          id: 'nav-todos',
+          label: 'Show to-dos',
+          icon: ListTodo,
+          next: { kind: 'todo' as const },
+          words: ['kind', 'tasks', 'todo', 'checklist'],
         },
         {
           id: 'nav-open',

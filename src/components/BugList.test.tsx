@@ -247,7 +247,7 @@ describe('BugList', () => {
     render(
       <Harness
         bugs={[...bugs, feature]}
-        openByKind={{ bug: 1, feature: 1, test: 0 }}
+        openByKind={{ bug: 1, feature: 1, test: 0, todo: 0 }}
         onFilters={onFilters}
       />,
     )
@@ -266,7 +266,7 @@ describe('BugList', () => {
     render(
       <Harness
         bugs={[...bugs, check]}
-        openByKind={{ bug: 1, feature: 0, test: 1 }}
+        openByKind={{ bug: 1, feature: 0, test: 1, todo: 0 }}
         onFilters={onFilters}
       />,
     )
@@ -276,6 +276,24 @@ describe('BugList', () => {
     expect(screen.getByRole('option', { name: '#4 Checkout smoke test' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: 'Search tests' })).toBeInTheDocument()
+  })
+
+  it('has a To-dos tab that shows only to-dos', () => {
+    const onFilters = vi.fn()
+    const task = bug({ id: 'todo', number: 5, title: 'Write the README', kind: 'todo' })
+    render(
+      <Harness
+        bugs={[...bugs, task]}
+        openByKind={{ bug: 1, feature: 0, test: 0, todo: 1 }}
+        onFilters={onFilters}
+      />,
+    )
+    expect(screen.queryByRole('option', { name: '#5 Write the README' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /To-dos/ }))
+    expect(onFilters).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'todo' }))
+    expect(screen.getByRole('option', { name: '#5 Write the README' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search to-dos' })).toBeInTheDocument()
   })
 
   it('shows feature wording when there are no feature requests', () => {
@@ -596,7 +614,7 @@ describe('BugList', () => {
         bugs={[]}
         loading
         counts={{ open: 0, resolved: 0, all: 0 }}
-        openByKind={{ bug: 0, feature: 0, test: 0 }}
+        openByKind={{ bug: 0, feature: 0, test: 0, todo: 0 }}
       />,
     )
     // Skeleton blocks the width of two digits stand in for the counts: no false "0", no shift.
@@ -639,7 +657,7 @@ describe('BugList', () => {
   })
 
   it('shows the open count only on the inactive kind tab', () => {
-    render(<Harness openByKind={{ bug: 1, feature: 3, test: 0 }} />)
+    render(<Harness openByKind={{ bug: 1, feature: 3, test: 0, todo: 0 }} />)
     expect(screen.getByRole('tab', { name: 'Bugs' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Features 3' })).toHaveAttribute(
       'aria-selected',

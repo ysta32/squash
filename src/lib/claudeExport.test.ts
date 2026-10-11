@@ -239,6 +239,16 @@ describe('formatClaudePrompt for tests', () => {
   })
 })
 
+describe('formatClaudePrompt for to-dos', () => {
+  it('asks Claude to do the to-do', () => {
+    const { prompt } = formatClaudePrompt({ ...base, bugs: [bug({ kind: 'todo' })] })
+    expect(prompt).toContain('Do this to-do from the Squash bug tracker')
+    expect(prompt).toContain('## To-do #')
+    expect(prompt).toContain('Do what it describes in this codebase and verify it is done')
+    expect(prompt).not.toContain('root cause')
+  })
+})
+
 describe('batchName', () => {
   it('is filesystem-safe and names the bugs', () => {
     expect(batchName([bug()], new Date('2026-10-06T15:30:12Z'))).toBe('20261006-153012-12')

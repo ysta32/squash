@@ -522,6 +522,13 @@ do $$ declare b uuid; num int; n int; begin
   if not exists (select 1 from public.bugs where id = b and kind = 'test') then
     raise exception 'FAIL[63]: could not file a test'; end if;
   delete from public.bugs where id = b;
+  -- to-dos are a fourth kind and file like any other item
+  insert into public.bugs (workspace_id, title, description, severity, filed_by, kind)
+    values (current_setting('t.ws1')::uuid, 'A to-do', 'x', 'low', '10000000-0000-0000-0000-000000000002', 'todo')
+    returning id into b;
+  if not exists (select 1 from public.bugs where id = b and kind = 'todo') then
+    raise exception 'FAIL[63]: could not file a to-do'; end if;
+  delete from public.bugs where id = b;
 end $$;
 :as_a
 -- [64] the workspace owner can delete a bug filed by someone else

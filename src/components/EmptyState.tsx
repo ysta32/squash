@@ -167,7 +167,9 @@ export function EmptyState({
           ? "Paste a screenshot anywhere and describe what's wrong. No form to fill in."
           : kind === 'test'
             ? 'Paste a screenshot anywhere and describe what to test. No form to fill in.'
-            : 'Paste a screenshot anywhere and describe your feature request. No form to fill in.'
+            : kind === 'todo'
+              ? 'Paste a screenshot anywhere and describe what needs doing. No form to fill in.'
+              : 'Paste a screenshot anywhere and describe your feature request. No form to fill in.'
         : `Every ${noun} here has been resolved.`
 
   return (

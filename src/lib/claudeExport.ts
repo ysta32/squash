@@ -91,6 +91,12 @@ const KIND_PROMPT: Record<BugKind, { heading: string; verb: string; task: string
       task: 'write or run the test it describes in this codebase and report whether it passes',
       each: 'write or run each test',
     },
+    todo: {
+      heading: 'To-do',
+      verb: 'Do',
+      task: 'do what it describes in this codebase and verify it is done',
+      each: 'do each to-do',
+    },
   }
 
 /** "a", "a or b", "a, b or c". */
