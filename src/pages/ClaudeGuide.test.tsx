@@ -109,7 +109,9 @@ describe('ClaudeGuide', () => {
     ],
     [{ version: 5, platform: 'darwin' }, /pins screenshot downloads/],
     [{ version: 6, platform: 'darwin' }, /records its commit, branch, pull request and diff/],
-    [{ version: 7, platform: 'darwin' }, /up to date/],
+    [{ version: 7, platform: 'darwin' }, /finished under an older helper/],
+    [{ version: 11, platform: 'darwin' }, /finished under an older helper/],
+    [{ version: 12, platform: 'darwin' }, /up to date/],
   ])('reports %o', async (status, text) => {
     pingBridge.mockResolvedValue(status)
     setup()

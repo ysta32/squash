@@ -4,7 +4,7 @@ import { Button, proseLinkClass } from '../ui'
 import { ClaudeSetupDialog } from '../ClaudeSetupDialog'
 import {
   BRIDGE_VERSION,
-  HARDENED_VERSION,
+  LEGACY_RESULTS_VERSION,
   getAutoSend,
   getBridgeFolder,
   pingBridge,
@@ -97,7 +97,7 @@ export function ClaudeSettings({
   const checking = check.state === 'checking'
   const status = check.state === 'done' ? check.status : null
   const connected = status !== null && status.version >= BRIDGE_VERSION
-  const outdated = status !== null && (!connected || status.version < HARDENED_VERSION)
+  const outdated = status !== null && (!connected || status.version < LEGACY_RESULTS_VERSION)
 
   const helperText = checking
     ? 'Checking this computer…'

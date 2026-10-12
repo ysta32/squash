@@ -55,7 +55,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 11
+const VERSION = 12
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -206,6 +206,8 @@ const RESERVED_FILES = new Set([
   'bridge.json',
 ])
 const RUN_ID = /^[0-9a-f]{32}$/
+// A batch folder's name, as in the results routes.
+const BATCH_NAME = /^[A-Za-z0-9_.-]{1,80}$/
 const CLOSE_AFTER_MS = 4000
 // Proof of fix: git and gh run with fixed argv (never a shell) and these limits.
 const GIT_TIMEOUT_MS = 10_000
@@ -1172,17 +1174,62 @@ async function handleSetFolder(workspaceId, payload) {
   return { folder }
 }
 
-/** The recorded run with this batch name in the workspace, or null. */
+/**
+ * Batches launched by helpers before v4, which never recorded runs or wrote done.json: Claude
+ * still wrote result.json, but nothing picked it up, so those items were never resolved. Returns
+ * the unapplied ones in `bugsDir` (a project's .squash/bugs) whose prompt is for this workspace.
+ * A batch with run.json belongs to the runner (it may still be working) and is never adopted.
+ */
+export async function legacyBatches(bugsDir, workspaceId) {
+  let names
+  try {
+    names = await readdir(bugsDir)
+  } catch {
+    return []
+  }
+  const found = []
+  for (const name of names.sort()) {
+    if (!BATCH_NAME.test(name)) continue
+    const dir = join(bugsDir, name)
+    const has = (file) => existsSync(join(dir, file))
+    if (!has(RESULT_FILE) || has(RUN_FILE) || has(DONE_FILE) || has(CLAIM_FILE)) continue
+    let prompt
+    try {
+      prompt = await readFile(join(dir, 'prompt.md'), 'utf8')
+    } catch {
+      continue
+    }
+    if (prompt.includes(`/app/${workspaceId}/`))
+      found.push({ id: name, workspaceId, dir, legacy: true })
+  }
+  return found
+}
+
+/** Legacy batches in the workspace's project folder (see legacyBatches). */
+async function workspaceLegacyRuns(workspaceId) {
+  const folder = (await loadConfig()).workspaces[workspaceId]?.folder ?? DEFAULT_FOLDER
+  if (!folder || !isDir(folder)) return []
+  return legacyBatches(join(folder, '.squash', 'bugs'), workspaceId)
+}
+
+/** The recorded (or legacy) run with this batch name in the workspace, or null. */
 async function findRun(workspaceId, batch) {
-  return (await loadRuns()).find((r) => r.id === batch && r.workspaceId === workspaceId) ?? null
+  const recorded = (await loadRuns()).find((r) => r.id === batch && r.workspaceId === workspaceId)
+  if (recorded) return recorded
+  return (await workspaceLegacyRuns(workspaceId)).find((r) => r.id === batch) ?? null
 }
 
 /** Finished runs in the workspace that no Squash tab has applied yet. */
 async function workspaceResults(workspaceId) {
   const results = []
-  for (const run of (await loadRuns()).filter((r) => r.workspaceId === workspaceId)) {
+  const recorded = (await loadRuns()).filter((r) => r.workspaceId === workspaceId)
+  const ids = new Set(recorded.map((r) => r.id))
+  const legacy = (await workspaceLegacyRuns(workspaceId)).filter((r) => !ids.has(r.id))
+  for (const run of [...recorded, ...legacy]) {
     if (!run.dir || existsSync(join(run.dir, CLAIM_FILE))) continue
-    const done = await readJson(join(run.dir, DONE_FILE))
+    const done = run.legacy
+      ? { exitCode: null, result: await readJson(join(run.dir, RESULT_FILE)), git: null }
+      : await readJson(join(run.dir, DONE_FILE))
     if (done)
       results.push({
         batch: run.id,
@@ -1197,7 +1244,7 @@ async function workspaceResults(workspaceId) {
 /** Marks a run as applied. Only the first caller gets claimed: true, so it is applied once. */
 async function claimResult(workspaceId, batch) {
   const run = await findRun(workspaceId, batch)
-  if (!run?.dir || !existsSync(join(run.dir, DONE_FILE))) {
+  if (!run?.dir || !existsSync(join(run.dir, run.legacy ? RESULT_FILE : DONE_FILE))) {
     throw new HttpError(404, 'not_found', 'No such finished run')
   }
   try {

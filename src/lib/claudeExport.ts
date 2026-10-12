@@ -551,6 +551,8 @@ export const PROOF_VERSION = 7
 export const PROJECT_VERSION = 10
 /** Oldest bridge that answers questions about the project in Squash (and opens terminals in the background). */
 export const ASK_VERSION = 11
+/** Oldest bridge that also applies results from runs an old helper (before v4) never picked up. */
+export const LEGACY_RESULTS_VERSION = 12
 
 export interface BridgeStatus {
   version: number

@@ -1,7 +1,7 @@
 // @vitest-environment node
 /// <reference types="node" />
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -50,6 +50,10 @@ interface Bridge {
     options?: { run?: Exec; startedAt?: string | null },
   ): Promise<GitReport | null>
   readScreenshot(dir: string, file: string): Promise<{ data: Buffer; type: string }>
+  legacyBatches(
+    bugsDir: string,
+    workspaceId: string,
+  ): Promise<{ id: string; workspaceId: string; dir: string; legacy: true }[]>
   askArgs(extra?: string[]): string[]
   validateAsk(payload: unknown): {
     id: string
@@ -813,6 +817,52 @@ describe('proof of fix', () => {
       deletions: 0,
     })
     expect(await bridge.startSha(tmpdir())).toBeNull()
+  })
+})
+
+describe('legacyBatches', () => {
+  const ws = '9d0d391d-3d9c-4689-af9c-7255e1e2085d'
+  function batch(root: string, name: string, files: Record<string, string>) {
+    const dir = join(root, name)
+    mkdirSync(dir)
+    for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body)
+  }
+  const prompt = (id: string) => `- Link: https://squash.example/app/${id}/bug/17\n`
+  const result = '{"bugs":[{"number":17,"resolved":true,"summary":"Done."}]}'
+
+  it('adopts unapplied results an old helper never picked up, for this workspace only', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'squash-legacy-'))
+    batch(root, '20261012-195226-17', { 'prompt.md': prompt(ws), 'result.json': result })
+    batch(root, '20261012-195316-18', { 'prompt.md': prompt('other-ws'), 'result.json': result })
+    batch(root, '20261012-195400-19', { 'prompt.md': prompt(ws) })
+    batch(root, '20261012-195500-20', {
+      'prompt.md': prompt(ws),
+      'result.json': result,
+      applied: 'x',
+    })
+    batch(root, '20261012-195600-21', {
+      'prompt.md': prompt(ws),
+      'result.json': result,
+      'run.json': '{}',
+    })
+    batch(root, '20261012-195700-22', {
+      'prompt.md': prompt(ws),
+      'result.json': result,
+      'done.json': '{}',
+    })
+    const found = await bridge.legacyBatches(root, ws)
+    expect(found).toEqual([
+      {
+        id: '20261012-195226-17',
+        workspaceId: ws,
+        dir: join(root, '20261012-195226-17'),
+        legacy: true,
+      },
+    ])
+  })
+
+  it('returns nothing when the folder has no batches', async () => {
+    expect(await bridge.legacyBatches(join(tmpdir(), 'squash-missing-dir-xyz'), ws)).toEqual([])
   })
 })
 

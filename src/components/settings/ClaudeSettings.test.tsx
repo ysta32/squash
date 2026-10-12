@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../lib/claudeExport', () => ({
   BRIDGE_VERSION: 2,
-  HARDENED_VERSION: 6,
+  LEGACY_RESULTS_VERSION: 12,
   pingBridge: () => mocks.pingBridge(),
   getBridgeFolder: (id: string) => mocks.getBridgeFolder(id),
   getAutoSend: () => false,
@@ -36,7 +36,7 @@ vi.mock('../ClaudeSetupDialog', () => ({
     ) : null,
 }))
 
-const RUNNING = { version: 6, platform: 'darwin' }
+const RUNNING = { version: 12, platform: 'darwin' }
 
 function show() {
   render(
@@ -82,8 +82,8 @@ describe('ClaudeSettings', () => {
     })
     await flush()
     expect(mocks.pingBridge.mock.calls.length).toBeGreaterThan(before)
-    expect(screen.getByRole('dialog', { name: 'Setup guide' })).toHaveTextContent('Connected v6')
-    expect(screen.getByText(/^Connected · helper v6 · macOS$/)).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Setup guide' })).toHaveTextContent('Connected v12')
+    expect(screen.getByText(/^Connected · helper v12 · macOS$/)).toBeInTheDocument()
     expect(screen.getByText('/Users/maya/lumen')).toBeInTheDocument()
   })
 
@@ -102,7 +102,7 @@ describe('ClaudeSettings', () => {
     })
     await flush()
     expect(mocks.pingBridge).toHaveBeenCalledTimes(afterMount + 1)
-    expect(screen.getByText(/^Connected · helper v6/)).toBeInTheDocument()
+    expect(screen.getByText(/^Connected · helper v12/)).toBeInTheDocument()
   })
 
   it('stops polling once the guide closes', async () => {
@@ -131,9 +131,9 @@ describe('ClaudeSettings', () => {
       window.dispatchEvent(new Event('focus'))
     })
     await flush()
-    expect(screen.getByText(/^Connected · helper v6/)).toBeInTheDocument()
+    expect(screen.getByText(/^Connected · helper v12/)).toBeInTheDocument()
     await act(async () => resolveSlow(null))
     await flush()
-    expect(screen.getByText(/^Connected · helper v6/)).toBeInTheDocument()
+    expect(screen.getByText(/^Connected · helper v12/)).toBeInTheDocument()
   })
 })
