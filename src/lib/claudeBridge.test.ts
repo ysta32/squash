@@ -50,6 +50,20 @@ interface Bridge {
     options?: { run?: Exec; startedAt?: string | null },
   ): Promise<GitReport | null>
   readScreenshot(dir: string, file: string): Promise<{ data: Buffer; type: string }>
+  askArgs(extra?: string[]): string[]
+  validateAsk(payload: unknown): {
+    id: string
+    question: string
+    bugs: number[]
+    files: { name: string; data: Buffer }[]
+  }
+  summarizeQuestion(
+    meta: Record<string, unknown>,
+    events: BridgeEvent[],
+    done: Record<string, unknown> | null,
+    live: boolean,
+  ): { state: string; answer?: string; activity?: string; error?: string }
+  BACKGROUND_TERMINAL_SCRIPT: string[]
   validateProject(payload: unknown): {
     workspaceId: string
     workspaceName: string
@@ -841,5 +855,76 @@ describe('validateProject', () => {
       expect(() => bridge.validateProject({ workspaceId: 'ws1', name })).toThrow()
     }
     expect(() => bridge.validateProject({ workspaceId: '../x', name: 'ok' })).toThrow()
+  })
+})
+
+describe('questions', () => {
+  it('runs read-only, whatever SQUASH_CLAUDE_ARGS says about permissions', () => {
+    const args = bridge.askArgs([
+      '--permission-mode',
+      'bypassPermissions',
+      '--dangerously-skip-permissions',
+      '--allowedTools=Edit',
+      '--model',
+      'opus',
+    ])
+    expect(args.slice(0, 2)).toEqual(['--permission-mode', 'default'])
+    expect(args).not.toContain('bypassPermissions')
+    expect(args).not.toContain('--dangerously-skip-permissions')
+    expect(args).not.toContain('--allowedTools=Edit')
+    expect(args).toContain('--model')
+    expect(args).toContain('opus')
+    const allowed = args.find((a) => a.startsWith('--allowedTools='))!
+    expect(allowed).toContain('Read')
+    expect(allowed).toContain('Bash(git log:*)')
+    expect(allowed).not.toMatch(/Edit|Write|git push|git commit/)
+    expect(args).toContain('--disallowedTools=Edit,MultiEdit,Write,NotebookEdit')
+  })
+
+  it('validates a question and decodes its attached files', () => {
+    const ask = bridge.validateAsk({
+      workspaceId: 'ws1',
+      id: 'ask-20261012-120000-ab12',
+      question: '  Is #12 fixed?  ',
+      prompt: 'Answer it',
+      bugs: [12, -1],
+      files: [{ name: 'file-1-notes.txt', data: Buffer.from('hello').toString('base64') }],
+    })
+    expect(ask.question).toBe('Is #12 fixed?')
+    expect(ask.bugs).toEqual([12])
+    expect(ask.files[0].data.toString()).toBe('hello')
+  })
+
+  it('rejects unsafe or reserved file names and a missing question', () => {
+    const base = { workspaceId: 'ws1', id: 'ask-1', question: 'Q', prompt: 'P' }
+    for (const name of ['../x', 'result.json', 'done.json', '.hidden', 'a/b']) {
+      expect(() => bridge.validateAsk({ ...base, files: [{ name, data: '' }] })).toThrow()
+    }
+    expect(() => bridge.validateAsk({ ...base, question: ' ' })).toThrow('Missing question')
+  })
+
+  it('reports a question as working, answered or failed', () => {
+    const meta = { id: 'ask-1', question: 'Q', askedAt: at(0).toISOString() }
+    const tool = { t: at(1).toISOString(), kind: 'tool', text: 'Reading src/App.tsx' }
+    expect(bridge.summarizeQuestion(meta, [tool], null, true)).toMatchObject({
+      state: 'working',
+      activity: 'Reading src/App.tsx',
+    })
+    expect(
+      bridge.summarizeQuestion(meta, [], { answer: 'Yes, fixed.', exitCode: 0 }, true),
+    ).toMatchObject({ state: 'answered', answer: 'Yes, fixed.' })
+    expect(bridge.summarizeQuestion(meta, [], { answer: '', exitCode: 1 }, true).state).toBe(
+      'failed',
+    )
+    expect(bridge.summarizeQuestion(meta, [], null, false).state).toBe('failed')
+  })
+})
+
+describe('run terminals', () => {
+  it('open without bringing Terminal to the front', () => {
+    const script = bridge.BACKGROUND_TERMINAL_SCRIPT.join('\n')
+    expect(script).not.toMatch(/^activate$/m)
+    expect(script).toContain('path to frontmost application')
+    expect(script).toContain('tell application previous to activate')
   })
 })

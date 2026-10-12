@@ -22,6 +22,12 @@
 // result.json; Squash fetches it through GET .../results/<batch>/files/<file> and attaches it to the
 // bug as the "after" shot.
 //
+// Questions: POST /workspaces/<id>/questions runs Claude Code read-only and headless (no terminal
+// window) on a question about the project, with any items and files it is about; Squash polls
+// GET /workspaces/<id>/questions and shows Claude's answer in the app.
+//
+// Run terminals open in the background: the browser (or whatever was in front) keeps focus.
+//
 // New projects: POST /projects creates an empty folder (a fresh git repo on main) for a new Squash
 // workspace and maps the workspace to it; Squash then sends the project's first feature as a run
 // that builds it, creates the GitHub repo and pushes.
@@ -49,7 +55,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 10
+const VERSION = 11
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -58,9 +64,12 @@ const DEFAULT_FOLDER = process.argv[2] && !HOOK && !RUNNER ? resolve(process.arg
 const CONFIG_DIR = join(homedir(), '.squash')
 const CONFIG_FILE = join(CONFIG_DIR, 'bridge.json')
 const RUNS_FILE = join(CONFIG_DIR, 'runs.json')
+const QUESTIONS_FILE = join(CONFIG_DIR, 'questions.json')
+const MAX_QUESTIONS = 30
 const MAX_RUNS = 50
 const RUNS_PER_WORKSPACE = 10
 const MAX_TEXT = 2000
+const MAX_ANSWER = 20_000
 const ORIGINS = new Set(
   (
     process.env.SQUASH_ORIGINS ??
@@ -103,8 +112,64 @@ const CLAUDE_ARGS = [
     : ['--permission-mode', 'auto', ...EXTRA_ARGS]),
   ...SHIP_TOOLS,
 ]
+/**
+ * Flags for a question run: read-only. Claude may read the code and the git and deploy history but
+ * never edit, commit or push, and SQUASH_CLAUDE_ARGS cannot widen that (its permission mode and
+ * tool lists are dropped; other flags, such as --model, still apply).
+ */
+export function askArgs(extra = EXTRA_ARGS) {
+  const kept = []
+  for (let i = 0; i < extra.length; i++) {
+    const arg = extra[i]
+    const flag = arg.split('=')[0]
+    if (
+      [
+        '--permission-mode',
+        '--allowedTools',
+        '--allowed-tools',
+        '--dangerously-skip-permissions',
+      ].includes(flag)
+    ) {
+      // A flag given as `--flag value` takes its value with it.
+      if (!arg.includes('=') && flag !== '--dangerously-skip-permissions') i++
+      continue
+    }
+    kept.push(arg)
+  }
+  const readOnlyBash = [
+    'git log',
+    'git show',
+    'git status',
+    'git diff',
+    'git branch',
+    'git fetch',
+    'git rev-parse',
+    'git ls-files',
+    'git blame',
+    'gh run list',
+    'gh run view',
+    'gh pr list',
+    'gh pr view',
+    'gh issue list',
+    'gh issue view',
+    'vercel ls',
+    'vercel inspect',
+  ].map((cmd) => `Bash(${cmd}:*)`)
+  return [
+    '--permission-mode',
+    'default',
+    ...kept,
+    '--allowedTools=' + ['Read', 'Grep', 'Glob', ...readOnlyBash].join(','),
+    '--disallowedTools=Edit,MultiEdit,Write,NotebookEdit',
+  ]
+}
 const MAC = process.platform === 'darwin'
 const MAX_BODY = 1024 * 1024
+// A question may carry files the person attached (sent inline, base64): this many, this big.
+const MAX_ASK_BODY = 40 * 1024 * 1024
+const MAX_ASK_FILES = 10
+const MAX_ASK_FILE = 8 * 1024 * 1024
+const MAX_QUESTION = 20_000
 const MAX_IMAGE = 15 * 1024 * 1024
 const MAX_DOWNLOADS = 100
 const SAFE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
@@ -668,13 +733,13 @@ function send(res, status, body, origin) {
   res.end(JSON.stringify(body))
 }
 
-function readBody(req) {
+function readBody(req, limit = MAX_BODY) {
   return new Promise((ok, fail) => {
     let size = 0
     const chunks = []
     req.on('data', (chunk) => {
       size += chunk.length
-      if (size > MAX_BODY) {
+      if (size > limit) {
         fail(new HttpError(413, 'too_large', 'Request too large'))
         req.destroy()
       } else chunks.push(chunk)
@@ -804,6 +869,8 @@ async function runBatch(batchDir, runId) {
   })
   child.stdin.on('error', () => {})
   child.stdin.end(prompt)
+  // Claude's final reply (the stream's closing `result` event): the answer to a question.
+  let answer = ''
   for await (const line of createInterface({ input: child.stdout })) {
     log.write(line + '\n')
     let event
@@ -812,6 +879,7 @@ async function runBatch(batchDir, runId) {
     } catch {
       continue
     }
+    if (event.type === 'result' && typeof event.result === 'string') answer = event.result.trim()
     if (event.type !== 'assistant') continue
     for (const block of event.message?.content ?? []) {
       if (block.type === 'text' && block.text.trim()) console.log(`\n${block.text.trim()}\n`)
@@ -830,7 +898,7 @@ async function runBatch(batchDir, runId) {
   })
   await writePrivate(
     join(batchDir, DONE_FILE),
-    JSON.stringify({ exitCode, result, git, finishedAt: t }),
+    JSON.stringify({ exitCode, result, git, answer: clip(answer, MAX_ANSWER), finishedAt: t }),
   )
   console.log(
     result
@@ -1002,28 +1070,41 @@ function closeWhenDone(windowId, batchDir) {
   }, 2000)
 }
 
-/** Runs Claude Code on the batch: in a new Terminal window on macOS, headless elsewhere. */
-async function launch(folder, batchDir, runId) {
+/**
+ * AppleScript that opens a run's Terminal window without taking focus: Terminal is never activated,
+ * and whatever app was in front (the browser with Squash) is brought back in case launching
+ * Terminal pulled it forward. Returns the new window's id.
+ */
+export const BACKGROUND_TERMINAL_SCRIPT = [
+  'on run argv',
+  'set previous to path to frontmost application as text',
+  'tell application "Terminal"',
+  'do script (item 1 of argv)',
+  // do script opens the new window first among Terminal's own windows.
+  'set newWindow to id of front window',
+  'end tell',
+  'if previous does not contain "Terminal" then',
+  'try',
+  'tell application previous to activate',
+  'end try',
+  'end if',
+  'return newWindow',
+  'end run',
+]
+
+/**
+ * Runs Claude Code on the batch: in a new background Terminal window on macOS, headless elsewhere
+ * and for questions (`headless`), whose answers show in Squash instead.
+ */
+async function launch(folder, batchDir, runId, { args = CLAUDE_ARGS, headless = false } = {}) {
   await writePrivate(
     join(batchDir, 'settings.json'),
     JSON.stringify(hookSettings(batchDir), null, 2) + '\n',
   )
-  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args: CLAUDE_ARGS }))
-  if (MAC) {
+  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args }))
+  if (MAC && !headless) {
     const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)} ${runId}; exit`
-    const windowId = await osascript(
-      [
-        'on run argv',
-        'tell application "Terminal"',
-        'activate',
-        'do script (item 1 of argv)',
-        // do script opens the new window in front.
-        'return id of front window',
-        'end tell',
-        'end run',
-      ],
-      [command],
-    )
+    const windowId = await osascript(BACKGROUND_TERMINAL_SCRIPT, [command])
     if (/^\d+$/.test(windowId)) closeWhenDone(Number(windowId), batchDir)
     return
   }
@@ -1212,6 +1293,142 @@ async function handleProject(payload) {
   return { folder }
 }
 
+// ── Questions ────────────────────────────────────────────────────────────────────────────────
+
+/** A file the person attached to a question, by the name Squash gives it in the question folder. */
+const ASK_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
+
+/** Validates a question: its id, the text, item screenshots to download and attached files. */
+export function validateAsk(payload) {
+  const { id, question, prompt } = payload ?? {}
+  const sent = validateSend({ ...payload, batch: id, downloads: payload?.downloads ?? [] })
+  if (typeof question !== 'string' || !question.trim()) throw bad('Missing question')
+  if (question.length > MAX_QUESTION) throw bad('Question too long')
+  if (typeof prompt !== 'string' || !prompt.trim()) throw bad('Missing prompt')
+  const files = payload.files ?? []
+  if (!Array.isArray(files) || files.length > MAX_ASK_FILES) throw bad('Too many files')
+  const names = new Set(sent.downloads.map((d) => d.file))
+  const decoded = files.map((f) => {
+    if (
+      typeof f?.name !== 'string' ||
+      !ASK_FILE.test(f.name) ||
+      f.name.includes('..') ||
+      isReservedName(f.name) ||
+      names.has(f.name)
+    ) {
+      throw bad('Invalid file name')
+    }
+    names.add(f.name)
+    if (typeof f.data !== 'string') throw bad('Invalid file')
+    const data = Buffer.from(f.data, 'base64')
+    if (data.length > MAX_ASK_FILE) throw bad(`${f.name} is too large`)
+    return { name: f.name, data }
+  })
+  return { ...sent, id: sent.batch, question: question.trim(), files: decoded }
+}
+
+async function loadQuestions() {
+  try {
+    const list = JSON.parse(await readFile(QUESTIONS_FILE, 'utf8'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+async function saveQuestions(list) {
+  await mkdirPrivate(CONFIG_DIR)
+  await writePrivate(QUESTIONS_FILE, JSON.stringify(list.slice(0, MAX_QUESTIONS), null, 2) + '\n')
+}
+
+/**
+ * A question as Squash shows it: `working` (with what Claude is doing), `answered` (with the
+ * answer) or `failed` (Claude exited without one, or its runner never started or died).
+ */
+export function summarizeQuestion(meta, events, done, live) {
+  const base = {
+    id: meta.id,
+    question: meta.question,
+    bugs: meta.bugs ?? [],
+    files: meta.files ?? [],
+    askedAt: meta.askedAt,
+  }
+  if (done) {
+    const answer = typeof done.answer === 'string' ? done.answer.trim() : ''
+    return answer
+      ? { ...base, state: 'answered', answer, finishedAt: done.finishedAt ?? null }
+      : {
+          ...base,
+          state: 'failed',
+          error: `Claude finished without an answer (exit ${done.exitCode ?? 'unknown'}).`,
+          finishedAt: done.finishedAt ?? null,
+        }
+  }
+  if (!live) return { ...base, state: 'failed', error: 'Claude stopped before answering.' }
+  const run = summarizeRun({ id: meta.id, startedAt: meta.askedAt }, events)
+  return { ...base, state: 'working', activity: run.activity ?? 'Starting' }
+}
+
+async function workspaceQuestions(workspaceId) {
+  const list = (await loadQuestions()).filter((q) => q.workspaceId === workspaceId)
+  return Promise.all(
+    list.map(async (q) => {
+      const done = await readJson(join(q.dir, DONE_FILE))
+      const since = Date.now() - Date.parse(q.askedAt)
+      const live = done ? true : runnerLive(runnerPidFile(q.dir, q.runId), since)
+      return summarizeQuestion(q, done ? [] : await readEvents(q.dir), done, live)
+    }),
+  )
+}
+
+/** Starts a read-only, headless Claude Code run that answers a question about the project. */
+async function handleAsk(workspaceIdFromPath, payload) {
+  const ask = validateAsk({ ...payload, workspaceId: workspaceIdFromPath })
+  const slot = limiter.acquire()
+  if (!slot) throw new HttpError(429, 'busy', 'busy')
+  try {
+    const folder = await folderFor(ask.workspaceId, ask.name)
+    const root = join(folder, '.squash')
+    const dir = join(root, 'questions', ask.id)
+    await mkdirPrivate(root)
+    await mkdirPrivate(join(root, 'questions'))
+    await mkdirPrivate(dir)
+    await writeFile(join(root, '.gitignore'), '*\n')
+    await Promise.all(ask.downloads.map((d) => download(d.url, join(dir, d.file))))
+    await Promise.all(ask.files.map((f) => writePrivate(join(dir, f.name), f.data)))
+    await writePrivate(join(dir, 'prompt.md'), ask.prompt)
+    const runId = randomBytes(16).toString('hex')
+    const record = {
+      id: ask.id,
+      workspaceId: ask.workspaceId,
+      question: clip(ask.question, MAX_QUESTION),
+      bugs: ask.bugs,
+      files: ask.files.map((f) => f.name),
+      folder,
+      dir,
+      runId,
+      askedAt: new Date().toISOString(),
+    }
+    await saveQuestions([record, ...(await loadQuestions()).filter((q) => q.id !== ask.id)])
+    slot.track({ pidFile: runnerPidFile(dir, runId) })
+    await launch(folder, dir, runId, { args: askArgs(), headless: true })
+    console.log(`? ${ask.name}: Claude Code is answering a question in ${folder}`)
+    return { ok: true, id: ask.id }
+  } catch (err) {
+    slot.release()
+    throw err
+  }
+}
+
+/** Removes a question (and its answer) from the workspace's list. */
+async function forgetQuestion(workspaceId, id) {
+  const list = await loadQuestions()
+  const kept = list.filter((q) => !(q.id === id && q.workspaceId === workspaceId))
+  if (kept.length === list.length) throw new HttpError(404, 'not_found', 'No such question')
+  await saveQuestions(kept)
+  return { ok: true }
+}
+
 function serve() {
   const server = createServer(async (req, res) => {
     const origin = req.headers.origin?.replace(/\/$/, '')
@@ -1244,6 +1461,11 @@ function serve() {
         /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/files\/([A-Za-z0-9_.-]{1,84})$/.exec(
           path,
         )
+      const questionsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/questions$/.exec(path)
+      const forgetRoute =
+        /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/questions\/([A-Za-z0-9_.-]{1,80})\/forget$/.exec(
+          path,
+        )
       if (req.method === 'GET' && path === '/health') {
         return send(res, 200, { ok: true, version: VERSION, platform: process.platform }, origin)
       }
@@ -1259,6 +1481,16 @@ function serve() {
       }
       if (req.method === 'GET' && fileRoute) {
         return await sendScreenshot(res, fileRoute[1], fileRoute[2], fileRoute[3], origin)
+      }
+      if (req.method === 'GET' && questionsRoute) {
+        return send(res, 200, { questions: await workspaceQuestions(questionsRoute[1]) }, origin)
+      }
+      if (req.method === 'POST' && questionsRoute) {
+        const body = await readBody(req, MAX_ASK_BODY)
+        return send(res, 200, await handleAsk(questionsRoute[1], body), origin)
+      }
+      if (req.method === 'POST' && forgetRoute) {
+        return send(res, 200, await forgetQuestion(forgetRoute[1], forgetRoute[2]), origin)
       }
       if (req.method === 'POST' && path === '/projects') {
         return send(res, 200, await handleProject(await readBody(req)), origin)

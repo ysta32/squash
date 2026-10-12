@@ -5,8 +5,11 @@ import {
   batchName,
   formatClaudePrompt,
   formatCreatePrompt,
+  formatAskPrompt,
   formatShipPrompt,
+  askFileName,
   getAutoSend,
+  questionId,
   parseClaudeResult,
   projectSlug,
   setAutoSend,
@@ -407,5 +410,58 @@ describe('new projects', () => {
     expect(projectSlug('  Café  Über ')).toBe('cafe-uber')
     expect(projectSlug('../..')).toBe('')
     expect(projectSlug('!!!')).toBe('')
+  })
+})
+
+describe('formatAskPrompt', () => {
+  const input = {
+    members,
+    workspaceName: 'Squash',
+    origin: 'https://squash.test',
+    urls: { 'ws/b1/one.webp': 'https://x.supabase.co/storage/v1/object/sign/one.webp' },
+    comments: [],
+    localDir: '.squash/questions/ask-1',
+  }
+
+  it('asks a read-only question about the picked items, with files and screenshots', () => {
+    const { prompt, downloads } = formatAskPrompt({
+      ...input,
+      bugs: [bug()],
+      question: 'Has this been fixed yet?',
+      files: ['file-1-log.txt'],
+    })
+    expect(prompt).toContain('Has this been fixed yet?')
+    expect(prompt).toContain('change nothing')
+    expect(prompt).toContain('It is about #12')
+    expect(prompt).toContain('- .squash/questions/ask-1/file-1-log.txt')
+    expect(prompt).toContain('## Bug #12: Login button does nothing')
+    expect(prompt).not.toContain('result.json')
+    expect(downloads).toHaveLength(1)
+  })
+
+  it('works with no items and no files', () => {
+    const { prompt, downloads } = formatAskPrompt({
+      ...input,
+      bugs: [],
+      question: 'What changed this week?',
+      files: [],
+    })
+    expect(prompt).toContain('What changed this week?')
+    expect(prompt).not.toContain('It is about')
+    expect(prompt).not.toContain('Attached files')
+    expect(downloads).toEqual([])
+  })
+})
+
+describe('askFileName and questionId', () => {
+  it('makes safe, unique file names that keep the extension', () => {
+    expect(askFileName('My notes (final).txt', 0)).toBe('file-1-My-notes-final-.txt')
+    expect(askFileName('../../etc/passwd', 1)).toBe('file-2-etc-passwd')
+    expect(askFileName('日本.png', 2)).toBe('file-3-png')
+    expect(askFileName('', 3)).toBe('file-4-file')
+  })
+
+  it('names a question folder by time', () => {
+    expect(questionId(new Date('2026-10-12T15:30:12Z'), () => 0)).toBe('ask-20261012-153012-0000')
   })
 })

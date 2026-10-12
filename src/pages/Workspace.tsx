@@ -50,6 +50,8 @@ import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, hasActiveFilters, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
+import { AskClaudeDialog } from '../components/AskClaudeDialog'
+import { useClaudeQuestions } from '../hooks/useClaudeQuestions'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
@@ -59,7 +61,7 @@ import { useNotifications } from '../hooks/useNotifications'
 import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
-import { AUTO_RESOLVE_VERSION, getAutoSend } from '../lib/claudeExport'
+import { ASK_VERSION, AUTO_RESOLVE_VERSION, askBridge, getAutoSend } from '../lib/claudeExport'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
 import { NEXT_THEME, useTheme } from '../lib/theme'
@@ -348,6 +350,40 @@ export default function Workspace() {
     (claude.status?.version ?? 0) >= AUTO_RESOLVE_VERSION,
     { getBugByNumber, resolveBug },
     toast,
+  )
+  const [askOpen, setAskOpen] = useState(false)
+  const [askItems, setAskItems] = useState<BugWithMeta[]>([])
+  const askAbout = useCallback((items: BugWithMeta[]) => {
+    setAskItems(items)
+    setAskOpen(true)
+  }, [])
+  const closeAsk = useCallback(() => setAskOpen(false), [])
+  const questions = useClaudeQuestions(
+    workspaceId,
+    (claude.status?.version ?? 0) >= ASK_VERSION,
+    useCallback(
+      () =>
+        toast('Claude answered your question.', {
+          action: { label: 'View', onAction: () => askAbout([]) },
+        }),
+      [toast, askAbout],
+    ),
+  )
+  const refreshQuestions = questions.refresh
+  const ask = useCallback(
+    async (question: string, items: BugWithMeta[], files: File[]) => {
+      await askBridge({
+        workspaceId,
+        workspaceName: ws.workspace?.name ?? '',
+        members: ws.members,
+        origin: window.location.origin,
+        question,
+        bugs: items,
+        files: files.map((file) => ({ name: file.name, file })),
+      })
+      refreshQuestions()
+    },
+    [workspaceId, ws.workspace?.name, ws.members, refreshQuestions],
   )
   /** Selection of an optimistic bug (no number yet, so it cannot live in the URL). */
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -1014,6 +1050,13 @@ export default function Workspace() {
       run: claude.openSetup,
     },
     {
+      id: 'claude-ask',
+      label: 'Ask Claude about the project',
+      group: 'Workspace',
+      keywords: ['claude', 'question', 'fixed', 'status', 'ask'],
+      run: () => askAbout([]),
+    },
+    {
       id: 'claude-guide',
       label: 'Claude Code guide',
       group: 'Help',
@@ -1262,6 +1305,7 @@ export default function Workspace() {
               onToggleStatus={toggleStatus}
               onSend={claude.sendBugs}
               onCopy={claude.copyBugs}
+              onAsk={askAbout}
               onInvite={() => setInviteOpen(true)}
               onClaudeSetup={claude.openSetup}
               onTour={() => setTourOpen(true)}
@@ -1305,6 +1349,21 @@ export default function Workspace() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={commands}
+      />
+      <AskClaudeDialog
+        open={askOpen}
+        onClose={closeAsk}
+        bugs={bugs}
+        initial={askItems}
+        status={claude.status}
+        questions={questions.questions}
+        onAsk={ask}
+        onForget={questions.forget}
+        onOpenNumber={(n) => navigate(bugPath(n))}
+        onSetup={() => {
+          setAskOpen(false)
+          claude.openSetup()
+        }}
       />
       <ClaudeSetupDialog
         open={claude.setupOpen}

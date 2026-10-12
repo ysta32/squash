@@ -1,7 +1,16 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { useParams } from 'react-router-dom'
-import { Activity, AlertTriangle, Copy, FolderCog, Search, Sparkle, X } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  Copy,
+  FolderCog,
+  MessageCircleQuestionMark,
+  Search,
+  Sparkle,
+  X,
+} from 'lucide-react'
 import { filterBugs, hasActiveFilters } from '../hooks/useBugs'
 import type { BugFilters as Filters } from '../hooks/useBugs'
 import type { PresenceUser } from '../hooks/usePresence'
@@ -58,6 +67,8 @@ export interface BugListProps {
   onCopy?: (bugs: BugWithMeta[]) => void
   /** Opens the Claude Code setup guide (helper and project folder). */
   onClaudeSetup?: () => void
+  /** Asks Claude a question about the project, about these items (may be none). */
+  onAsk?: (bugs: BugWithMeta[]) => void
   onInvite?: () => void
   /** Opens the product tour. */
   onTour?: () => void
@@ -253,6 +264,7 @@ export function BugList({
   onSend,
   onCopy,
   onClaudeSetup,
+  onAsk,
   onInvite,
   onTour,
   claudeConnected = false,
@@ -326,6 +338,13 @@ export function BugList({
       label: `Copy prompt for ${exportable.length} ${exportable.length === 1 ? KIND_LABEL[filters.kind].one.toLowerCase() : items}`,
       icon: <Copy size={16} strokeWidth={1.5} />,
       onSelect: () => onCopy(exportable),
+    })
+  if (onAsk)
+    actions.push({
+      id: 'claude-ask',
+      label: 'Ask Claude about the project…',
+      icon: <MessageCircleQuestionMark size={16} strokeWidth={1.5} />,
+      onSelect: () => onAsk(picked.filter((b) => !b.optimistic)),
     })
   if (onClaudeSetup && claudeConnected)
     actions.push({
@@ -563,6 +582,7 @@ export function BugList({
             onClear={onClearPicked}
             onSend={onSend}
             onCopy={onCopy}
+            onAsk={onAsk}
             onClaudeSetup={claudeConnected ? onClaudeSetup : undefined}
           />
         )}
@@ -628,6 +648,18 @@ export function BugList({
                         className="t focus-ring flex size-[2.2857rem] items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem]"
                       >
                         <X size={16} strokeWidth={1.5} aria-hidden="true" />
+                      </button>
+                    </Tooltip>
+                  )}
+                  {onAsk && (
+                    <Tooltip label="Ask Claude about the project" align="end">
+                      <button
+                        type="button"
+                        onClick={() => onAsk(picked.filter((b) => !b.optimistic))}
+                        aria-label="Ask Claude about the project"
+                        className="t focus-ring flex size-[2.2857rem] items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink pointer-coarse:size-[3.1429rem]"
+                      >
+                        <MessageCircleQuestionMark size={16} strokeWidth={1.5} aria-hidden="true" />
                       </button>
                     </Tooltip>
                   )}
