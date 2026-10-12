@@ -184,6 +184,8 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
     '',
     shipInstructions(noun),
     '',
+    sharedFolderInstructions(localDir),
+    '',
     screenshotInstructions(noun, localDir),
     '',
     `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
@@ -210,6 +212,24 @@ function cleanTitle(value: unknown): string {
     .slice(0, RESULT_TITLE_MAX - 1)
     .join('')
     .trimEnd()}…`
+}
+
+/**
+ * Several runs can work in the same folder at once (one per item, all on the same branch). They
+ * stay out of each other's way without worktrees or branches: each touches only its own changes,
+ * commits only its own hunks, and only the short commit-to-push stretch is serialized by a lock.
+ */
+function sharedFolderInstructions(localDir: string): string {
+  return [
+    'Other Claude sessions may be working in this same folder at the same time, each on its own item. Keep working in parallel with them (no extra branches, worktrees or copies), but do not collide:',
+    '',
+    '- Change only what your work needs. Never stash, reset, restore, check out or clean files, never switch branches, and never revert, reformat or rewrite changes you did not make: they belong to a session that is still working.',
+    "- If a check fails in code you did not touch, that is most likely another session's unfinished work: leave it alone, make sure your own changes pass (for example the tests for the files you changed) and run the checks again just before you commit.",
+    `- Commit only your own changes and leave anything others have staged alone: \`git commit -m "<message>" -- <your files>\`. When a file you changed also has edits that are not yours, commit just your hunks: write them to a patch based on HEAD (\`git diff HEAD -- <file>\`, trimmed to your hunks), commit it through a private index (\`export GIT_INDEX_FILE=${localDir}/commit.index; git read-tree HEAD && git apply --cached <patch> && git commit -m "<message>"; unset GIT_INDEX_FILE\`), then run \`git apply --cached <patch>\` so the shared index matches the new HEAD.`,
+    '- Land one session at a time: take the lock right before committing (`until mkdir .squash/git.lock 2>/dev/null; do find .squash/git.lock -maxdepth 0 -mmin +10 -exec rmdir {} + 2>/dev/null; sleep 2; done`) and release it (`rmdir .squash/git.lock`) as soon as your push is done, or if you stop early. Hold it only for commit, pull and push, never while you work or run checks.',
+    "- Pull without touching other sessions' uncommitted changes: never use `--autostash` or `git stash`. Use `git pull --rebase` only when `git status` is clean apart from `.squash/`; otherwise use `git pull --no-rebase --no-edit`.",
+    '- To run the app (for a screenshot, say), start your own server on a free port and stop only the processes you started.',
+  ].join('\n')
 }
 
 /** Validates a result file written by Claude. Malformed entries are dropped. */
@@ -395,6 +415,8 @@ export function formatShipPrompt({
     '5. Resolve any merge or rebase conflicts so both sides keep working, then run the checks again.',
     '6. Push the default branch to its remote. Never force-push. If the push is rejected because the remote moved on, pull with rebase, resolve, re-check and push again.',
     '7. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example `gh run list` or `vercel ls`). If it failed, fix it and ship again.',
+    '',
+    sharedFolderInstructions(localDir),
     '',
     screenshotInstructions(noun, localDir),
     '',

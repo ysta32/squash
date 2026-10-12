@@ -326,6 +326,30 @@ describe('unattended bridge runs', () => {
     expect(prompt).toContain('https://squash.test/app/ws/bug/12')
   })
 
+  it("tells parallel runs in one folder how to stay out of each other's way", () => {
+    const bridged = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    const shipped = formatShipPrompt({
+      bugs: [bug()],
+      workspaceName: 'Acme',
+      origin: 'https://squash.test',
+      localDir: '.squash/bugs/y',
+    })
+    for (const [prompt, dir] of [
+      [bridged.prompt, '.squash/bugs/x'],
+      [shipped, '.squash/bugs/y'],
+    ]) {
+      expect(prompt).toContain('Other Claude sessions may be working in this same folder')
+      expect(prompt).toContain('no extra branches, worktrees or copies')
+      expect(prompt).toContain('Never stash, reset, restore, check out or clean files')
+      expect(prompt).toContain(`export GIT_INDEX_FILE=${dir}/commit.index`)
+      expect(prompt).toContain('until mkdir .squash/git.lock')
+      expect(prompt).toContain('rmdir .squash/git.lock')
+      expect(prompt).toContain('never use `--autostash`')
+    }
+    const copied = formatClaudePrompt({ ...base, bugs: [bug()] })
+    expect(copied.prompt).not.toContain('Other Claude sessions')
+  })
+
   it('remembers auto-fix per workspace, off by default', () => {
     localStorage.clear()
     expect(getAutoSend('ws-1')).toBe(false)
