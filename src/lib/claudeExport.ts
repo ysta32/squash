@@ -133,6 +133,13 @@ function screenshotInstructions(noun: string, localDir: string): string {
   return `When ${noun === 'item' ? 'an item' : `the ${noun}`} changes something people can see (a page, a component, a layout), finish by taking a screenshot of the result working: run the app and capture it with whatever you have (Playwright, a headless browser, a browser tool or \`screencapture\` on macOS). Save it as \`${localDir}/after-<number>.png\` (PNG, JPEG or WebP, under 5 MB) and add \`"screenshot": "after-<number>.png"\` to that entry below. Squash shows it on the ${noun} next to your summary. Capture the changed part of the app itself, not a terminal or a test run. Skip it only when there is nothing to see.`
 }
 
+/** Unattended runs decide for themselves and keep going until the problem is actually gone. */
+const UNATTENDED = [
+  'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+  '',
+  'Keep going until it is fixed. If part of the problem still remains (you notice it while verifying, a check shows it, or your fix only covers part of it), fix that too in this session instead of reporting it as left over. Only stop with work left when you are truly blocked by something you cannot do from here (missing access or credentials, or a decision only a person can make).',
+].join('\n')
+
 /**
  * How a run writes the summary Squash shows as the resolution note: what changed for the people who
  * use the app, not how it was done.
@@ -153,7 +160,7 @@ function shipInstructions(noun: string): string {
     '2. Push the commit to the current branch on its remote (`git push`; if the branch has no upstream yet, `git push -u origin HEAD`). Never force-push. A project that deploys from its remote goes live from this push.',
     '3. If the push is rejected because the remote has moved on, run `git pull --rebase`, resolve any conflicts so both sides keep working, run the checks again and push again.',
     `4. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example \`gh run list\` or \`vercel ls\`) and fix it if it failed.`,
-    `5. If a check fails or the push is still rejected, fix the cause and try again; if you cannot, leave the ${noun} open and say why in its summary.`,
+    `5. If a check fails or the push is still rejected, fix the cause and try again; keep at it until it works; only if you are truly blocked, leave the ${noun} open and say why in its summary.`,
   ].join('\n')
 }
 
@@ -180,7 +187,7 @@ function titleInstructions(noun: string): string {
 /** Tells an unattended Claude Code session how to report each bug back to Squash. */
 function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string): string {
   return [
-    'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+    UNATTENDED,
     '',
     shipInstructions(noun),
     '',
@@ -194,7 +201,7 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
     resultExample(bugs),
     '```',
     '',
-    `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. The terminal closes on its own once you finish.`,
+    `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise (only when you are blocked) set it to false and say what is left and why: the summary is posted as a comment and the ${noun} stays open. The terminal closes on its own once you finish.`,
     '',
     SUMMARY_STYLE,
     '',
@@ -406,7 +413,7 @@ export function formatShipPrompt({
   const intro = [
     `Ship the work for ${count} from the Squash bug tracker (workspace "${workspaceName}"): get it committed on the default branch (usually \`main\`), pushed to GitHub (or whichever remote the repo uses) and live.`,
     '',
-    'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+    UNATTENDED,
     '',
     `1. Find the work for ${refs}: uncommitted changes (\`git status\`, \`git diff\`), commits on this branch that the remote default branch does not have (\`git fetch\`, then \`git log origin/main..HEAD\` or the repo's default branch), or both. If there is no work for one yet, do it now: ${KIND_PROMPT[kinds[0] ?? 'bug'].task}.`,
     '2. Verify it: typecheck, lint, tests and a build where the project has them.',
@@ -426,7 +433,7 @@ export function formatShipPrompt({
     resultExample(bugs),
     '```',
     '',
-    `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left. The terminal closes on its own once you finish.`,
+    `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise (only when you are blocked) set it to false and say what is left and why. The terminal closes on its own once you finish.`,
     '',
     SUMMARY_STYLE,
     '',
@@ -477,7 +484,7 @@ export function formatCreatePrompt({
   const intro = [
     `Start a brand-new project, "${project.name}", for the Squash workspace "${workspaceName}". The folder you are in was just created for it: it is empty and a fresh git repo on \`main\`, with no commits and no remote yet. Build what ${refs} below asks for.`,
     '',
-    'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+    UNATTENDED,
     '',
     '1. Choose a stack: use what the description names; otherwise pick a simple, well-supported one that suits it and deploys easily (for a website or web app, a Vite + React + TypeScript app is a good default).',
     '2. Scaffold the project here (in this folder, not a subfolder) and build a first working version of what is asked. Add a short README saying what it is and how to run it, and a .gitignore that keeps out dependencies, build output, `.env` files and `.squash/`.',
@@ -494,7 +501,7 @@ export function formatCreatePrompt({
     resultExample(bugs),
     '```',
     '',
-    'Set "resolved" to true only when the first version works, is committed and is pushed to its new GitHub repo: Squash then marks the item resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write the summary as one or two short sentences saying what you built, then the repo URL and, if deployed, the live URL. Leave out how you built or verified it. The terminal closes on its own once you finish.',
+    'Set "resolved" to true only when the first version works, is committed and is pushed to its new GitHub repo: Squash then marks the item resolved with your summary as its resolution note. Otherwise (only when you are blocked) set it to false and say what is left and why. Write the summary as one or two short sentences saying what you built, then the repo URL and, if deployed, the live URL. Leave out how you built or verified it. The terminal closes on its own once you finish.',
     '',
     titleInstructions(noun),
   ]

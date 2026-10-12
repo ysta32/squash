@@ -307,6 +307,22 @@ describe('unattended bridge runs', () => {
     }
   })
 
+  it('asks every run to fix what remains instead of reporting it as left over', () => {
+    const bridged = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    const shipped = formatShipPrompt({
+      bugs: [bug()],
+      workspaceName: 'Acme',
+      origin: 'https://squash.test',
+      localDir: '.squash/bugs/y',
+    })
+    for (const prompt of [bridged.prompt, shipped]) {
+      expect(prompt).toContain('Keep going until it is fixed')
+      expect(prompt).toContain('only when you are blocked')
+    }
+    const copied = formatClaudePrompt({ ...base, bugs: [bug()] })
+    expect(copied.prompt).not.toContain('Keep going until it is fixed')
+  })
+
   it('asks a ship run to land the work on main, pushed and live', () => {
     const prompt = formatShipPrompt({
       bugs: [bug(), bug({ id: 'b2', number: 13, kind: 'feature', title: 'Dark mode' })],
