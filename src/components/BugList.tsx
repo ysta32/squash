@@ -270,10 +270,11 @@ function KindTabs({
             )}
           >
             {KIND_LABEL[k].many}{' '}
-            {/* The active kind's count already shows on the status control beside it; on a
-                phone the other counts give way so the tabs never run off the edge. */}
+            {/* The active kind's count already shows on the status control beside it; in the
+                list pane (400–480px) and on phones the other counts give way, so the strip never
+                pushes the "Open ⌄" menu past the pane's edge. */}
             {openByKind && !active && (
-              <span className="@max-[399px]:hidden">
+              <span className="@max-[479px]:hidden">
                 <Count value={openByKind[k]} pending={countsPending} />
               </span>
             )}

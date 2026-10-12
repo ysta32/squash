@@ -121,6 +121,13 @@ const STATES = {
       await page.getByText('No matches', { exact: true }).waitFor({ timeout: SHORT })
     },
   },
+  'status-menu': {
+    path: `${WS}/bug/24`,
+    run: async (page) => {
+      await page.getByRole('button', { name: /^Status:/ }).click({ timeout: SHORT })
+      await page.getByRole('menu', { name: 'Status' }).waitFor({ timeout: SHORT })
+    },
+  },
   'filter-popover': {
     path: WS,
     run: async (page) => {
