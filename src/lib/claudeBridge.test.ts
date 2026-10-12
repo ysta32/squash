@@ -68,6 +68,7 @@ interface Bridge {
     live: boolean,
   ): { state: string; answer?: string; activity?: string; error?: string }
   BACKGROUND_TERMINAL_SCRIPT: string[]
+  CLOSE_OWN_WINDOW_SCRIPT: string[]
   runUsage(result: Record<string, unknown>): Record<string, unknown>
   parseLimits(event: Record<string, unknown>, now?: Date): ClaudeLimits | null
   summarizeUsage(
@@ -984,6 +985,17 @@ describe('run terminals', () => {
     expect(script).not.toMatch(/^activate$/m)
     expect(script).toContain('path to frontmost application')
     expect(script).toContain('tell application previous to activate')
+  })
+
+  it("close their own window, found by the runner's tty while it is busy", () => {
+    const script = bridge.CLOSE_OWN_WINDOW_SCRIPT.join('\n')
+    // A finished window keeps showing its tty after the tty is reused by a newer window.
+    expect(script).toContain('if tty of t is myTty and busy of t then')
+    // Closed windows linger, invisible, in Terminal's window list.
+    expect(script).toContain('whose id is myWindow and visible is true')
+    expect(script).toContain('close (item 1 of matches)')
+    // `idle` is reserved in AppleScript (the idle handler) and fails at run time as a variable.
+    expect(script).not.toMatch(/\bidle\b/)
   })
 })
 

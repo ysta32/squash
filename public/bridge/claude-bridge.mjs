@@ -26,7 +26,8 @@
 // window) on a question about the project, with any items and files it is about; Squash polls
 // GET /workspaces/<id>/questions and shows Claude's answer in the app.
 //
-// Run terminals open in the background: the browser (or whatever was in front) keeps focus.
+// Run terminals open in the background: the browser (or whatever was in front) keeps focus. Each
+// runner closes its own window when it ends (see closeOwnWindow), even if the bridge restarted.
 //
 // New projects: POST /projects creates an empty folder (a fresh git repo on main) for a new Squash
 // workspace and maps the workspace to it; Squash then sends the project's first feature as a run
@@ -40,7 +41,7 @@
 // SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
 // with e.g. "--permission-mode acceptEdits"), SQUASH_DOWNLOAD_HOSTS (comma-separated extra hosts
 // screenshots may be downloaded from), SQUASH_SUPABASE_HOST (this app's Supabase project host).
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import {
   closeSync,
@@ -217,7 +218,7 @@ const RESERVED_FILES = new Set([
 const RUN_ID = /^[0-9a-f]{32}$/
 // A batch folder's name, as in the results routes.
 const BATCH_NAME = /^[A-Za-z0-9_.-]{1,80}$/
-const CLOSE_AFTER_MS = 4000
+const CLOSE_AFTER_S = 3 // a finished run's window stays this long, to show how it went
 // Proof of fix: git and gh run with fixed argv (never a shell) and these limits.
 const GIT_TIMEOUT_MS = 10_000
 const GH_TIMEOUT_MS = 10_000
@@ -860,6 +861,7 @@ async function runBatch(batchDir, runId) {
   const { args = [], usage: usageMeta = null } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
   const prompt = await readFile(join(batchDir, 'prompt.md'), 'utf8')
   const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a', mode: FILE_MODE })
+  closeOwnWindow()
   console.log(`Squash → Claude Code in ${process.cwd()}`)
   console.log('Running unattended. This window closes on its own when Claude is done.\n')
   const startedAt = new Date().toISOString()
@@ -1175,36 +1177,61 @@ export async function collectGitReport(cwd, start, { run = execQuiet, startedAt 
   }
 }
 
-/** Closes a Terminal window once its shell has exited, so macOS does not ask to confirm. */
-async function closeWindow(windowId) {
-  for (let i = 0; i < 30; i++) {
-    const state = await osascript(
-      [
-        'on run argv',
-        'tell application "Terminal"',
-        'set matches to (every window whose id is ((item 1 of argv) as integer))',
-        'if matches is {} then return "gone"',
-        'set w to item 1 of matches',
-        'if busy of selected tab of w then return "busy"',
-        'close w',
-        'return "closed"',
-        'end tell',
-        'end run',
-      ],
-      [String(windowId)],
-    ).catch(() => 'gone')
-    if (state !== 'busy') return
-    await new Promise((ok) => setTimeout(ok, 1000))
-  }
-}
+/**
+ * AppleScript that closes the Terminal window holding the tty in argv 1 once its shell has exited
+ * (so macOS does not ask to confirm), argv 2 seconds later. The window is found while the runner
+ * holds the tty (busy: a finished window keeps showing the tty after it has been reused), then
+ * followed by id.
+ */
+export const CLOSE_OWN_WINDOW_SCRIPT = [
+  'on run argv',
+  'set myTty to item 1 of argv',
+  'set myWindow to missing value',
+  'tell application "Terminal"',
+  'repeat with w in windows',
+  'repeat with t in tabs of w',
+  'if tty of t is myTty and busy of t then set myWindow to id of w',
+  'end repeat',
+  'end repeat',
+  'end tell',
+  'if myWindow is missing value then return',
+  // Runs can take hours; give up after a day.
+  'repeat 43200 times',
+  'tell application "Terminal"',
+  'set matches to (every window whose id is myWindow and visible is true)',
+  'if matches is {} then return',
+  'set finished to not (busy of selected tab of (item 1 of matches))',
+  'end tell',
+  'if finished then',
+  'delay ((item 2 of argv) as number)',
+  'tell application "Terminal"',
+  'set matches to (every window whose id is myWindow and visible is true)',
+  'if matches is not {} then close (item 1 of matches)',
+  'end tell',
+  'return',
+  'end if',
+  'delay 2',
+  'end repeat',
+  'end run',
+]
 
-/** Closes the run's Terminal window shortly after the runner reports Claude has finished. */
-function closeWhenDone(windowId, batchDir) {
-  const timer = setInterval(() => {
-    if (!existsSync(join(batchDir, DONE_FILE))) return
-    clearInterval(timer)
-    setTimeout(() => void closeWindow(windowId), CLOSE_AFTER_MS)
-  }, 2000)
+/**
+ * Closes this run's Terminal window when the run ends, however it ends. A detached osascript
+ * watches the window, so it outlives the runner and does not depend on the bridge (which may
+ * restart mid-run); the window is matched by this process's tty, which, unlike the window id the
+ * bridge saw at launch, cannot mix up when several runs open at once.
+ */
+function closeOwnWindow() {
+  if (!MAC || !process.stdout.isTTY) return
+  let tty
+  try {
+    tty = execFileSync('tty', { stdio: ['inherit', 'pipe', 'ignore'], encoding: 'utf8' }).trim()
+  } catch {
+    return
+  }
+  if (!/^\/dev\/ttys\d+$/.test(tty)) return
+  const args = [...CLOSE_OWN_WINDOW_SCRIPT.flatMap((l) => ['-e', l]), tty, String(CLOSE_AFTER_S)]
+  spawn('osascript', args, { detached: true, stdio: 'ignore' }).unref()
 }
 
 /**
@@ -1247,8 +1274,7 @@ async function launch(
   await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args, usage }))
   if (MAC && !headless) {
     const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)} ${runId}; exit`
-    const windowId = await osascript(BACKGROUND_TERMINAL_SCRIPT, [command])
-    if (/^\d+$/.test(windowId)) closeWhenDone(Number(windowId), batchDir)
+    await osascript(BACKGROUND_TERMINAL_SCRIPT, [command])
     return
   }
   const log = openSync(join(batchDir, 'runner.log'), 'a', FILE_MODE)

@@ -6,7 +6,7 @@ import type { PresenceUser } from '../hooks/usePresence'
 import { useDismiss } from '../hooks/useDismiss'
 import { NEXT_THEME, useTheme } from '../lib/theme'
 import { cn } from '../lib/utils'
-import { Button, Logo, LogoMark } from './ui'
+import { Button, AppIcon, Logo } from './ui'
 import { PresenceAvatars } from './PresenceAvatars'
 import { ProfileMenu } from './ProfileMenu'
 import { StatsPopover } from './StatsPopover'
@@ -79,7 +79,7 @@ export function Header({
           {/* Wordmark from 360px up; only the narrowest phones fall back to the bare pin. Wrapped
               because Logo sets its own display and cn() does not merge conflicting classes. */}
           <span className="inline-flex min-[360px]:hidden">
-            <LogoMark size={20} />
+            <AppIcon size={20} />
           </span>
           <span className="hidden min-[360px]:inline-flex">
             <Logo size={18} />

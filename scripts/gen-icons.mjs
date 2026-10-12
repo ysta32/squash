@@ -1,27 +1,21 @@
-// Generates the favicon + PWA icon set from the pin mark (src/components/ui/pinMark.ts) and the
+// Generates the favicon + PWA icon set from the app icon (src/components/ui/pinMark.ts) and the
 // design tokens in src/index.css. Run `npm run gen:icons` after changing either; outputs are
 // committed:
-//   public/favicon.svg            mark only, follows prefers-color-scheme (modern browsers)
-//   public/favicon.ico            16/32/48 on a paper tile (legacy browsers, RSS readers)
+//   public/favicon.svg            the app icon squircle (modern browsers)
+//   public/favicon.ico            16/32/48 of the same (legacy browsers, RSS readers)
 //   public/icons/*.png            apple-touch 180, PWA 192/512, maskable 512
 //   public/manifest.webmanifest   theme/background colors from the paper tokens
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
-import { markSvg, readTokens, root } from './brand.mjs'
+import { appIconSvg } from '../src/components/ui/pinMark.ts'
+import { readTokens, root } from './brand.mjs'
 
-const { light, dark } = readTokens()
-const paper = { needle: light['text-1'], head: light.accent }
+const { light } = readTokens()
 const pub = (...parts) => path.join(root, 'public', ...parts)
 await mkdir(pub('icons'), { recursive: true })
 
-// favicon.svg: transparent, ink needle on light tabs and paper needle on dark ones. CSS beats
-// the presentation attributes, so the media query only has to restate the dark paints.
-const faviconSvg = markSvg(paper).replace(
-  /^(<svg\b[^>]*>)/,
-  `$1<style>@media (prefers-color-scheme: dark) { path { stroke: ${dark['text-1']} } circle { fill: ${dark.accent} } }</style>`,
-)
-await writeFile(pub('favicon.svg'), `${faviconSvg}\n`)
+await writeFile(pub('favicon.svg'), `${appIconSvg()}\n`)
 
 const png = (svg, size) =>
   sharp(Buffer.from(svg), { density: 72 * 8 })
@@ -29,23 +23,19 @@ const png = (svg, size) =>
     .png({ compressionLevel: 9 })
     .toBuffer()
 
-// Icons sit on a paper tile so they read on any home screen or tab bar. `pad` is the margin
-// around the 16-unit mark, in mark units.
-const tile = (pad, radius) => markSvg({ ...paper, background: light.bg, pad, radius })
-
 const outputs = [
-  // iOS rounds the corners itself: full bleed.
-  ['icons/apple-touch-icon.png', tile(4, 0), 180],
-  ['icons/icon-192.png', tile(3, 5), 192],
-  ['icons/icon-512.png', tile(3, 5), 512],
-  // Maskable: full bleed, mark well inside the 80% safe circle.
-  ['icons/icon-maskable-512.png', tile(6, 0), 512],
+  // iOS and maskable icons get rounded by the platform: full bleed. The pin sits well inside
+  // the maskable 80% safe circle.
+  ['icons/apple-touch-icon.png', appIconSvg({ bleed: true }), 180],
+  ['icons/icon-192.png', appIconSvg(), 192],
+  ['icons/icon-512.png', appIconSvg(), 512],
+  ['icons/icon-maskable-512.png', appIconSvg({ bleed: true }), 512],
 ]
 for (const [file, svg, size] of outputs) await writeFile(pub(file), await png(svg, size))
 
 // favicon.ico with PNG-encoded entries (supported by every browser that still asks for .ico).
 const icoSizes = [16, 32, 48]
-const icoImages = await Promise.all(icoSizes.map((size) => png(tile(1, 3), size)))
+const icoImages = await Promise.all(icoSizes.map((size) => png(appIconSvg(), size)))
 const header = Buffer.alloc(6 + 16 * icoImages.length)
 header.writeUInt16LE(0, 0)
 header.writeUInt16LE(1, 2)

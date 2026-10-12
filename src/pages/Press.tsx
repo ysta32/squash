@@ -9,7 +9,7 @@ import { PageHero } from '../components/marketing/PageHero'
 import { Reveal } from '../components/marketing/Reveal'
 import { PRESS_COLORS, type PressColor } from '../components/marketing/pressColors'
 import { usePageTitle } from '../components/marketing/usePageTitle'
-import { LogoMark, buttonClass, proseLinkClass } from '../components/ui'
+import { AppIcon, buttonClass, proseLinkClass } from '../components/ui'
 import { cn } from '../lib/utils'
 
 const LOGOS: {
@@ -307,7 +307,7 @@ export default function Press() {
             </p>
           </div>
           <div className="flex items-center gap-4 lg:col-span-4 lg:col-start-9 lg:justify-end">
-            <LogoMark size={56} />
+            <AppIcon size={56} />
             <a href="/og/press-dark.png" download className={buttonClass('secondary', 'lg')}>
               <Download size={16} aria-hidden="true" />
               Social card

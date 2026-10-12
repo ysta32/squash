@@ -107,12 +107,25 @@ describe('Label, Badge, Section, Logo', () => {
     expect(section.closest('section')).toHaveTextContent('Danger zone')
   })
 
-  it('draws the pin mark beside the lowercase wordmark', () => {
+  it('draws the app icon beside the lowercase wordmark', () => {
     const { container } = render(<Logo />)
     expect(container).toHaveTextContent('squash')
     const svg = container.querySelector('svg')
     expect(svg).toHaveAttribute('aria-hidden', 'true')
-    expect(svg?.querySelector('circle')).toHaveAttribute('fill', 'var(--accent)')
+    const bg = svg?.querySelector('linearGradient')?.id
+    expect(bg).toMatch(/^app-icon-[\w-]*-bg$/)
+    expect(svg?.querySelector(`[fill="url(#${bg})"]`)).not.toBeNull()
+  })
+
+  it('gives every app icon its own gradient ids', () => {
+    const { container } = render(
+      <>
+        <Logo />
+        <Logo />
+      </>,
+    )
+    const ids = [...container.querySelectorAll('linearGradient')].map((g) => g.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })
 

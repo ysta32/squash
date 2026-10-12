@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { ButtonLink, Logo, LogoMark } from '../components/ui'
+import { ButtonLink, AppIcon, Logo } from '../components/ui'
 import { ThemeToggle } from '../components/Header'
 import { ProfileMenu } from '../components/ProfileMenu'
 import { cn } from '../lib/utils'
@@ -182,7 +182,7 @@ export default function Settings() {
                 aria-label={workspace ? `Squash, back to ${workspace.name}` : 'Squash home'}
               >
                 <span className="inline-flex min-[360px]:hidden">
-                  <LogoMark size={20} />
+                  <AppIcon size={20} />
                 </span>
                 <span className="hidden min-[360px]:inline-flex">
                   <Logo size={18} />
