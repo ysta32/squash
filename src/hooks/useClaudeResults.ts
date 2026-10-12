@@ -19,6 +19,8 @@ const POLL_MS = 5000
 export interface ClaudeResultActions {
   getBugByNumber(number: number): Promise<BugWithMeta | null>
   resolveBug(id: string, note: string | null): Promise<void>
+  /** Renames a bug to the clean title Claude wrote, keeping its original wording elsewhere. */
+  updateBug?(id: string, patch: { title: string; description?: string }): Promise<void>
   addComment(bugId: string, body: string): Promise<void>
   /** Stores the run's git evidence for a bug it resolved (proof of fix). */
   recordFixRun?(input: FixRunInput): Promise<unknown>
@@ -47,6 +49,26 @@ export async function attachRunScreenshot(
   } finally {
     URL.revokeObjectURL(image.previewUrl)
   }
+}
+
+/**
+ * The edit that gives a bug Claude's clean title, or null when it already has it. A title filed by
+ * voice or as a quick note is cut from the description or transcript, so the full wording stays
+ * there; a title found in neither moves to the top of the description so it is never lost.
+ */
+export function retitlePatch(
+  bug: Pick<BugWithMeta, 'title' | 'description' | 'transcript'>,
+  title: string,
+): { title: string; description?: string } | null {
+  const old = bug.title.trim()
+  if (!title || title === old) return null
+  const words = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
+  const kept = words(old.replace(/…$/, ''))
+  const description = bug.description.trim()
+  if (!kept || [description, bug.transcript ?? ''].some((text) => words(text).includes(kept))) {
+    return { title }
+  }
+  return { title, description: description ? `${old}\n\n${description}` : old }
 }
 
 /** Posts a comment on any bug in the workspace as the signed-in user. */
@@ -105,6 +127,7 @@ export async function applyClaudeRun(
   const open: number[] = []
   const unrecorded: number[] = []
   const noScreenshot: number[] = []
+  const unrenamed: number[] = []
   let recordError: string | null = null
   const report = parseFixReport(run.git)
   const list = (ns: number[]) => ns.map((n) => `#${n}`).join(', ')
@@ -112,6 +135,15 @@ export async function applyClaudeRun(
     try {
       const bug = await actions.getBugByNumber(item.number)
       if (!bug) continue
+      const retitle = item.title && actions.updateBug ? retitlePatch(bug, item.title) : null
+      if (retitle && actions.updateBug) {
+        // A clean title is a bonus: the result applies whether or not the rename goes through.
+        try {
+          await withRetry(() => actions.updateBug!(bug.id, retitle))
+        } catch {
+          unrenamed.push(item.number)
+        }
+      }
       if (item.resolved && bug.status === 'open') {
         // The screenshot is a bonus: a bug is resolved whether or not it can be attached.
         let afterAttachmentId: string | null = null
@@ -164,6 +196,9 @@ export async function applyClaudeRun(
   }
   if (noScreenshot.length > 0) {
     notes.push(`Could not attach Claude’s screenshot for ${list(noScreenshot)}.`)
+  }
+  if (unrenamed.length > 0) {
+    notes.push(`Could not rename ${list(unrenamed)} to Claude’s title.`)
   }
   return notes.join(' ')
 }

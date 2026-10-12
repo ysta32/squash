@@ -348,7 +348,7 @@ export default function Workspace() {
   useClaudeResults(
     workspaceId,
     (claude.status?.version ?? 0) >= AUTO_RESOLVE_VERSION,
-    { getBugByNumber, resolveBug },
+    { getBugByNumber, resolveBug, updateBug },
     toast,
   )
   const [askOpen, setAskOpen] = useState(false)

@@ -11,6 +11,7 @@ import {
   getAutoSend,
   questionId,
   parseClaudeResult,
+  RESULT_TITLE_MAX,
   projectSlug,
   setAutoSend,
 } from './claudeExport'
@@ -352,6 +353,35 @@ describe('unattended bridge runs', () => {
     ])
     expect(parseClaudeResult(null)).toEqual([])
     expect(parseClaudeResult({ bugs: 'x' })).toEqual([])
+  })
+
+  it('takes a clean title from a result, on one line and within the limit', () => {
+    const [short, long, blank] = parseClaudeResult({
+      bugs: [
+        { number: 1, resolved: true, summary: 'Done', title: '  Rename items\n sent to Claude ' },
+        { number: 2, resolved: true, summary: 'Done', title: 'x'.repeat(200) },
+        { number: 3, resolved: true, summary: 'Done', title: '   ' },
+      ],
+    })
+    expect(short.title).toBe('Rename items sent to Claude')
+    expect(Array.from(long.title ?? '')).toHaveLength(RESULT_TITLE_MAX)
+    expect(long.title?.endsWith('…')).toBe(true)
+    expect(blank).not.toHaveProperty('title')
+  })
+
+  it('asks every run that reports back for a clean title', () => {
+    const bridged = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    const shipped = formatShipPrompt({
+      bugs: [bug()],
+      workspaceName: 'Acme',
+      origin: 'https://squash.test',
+      localDir: '.squash/bugs/y',
+    })
+    for (const prompt of [bridged.prompt, shipped]) {
+      expect(prompt).toContain('"title":"A short, clean title for it"')
+      expect(prompt).toContain('Squash renames the bug to it')
+    }
+    expect(formatClaudePrompt({ ...base, bugs: [bug()] }).prompt).not.toContain('clean title')
   })
 })
 

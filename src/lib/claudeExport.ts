@@ -118,7 +118,12 @@ export interface ClaudeResultItem {
   summary: string
   /** An after screenshot Claude saved in the batch folder (a file name, never a path). */
   screenshot?: string
+  /** A short, clean title Claude wrote for the item; Squash renames the item to it. */
+  title?: string
 }
+
+/** Longest title Squash takes from a result (the database allows 200). */
+export const RESULT_TITLE_MAX = 80
 
 /** File names Claude may give an after screenshot: an image in the batch folder itself. */
 const SCREENSHOT_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}\.(png|jpe?g|webp)$/i
@@ -158,9 +163,18 @@ function resultExample(bugs: BugWithMeta[]): string {
     bugs: bugs.map((b) => ({
       number: b.number,
       resolved: true,
+      title: 'A short, clean title for it',
       summary: 'What changed, in a sentence or two.',
     })),
   })
+}
+
+/**
+ * Asks for a clean title per item: items filed by voice or as quick notes are titled with their
+ * first words, which read poorly in the list.
+ */
+function titleInstructions(noun: string): string {
+  return `Give each entry a "title": a short, clean title for the ${noun} (a few words, under ${RESULT_TITLE_MAX} characters, no trailing period) that says what it is about. Rephrase or summarize the current title when it reads like raw notes or a voice transcript; keep it as it is when it is already clean. Squash renames the ${noun} to it, and the original wording stays in its description.`
 }
 
 /** Tells an unattended Claude Code session how to report each bug back to Squash. */
@@ -181,7 +195,21 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
     `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. The terminal closes on its own once you finish.`,
     '',
     SUMMARY_STYLE,
+    '',
+    titleInstructions(noun),
   ].join('\n')
+}
+
+/** A result's title on one line and within the limit, or nothing when it has none. */
+function cleanTitle(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const line = value.replace(/\s+/g, ' ').trim()
+  const chars = Array.from(line)
+  if (chars.length <= RESULT_TITLE_MAX) return line
+  return `${chars
+    .slice(0, RESULT_TITLE_MAX - 1)
+    .join('')
+    .trimEnd()}…`
 }
 
 /** Validates a result file written by Claude. Malformed entries are dropped. */
@@ -190,7 +218,10 @@ export function parseClaudeResult(value: unknown): ClaudeResultItem[] {
   if (!Array.isArray(list)) return []
   const items: ClaudeResultItem[] = []
   for (const entry of list as unknown[]) {
-    const { number, resolved, summary, screenshot } = (entry ?? {}) as Record<string, unknown>
+    const { number, resolved, summary, screenshot, title } = (entry ?? {}) as Record<
+      string,
+      unknown
+    >
     if (typeof number !== 'number' || !Number.isInteger(number) || number < 1) continue
     if (typeof summary !== 'string' || !summary.trim()) continue
     items.push({
@@ -198,6 +229,7 @@ export function parseClaudeResult(value: unknown): ClaudeResultItem[] {
       resolved: resolved === true,
       summary: summary.trim().slice(0, RESULT_SUMMARY_MAX),
       ...(typeof screenshot === 'string' && SCREENSHOT_FILE.test(screenshot) ? { screenshot } : {}),
+      ...(cleanTitle(title) ? { title: cleanTitle(title) } : {}),
     })
   }
   return items
@@ -375,6 +407,8 @@ export function formatShipPrompt({
     `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left. The terminal closes on its own once you finish.`,
     '',
     SUMMARY_STYLE,
+    '',
+    titleInstructions(noun),
   ]
   return [intro.join('\n'), ...sections].join('\n\n') + '\n'
 }
@@ -439,6 +473,8 @@ export function formatCreatePrompt({
     '```',
     '',
     'Set "resolved" to true only when the first version works, is committed and is pushed to its new GitHub repo: Squash then marks the item resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write the summary as one or two short sentences saying what you built, then the repo URL and, if deployed, the live URL. Leave out how you built or verified it. The terminal closes on its own once you finish.',
+    '',
+    titleInstructions(noun),
   ]
   return [intro.join('\n'), ...sections].join('\n\n') + '\n'
 }
