@@ -528,8 +528,8 @@ function BugBody({
                   )}
                 </p>
                 {bug.resolution_note && (
-                  <blockquote className="mt-1 max-w-[68ch] [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">
-                    “{bug.resolution_note}”
+                  <blockquote className="mt-1.5 max-w-[68ch] border-l-2 border-status-resolved/40 pl-3 [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">
+                    {bug.resolution_note}
                   </blockquote>
                 )}
               </div>

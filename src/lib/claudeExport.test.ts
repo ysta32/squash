@@ -286,7 +286,24 @@ describe('unattended bridge runs', () => {
     const { prompt } = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
     expect(prompt).toContain('`git pull --rebase`')
     expect(prompt).toContain('resolve any conflicts')
-    expect(prompt).toContain('whether it is live')
+    expect(prompt).toContain('check that the deploy of your commit succeeded')
+  })
+
+  it('asks every run for a short summary of what changed, not how it was done', () => {
+    const bridged = formatClaudePrompt({ ...base, bugs: [bug()], localDir: '.squash/bugs/x' })
+    const shipped = formatShipPrompt({
+      bugs: [bug()],
+      workspaceName: 'Acme',
+      origin: 'https://squash.test',
+      localDir: '.squash/bugs/y',
+    })
+    for (const prompt of [bridged.prompt, shipped]) {
+      expect(prompt).toContain('one or two short sentences that say what changed')
+      expect(prompt).toContain('Leave out how you fixed it, how you verified it')
+      expect(prompt).toContain('What changed, in a sentence or two.')
+      expect(prompt).not.toContain('how you verified it.')
+      expect(prompt).not.toContain('say in your summary whether it is live')
+    }
   })
 
   it('asks a ship run to land the work on main, pushed and live', () => {

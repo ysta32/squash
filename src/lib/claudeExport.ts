@@ -125,8 +125,15 @@ const SCREENSHOT_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}\.(png|jpe?g|webp)$/i
 
 /** Asks for a screenshot of a visible change, saved next to the result file and named in it. */
 function screenshotInstructions(noun: string, localDir: string): string {
-  return `When ${noun === 'item' ? 'an item' : `the ${noun}`} changes something people can see (a page, a component, a layout), finish by taking a screenshot of the result working: run the app and capture it with whatever you have (Playwright, a headless browser, a browser tool or \`screencapture\` on macOS). Save it as \`${localDir}/after-<number>.png\` (PNG, JPEG or WebP, under 5 MB) and add \`"screenshot": "after-<number>.png"\` to that entry below. Squash shows it on the ${noun} next to your summary. Skip it when there is nothing to see.`
+  return `When ${noun === 'item' ? 'an item' : `the ${noun}`} changes something people can see (a page, a component, a layout), finish by taking a screenshot of the result working: run the app and capture it with whatever you have (Playwright, a headless browser, a browser tool or \`screencapture\` on macOS). Save it as \`${localDir}/after-<number>.png\` (PNG, JPEG or WebP, under 5 MB) and add \`"screenshot": "after-<number>.png"\` to that entry below. Squash shows it on the ${noun} next to your summary. Capture the changed part of the app itself, not a terminal or a test run. Skip it only when there is nothing to see.`
 }
+
+/**
+ * How a run writes the summary Squash shows as the resolution note: what changed for the people who
+ * use the app, not how it was done.
+ */
+const SUMMARY_STYLE =
+  'Keep each summary to one or two short sentences that say what changed, as the people using the app will notice it (for example "The Ship button now shows a spinner while it works."). Leave out how you fixed it, how you verified it, test counts, commit hashes, file names and helper versions; the screenshot shows the change.'
 
 /**
  * Tells an unattended run to ship its work: commit it and push it, so a project that deploys from
@@ -140,7 +147,7 @@ function shipInstructions(noun: string): string {
     `1. Commit only the files you changed, with a message that names each ${noun} number (never commit \`.squash/\`, secrets or unrelated changes).`,
     '2. Push the commit to the current branch on its remote (`git push`; if the branch has no upstream yet, `git push -u origin HEAD`). Never force-push. A project that deploys from its remote goes live from this push.',
     '3. If the push is rejected because the remote has moved on, run `git pull --rebase`, resolve any conflicts so both sides keep working, run the checks again and push again.',
-    `4. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example \`gh run list\` or \`vercel ls\`) and say in your summary whether it is live.`,
+    `4. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example \`gh run list\` or \`vercel ls\`) and fix it if it failed.`,
     `5. If a check fails or the push is still rejected, fix the cause and try again; if you cannot, leave the ${noun} open and say why in its summary.`,
   ].join('\n')
 }
@@ -151,7 +158,7 @@ function resultExample(bugs: BugWithMeta[]): string {
     bugs: bugs.map((b) => ({
       number: b.number,
       resolved: true,
-      summary: 'What you changed and how you verified it.',
+      summary: 'What changed, in a sentence or two.',
     })),
   })
 }
@@ -171,7 +178,9 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
     resultExample(bugs),
     '```',
     '',
-    `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. Write each summary as a short plain-language statement of what you did. The terminal closes on its own once you finish.`,
+    `Set "resolved" to true only when the work is done, verified, committed and pushed: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left: the summary is posted as a comment and the ${noun} stays open. The terminal closes on its own once you finish.`,
+    '',
+    SUMMARY_STYLE,
   ].join('\n')
 }
 
@@ -363,7 +372,9 @@ export function formatShipPrompt({
     resultExample(bugs),
     '```',
     '',
-    `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write each summary as a short plain-language statement of what you shipped (the commit, the branch, whether the deploy is live). The terminal closes on its own once you finish.`,
+    `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left. The terminal closes on its own once you finish.`,
+    '',
+    SUMMARY_STYLE,
   ]
   return [intro.join('\n'), ...sections].join('\n\n') + '\n'
 }
@@ -427,7 +438,7 @@ export function formatCreatePrompt({
     resultExample(bugs),
     '```',
     '',
-    'Set "resolved" to true only when the first version works, is committed and is pushed to its new GitHub repo: Squash then marks the item resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write the summary as a short plain-language statement of what you built, the repo URL and, if deployed, the live URL. The terminal closes on its own once you finish.',
+    'Set "resolved" to true only when the first version works, is committed and is pushed to its new GitHub repo: Squash then marks the item resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write the summary as one or two short sentences saying what you built, then the repo URL and, if deployed, the live URL. Leave out how you built or verified it. The terminal closes on its own once you finish.',
   ]
   return [intro.join('\n'), ...sections].join('\n\n') + '\n'
 }
