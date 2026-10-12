@@ -124,7 +124,7 @@ curl -fsSL https://squash-livid.vercel.app/bridge/install.sh | sh -s -- https://
 - The helper listens only on `127.0.0.1:4317`, accepts requests only from Squash, and saves each batch to `.squash/bugs/` in the project (ignored by git). Chrome asks once to let the page reach the local network.
 - Each workspace opens Claude in its own project folder, in its own Terminal window. Folder choices are saved in `~/.squash/bridge.json`.
 - Progress comes from Claude Code hooks the helper adds to each session, so it is only visible on the computer running the helper. Bugs Claude is on get a pulsing Claude icon in the list, amber when it is waiting for you in Terminal. Helpers installed before progress tracking need the install command run again.
-- Claude runs as `claude -p --permission-mode auto`; pass other `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Each run logs to `claude.log` in the batch folder, and Claude reports back through `result.json` there. Keep a Squash tab open (or open one later) to apply the results.
+- Claude runs as `claude -p --permission-mode auto`; pass other `claude` flags with `SQUASH_CLAUDE_ARGS`, for example `--permission-mode acceptEdits`. Each run logs to `claude.log` in the batch folder, and Claude reports back through `result.json` there. Keep a Squash tab open (or open one later) to apply the results. Up to 3 runs work at once (`SQUASH_MAX_RUNS`, up to 10); more queue and start as runs finish.
 - To work on the helper itself, run `npm run claude-bridge`. Outside macOS it runs without a Terminal window.
 
 </details>

@@ -323,6 +323,13 @@ function itemSections({
   return { sections, downloads, hasRegions }
 }
 
+/**
+ * Items sent together are one Claude session: it fans independent ones out to subagents, so a big
+ * batch takes one of the bridge's run slots instead of one per item.
+ */
+const PARALLEL_ITEMS =
+  'When some of them are independent of each other, work on those in parallel with subagents (the Agent tool, one per item or per group of related items, each told to change only what its items need and not to commit), then review their changes together. Do related items, or ones that touch the same code, one at a time yourself.'
+
 /** Builds a prompt Claude Code can act on directly: bug details plus a script that downloads the screenshots. */
 export function formatClaudePrompt(input: ClaudeExportInput): ClaudeExport {
   const { bugs, workspaceName, localDir } = input
@@ -367,7 +374,7 @@ export function formatClaudePrompt(input: ClaudeExportInput): ClaudeExport {
   intro.push(
     bugs.length === 1
       ? `${task[0].toUpperCase()}${task.slice(1)}. When you are done, summarize what you changed.`
-      : `Work through the ${noun}s one at a time: ${task}. When you are done, list each number with what you changed.`,
+      : `Work through the ${noun}s: ${task}. ${PARALLEL_ITEMS} When you are done, list each number with what you changed.`,
   )
   if (localDir) intro.push('', resultInstructions(bugs, noun, localDir))
   return { prompt: [intro.join('\n'), ...sections].join('\n\n') + '\n', downloads }
@@ -631,6 +638,8 @@ export const ASK_VERSION = 11
 export const LEGACY_RESULTS_VERSION = 12
 /** Oldest bridge that records how much of Claude each run used, and the plan's limits. */
 export const USAGE_VERSION = 13
+/** Oldest bridge that queues runs sent while Claude is busy, instead of turning them away. */
+export const QUEUE_VERSION = 14
 
 export interface BridgeStatus {
   version: number
@@ -672,7 +681,7 @@ async function bridgeRequest<T>(path: string, body?: unknown): Promise<T> {
     (T & { error?: string; code?: string }) | null
   if (res.status === 429) {
     throw new BridgeError(
-      'Claude is already working on several runs on this computer. Try again in a few minutes.',
+      'Claude is already working on several runs on this computer, and too many more are waiting. Try again in a few minutes, or update the helper (Claude setup) to queue them.',
       'busy',
     )
   }
@@ -740,14 +749,17 @@ export function batchName(bugs: BugWithMeta[], now = new Date()): string {
  */
 export type ClaudeRunMode = 'fix' | 'ship' | 'create'
 
-/** Hands the bugs to the local bridge, which downloads screenshots and launches Claude Code. */
+/**
+ * Hands the bugs to the local bridge, which downloads screenshots and launches Claude Code, or
+ * queues the run (`queued`, behind `ahead` others) while Claude is busy with as many as it runs.
+ */
 export async function sendToBridge(
   input: Omit<ClaudeExportInput, 'urls' | 'comments' | 'localDir'> & {
     workspaceId: string
     mode?: ClaudeRunMode
     project?: NewProject
   },
-): Promise<void> {
+): Promise<{ queued: boolean; ahead: number }> {
   const { workspaceId, mode = 'fix', project, ...rest } = input
   const batch = batchName(rest.bugs)
   const localDir = `.squash/bugs/${batch}`
@@ -758,7 +770,7 @@ export async function sendToBridge(
       : mode === 'ship'
         ? { prompt: formatShipPrompt({ ...rest, localDir }), downloads: [] }
         : await buildClaudeExport({ ...rest, localDir })
-  await bridgeRequest('/claude', {
+  const res = await bridgeRequest<{ queued?: boolean; ahead?: number }>('/claude', {
     workspaceId,
     workspaceName: rest.workspaceName,
     batch,
@@ -766,16 +778,18 @@ export async function sendToBridge(
     prompt,
     downloads,
   })
+  return { queued: res.queued === true, ahead: res.ahead ?? 0 }
 }
 
 /**
+ * - queued: waiting for one of the runs already working to finish
  * - starting: launched, Claude has not reported in yet
  * - working: running tools or thinking
  * - waiting: needs permission or an answer in its terminal
  * - done: finished its work
  * - ended: the Claude session was closed
  */
-export type ClaudeRunState = 'starting' | 'working' | 'waiting' | 'done' | 'ended'
+export type ClaudeRunState = 'queued' | 'starting' | 'working' | 'waiting' | 'done' | 'ended'
 
 export interface ClaudeTodo {
   text: string
@@ -802,7 +816,10 @@ export interface ClaudeRun {
 }
 
 export const isRunActive = (run: ClaudeRun) =>
-  run.state === 'starting' || run.state === 'working' || run.state === 'waiting'
+  run.state === 'queued' ||
+  run.state === 'starting' ||
+  run.state === 'working' ||
+  run.state === 'waiting'
 
 /** Recent Claude runs for this workspace, newest first. */
 export async function getBridgeRuns(workspaceId: string): Promise<ClaudeRun[]> {

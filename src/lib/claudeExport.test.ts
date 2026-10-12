@@ -244,6 +244,16 @@ describe('formatClaudePrompt for tests', () => {
       'fix each bug at its root cause or write or run each test, then verify it',
     )
   })
+
+  it('has a batch of several items fan independent ones out to subagents', () => {
+    const { prompt } = formatClaudePrompt({
+      ...base,
+      bugs: [bug({ id: 'b1', number: 1 }), bug({ id: 'b2', number: 2 })],
+    })
+    expect(prompt).toContain('work on those in parallel with subagents (the Agent tool')
+    const single = formatClaudePrompt({ ...base, bugs: [bug()] }).prompt
+    expect(single).not.toContain('subagents')
+  })
 })
 
 describe('formatClaudePrompt for to-dos', () => {

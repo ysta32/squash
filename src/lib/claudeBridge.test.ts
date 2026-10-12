@@ -32,6 +32,11 @@ interface Bridge {
     acquire(): { track(run: string): void; release(): void } | null
     readonly running: number
   }
+  createRunQueue<J>(options: {
+    acquire: () => { track(run: string): void; release(): void } | null
+    start: (job: J, slot: { track(run: string): void; release(): void }) => void
+    maxQueued?: number
+  }): { add(job: J): boolean; drain(): void; readonly size: number }
   isReservedName(file: string): boolean
   runnerPidFile(batchDir: string, runId: string): string
   pidAlive(pid: number): boolean
@@ -184,6 +189,11 @@ describe('summarizeRun', () => {
 
   it('is starting until Claude reports in', () => {
     expect(bridge.summarizeRun(meta, [])).toMatchObject({ state: 'starting', stepCount: 0 })
+  })
+
+  it('is queued while it waits for a slot, and ended if it never started', () => {
+    expect(bridge.summarizeRun({ ...meta, queued: true }, [])).toMatchObject({ state: 'queued' })
+    expect(bridge.summarizeRun({ ...meta, failed: true }, [])).toMatchObject({ state: 'ended' })
   })
 
   it('follows Claude from working to waiting to done', () => {
@@ -553,6 +563,44 @@ describe('createLaunchLimiter', () => {
     expect(limiter.acquire()).toBeNull()
     first!.release()
     expect(limiter.acquire()).not.toBeNull()
+  })
+})
+
+describe('createRunQueue', () => {
+  it('starts queued runs oldest first, as slots free up', () => {
+    const limiter = bridge.createLaunchLimiter({ maxRunning: 1, now: () => 0 })
+    const started: string[] = []
+    const slots: { release(): void }[] = []
+    const queue = bridge.createRunQueue<string>({
+      acquire: () => limiter.acquire(),
+      start: (job, slot) => {
+        started.push(job)
+        slots.push(slot)
+      },
+    })
+    expect(queue.add('a')).toBe(true)
+    expect(queue.add('b')).toBe(true)
+    queue.drain()
+    expect(started).toEqual(['a'])
+    expect(queue.size).toBe(1)
+    queue.drain()
+    expect(started).toEqual(['a'])
+    slots[0].release()
+    queue.drain()
+    expect(started).toEqual(['a', 'b'])
+    expect(queue.size).toBe(0)
+  })
+
+  it('turns runs away once maxQueued are waiting', () => {
+    const queue = bridge.createRunQueue<number>({
+      acquire: () => null,
+      start: () => {},
+      maxQueued: 2,
+    })
+    expect(queue.add(1)).toBe(true)
+    expect(queue.add(2)).toBe(true)
+    expect(queue.add(3)).toBe(false)
+    expect(queue.size).toBe(2)
   })
 })
 

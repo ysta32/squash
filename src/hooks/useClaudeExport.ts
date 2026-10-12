@@ -129,11 +129,18 @@ export function useClaudeExport(
         mode,
       }
       sendToBridge(input).then(
-        () => {
+        ({ queued, ahead }) => {
           setPending([])
           setSetupOpen(false)
           setRunsNonce((n) => n + 1)
           const doing = ship ? 'shipping' : 'fixing'
+          if (queued) {
+            const behind = ahead > 0 ? `, behind ${ahead} more,` : ''
+            onToast(
+              `Claude Code is busy with other runs, so ${label(bugs)} is queued${behind} and starts when one finishes.`,
+            )
+            return
+          }
           onToast(
             tracksProgress
               ? `Claude Code is ${doing} ${label(bugs)}. Follow along on the bug or under Running.`

@@ -33,6 +33,10 @@
 // workspace and maps the workspace to it; Squash then sends the project's first feature as a run
 // that builds it, creates the GitHub repo and pushes.
 //
+// Queue: at most SQUASH_MAX_RUNS (3) runs work at once. Items sent while every slot is taken wait
+// in a queue (kept in ~/.squash/runs.json, so it survives a restart) and start, oldest first, as
+// runs finish; Squash shows them as queued.
+//
 // Usage: each run's runner records what Claude used (tokens, API-price cost, turns) in
 // ~/.squash/usage.jsonl, with the workspace and item numbers it ran for, and the latest plan limits
 // Claude Code reports (5-hour and weekly windows) in ~/.squash/limits.json. Squash reads both through
@@ -61,7 +65,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 13
+const VERSION = 14
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -186,7 +190,10 @@ const SAFE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
 const DOWNLOAD_HOSTS = parseHosts(process.env.SQUASH_DOWNLOAD_HOSTS)
 const MAX_REDIRECTS = 3
 // Launch limits: claude runs at once, and launches per window.
-const MAX_RUNNING = 3
+const MAX_RUNNING = Math.min(10, Math.max(1, Math.floor(Number(process.env.SQUASH_MAX_RUNS)) || 3))
+// Runs waiting for a slot, and how often the queue checks for one.
+const MAX_QUEUED = 30
+const QUEUE_POLL_MS = 3000
 const MAX_LAUNCHES = 20
 const LAUNCH_WINDOW_MS = 10 * 60_000
 // A launched run holds its slot while its runner process is alive. A runner that has not written its
@@ -391,7 +398,8 @@ function hookSettings(dir) {
 
 /** Folds a run's events into what it is doing now. */
 export function summarizeRun(meta, events) {
-  let state = 'starting'
+  // A queued run has no events until it starts; one that failed to start never will.
+  let state = meta.queued ? 'queued' : meta.failed ? 'ended' : 'starting'
   let activity = null
   let message = null
   let todos = null
@@ -477,7 +485,8 @@ async function readEvents(dir) {
 async function workspaceRuns(workspaceId) {
   const runs = (await loadRuns())
     .filter((r) => r.workspaceId === workspaceId)
-    .slice(0, RUNS_PER_WORKSPACE)
+    // Queued runs always show, however many there are.
+    .filter((r, i) => r.queued || i < RUNS_PER_WORKSPACE)
   return Promise.all(runs.map(async (r) => summarizeRun(r, await readEvents(r.dir))))
 }
 
@@ -592,6 +601,32 @@ export function createLaunchLimiter({
     },
     get running() {
       return running.size
+    },
+  }
+}
+
+/**
+ * Runs waiting for a free slot, oldest first. `add(job)` queues one (false when `maxQueued` are
+ * already waiting); `drain()` starts as many as `acquire()` has slots for, handing each to
+ * `start(job, slot)`.
+ */
+export function createRunQueue({ acquire, start, maxQueued = MAX_QUEUED }) {
+  const jobs = []
+  return {
+    add(job) {
+      if (jobs.length >= maxQueued) return false
+      jobs.push(job)
+      return true
+    },
+    drain() {
+      while (jobs.length) {
+        const slot = acquire()
+        if (!slot) return
+        start(jobs.shift(), slot)
+      }
+    },
+    get size() {
+      return jobs.length
     },
   }
 }
@@ -1292,11 +1327,53 @@ const limiter = createLaunchLimiter({
   isRunning: (run, msSinceLaunch) => runnerLive(run.pidFile, msSinceLaunch),
 })
 
+/** Runs sent while every slot was taken; each starts when one frees up. */
+const runQueue = createRunQueue({
+  acquire: () => limiter.acquire(),
+  start: (job, slot) => void startQueued(job, slot),
+})
+
+/** Launches a recorded run in the slot reserved for it. */
+async function startRun(run, name, slot) {
+  const runId = randomBytes(16).toString('hex')
+  slot.track({ pidFile: runnerPidFile(run.dir, runId) })
+  await launch(run.folder, run.dir, runId, { usage: run.usage })
+  console.log(`→ ${name}: Claude Code started in ${run.folder}`)
+}
+
+async function startQueued({ run, name }, slot) {
+  try {
+    const started = { ...run, queued: false, startedAt: new Date().toISOString() }
+    await recordRun(started)
+    await startRun(started, name, slot)
+  } catch (err) {
+    slot.release()
+    await recordRun({ ...run, queued: false, failed: true }).catch(() => {})
+    console.error(
+      `✗ ${name}: queued run failed to start:`,
+      err instanceof Error ? err.message : err,
+    )
+  }
+}
+
+/** Queues the runs a previous bridge left waiting, oldest first. */
+async function requeueRuns() {
+  const waiting = (await loadRuns()).filter((r) => r.queued).reverse()
+  for (const run of waiting) {
+    if (existsSync(join(run.dir, 'prompt.md')) && runQueue.add({ run, name: run.name ?? 'Squash' }))
+      continue
+    await recordRun({ ...run, queued: false, failed: true })
+  }
+  if (waiting.length) console.log(`  ${runQueue.size} queued run(s) waiting for a slot`)
+  runQueue.drain()
+}
+
 async function handleSend(payload) {
   const { workspaceId, name, batch, bugs, prompt, downloads } = validateSend(payload)
-  // Reserve before any await so concurrent requests cannot overshoot the limits.
-  const slot = limiter.acquire()
-  if (!slot) throw new HttpError(429, 'busy', 'busy')
+  // Reserve before any await so concurrent requests cannot overshoot the limits. Runs already
+  // waiting go first: a new one only starts straight away when none are.
+  const slot = runQueue.size === 0 ? limiter.acquire() : null
+  if (!slot && runQueue.size >= MAX_QUEUED) throw new HttpError(429, 'busy', 'busy')
   try {
     const folder = await folderFor(workspaceId, name)
     const root = join(folder, '.squash')
@@ -1307,22 +1384,33 @@ async function handleSend(payload) {
     await writeFile(join(root, '.gitignore'), '*\n')
     await Promise.all(downloads.map((d) => download(d.url, join(batchDir, d.file))))
     await writePrivate(join(batchDir, 'prompt.md'), prompt)
-    await recordRun({
+    const run = {
       id: batch,
       workspaceId,
+      name,
       bugs,
       folder,
       dir: batchDir,
       startedAt: new Date().toISOString(),
-    })
-    const runId = randomBytes(16).toString('hex')
-    slot.track({ pidFile: runnerPidFile(batchDir, runId) })
-    await launch(folder, batchDir, runId, { usage: { workspaceId, kind: 'fix', bugs } })
-    console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
+      usage: { workspaceId, kind: 'fix', bugs },
+    }
+    if (!slot) {
+      // Recorded before it joins the queue, so starting it always overwrites the queued record.
+      await recordRun({ ...run, queued: true })
+      if (!runQueue.add({ run, name })) {
+        await recordRun({ ...run, failed: true })
+        throw new HttpError(429, 'busy', 'busy')
+      }
+      const ahead = runQueue.size - 1
+      console.log(`… ${name}: queued until a run finishes (${ahead} ahead)`)
+      return { ok: true, folder, queued: true, ahead }
+    }
+    await recordRun(run)
+    await startRun(run, name, slot)
     return { ok: true, folder }
   } catch (err) {
     // Nothing is running if it failed before (or while) starting Claude.
-    slot.release()
+    slot?.release()
     throw err
   }
 }
@@ -1748,7 +1836,9 @@ function serve() {
     console.log(`  folders: ${DEFAULT_FOLDER ?? `per workspace, saved in ${CONFIG_FILE}`}`)
     console.log(`  origins: ${[...ORIGINS].join(', ')}`)
     console.log('Leave this running, then press "Send to Claude" in Squash.')
+    void requeueRuns()
   })
+  setInterval(() => runQueue.drain(), QUEUE_POLL_MS).unref()
 }
 
 function isMain() {

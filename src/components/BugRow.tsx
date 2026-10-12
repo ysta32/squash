@@ -61,7 +61,10 @@ export const BugRow = memo(function BugRow({
     ? (members.find((member) => member.user_id === bug.assignee_id)?.profile ?? null)
     : null
   const claudeActive =
-    claudeState === 'starting' || claudeState === 'working' || claudeState === 'waiting'
+    claudeState === 'queued' ||
+    claudeState === 'starting' ||
+    claudeState === 'working' ||
+    claudeState === 'waiting'
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -168,16 +171,30 @@ export const BugRow = memo(function BugRow({
             <span
               className={cn(
                 'inline-flex',
-                claudeState === 'waiting' ? 'text-warning' : 'text-accent',
+                claudeState === 'waiting'
+                  ? 'text-warning'
+                  : claudeState === 'queued'
+                    ? 'text-ink-3'
+                    : 'text-accent',
               )}
               title={
-                claudeState === 'waiting' ? 'Claude needs you in Terminal' : 'Claude is working'
+                claudeState === 'waiting'
+                  ? 'Claude needs you in Terminal'
+                  : claudeState === 'queued'
+                    ? 'Queued for Claude: starts when a run finishes'
+                    : 'Claude is working'
               }
             >
               <Sparkle
                 size={14}
                 strokeWidth={1.75}
-                aria-label={claudeState === 'waiting' ? 'Claude needs you' : 'Claude is working'}
+                aria-label={
+                  claudeState === 'waiting'
+                    ? 'Claude needs you'
+                    : claudeState === 'queued'
+                      ? 'Queued for Claude'
+                      : 'Claude is working'
+                }
               />
             </span>
           )}

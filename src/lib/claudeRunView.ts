@@ -4,6 +4,7 @@ import type { ClaudeRun, ClaudeRunState } from './claudeExport'
 export type StatusGlyphKind = 'open' | 'progress' | 'done' | 'working' | 'attention'
 
 export const STATE_LABEL: Record<ClaudeRunState, string> = {
+  queued: 'Queued: starts when a Claude run finishes',
   starting: 'Starting Claude Code…',
   working: 'Claude is working',
   waiting: 'Claude needs you in Terminal',
@@ -12,6 +13,7 @@ export const STATE_LABEL: Record<ClaudeRunState, string> = {
 }
 
 export const STATE_GLYPH: Record<ClaudeRunState, { kind: StatusGlyphKind; tone: string }> = {
+  queued: { kind: 'open', tone: 'text-ink-3' },
   starting: { kind: 'working', tone: 'text-ink-3' },
   working: { kind: 'working', tone: 'text-status-progress' },
   waiting: { kind: 'attention', tone: 'text-warning' },
@@ -33,7 +35,13 @@ export function elapsed(fromIso: string, to: Date): string {
  */
 export function orderRuns(runs: ClaudeRun[]): ClaudeRun[] {
   const rank = (run: ClaudeRun) =>
-    run.state === 'waiting' ? 0 : run.state === 'starting' || run.state === 'working' ? 1 : 2
+    run.state === 'waiting'
+      ? 0
+      : run.state === 'starting' || run.state === 'working'
+        ? 1
+        : run.state === 'queued'
+          ? 2
+          : 3
   return [...runs].sort(
     (a, b) => rank(a) - rank(b) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
   )

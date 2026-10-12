@@ -76,7 +76,11 @@ const TODO_GLYPH = {
 
 /** Live view of the Claude Code session working on this bug, fed by the local bridge. */
 export function ClaudeProgress({ run }: { run: ClaudeRun }) {
-  const live = run.state === 'starting' || run.state === 'working' || run.state === 'waiting'
+  const live =
+    run.state === 'queued' ||
+    run.state === 'starting' ||
+    run.state === 'working' ||
+    run.state === 'waiting'
   const now = useNow(live)
   const others = run.bugs.length > 1 ? run.bugs.length - 1 : 0
   const waiting = run.state === 'waiting'
