@@ -1,11 +1,11 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { seoPlugin } from './vite-plugin-seo'
-import { bridgeConfigPlugin } from './vite-plugin-bridge'
-import { slimBundlePlugin } from './vite-plugin-slim'
-import { factsPlugin } from './vite-plugin-facts'
-import { contentPlugin } from './vite-plugin-content'
+import { seoPlugin } from './vite-plugin-seo.ts'
+import { bridgeConfigPlugin } from './vite-plugin-bridge.ts'
+import { slimBundlePlugin } from './vite-plugin-slim.ts'
+import { factsPlugin } from './vite-plugin-facts.ts'
+import { contentPlugin } from './vite-plugin-content.ts'
 
 /** Preloads the Latin IBM Plex Sans file so body text renders in Plex on first paint. */
 function fontPreloadPlugin(): Plugin {

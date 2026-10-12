@@ -3,7 +3,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Plugin } from 'vite'
-import type { FactKey, SquashFacts } from './src/components/marketing/facts-types'
+import type { FactKey, SquashFacts } from './src/components/marketing/facts-types.ts'
 
 export const FACTS_MODULE_ID = 'virtual:squash-facts'
 const RESOLVED_ID = `\0${FACTS_MODULE_ID}`
