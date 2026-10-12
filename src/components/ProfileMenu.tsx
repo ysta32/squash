@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Keyboard, LogOut, Settings } from 'lucide-react'
+import { Compass, Keyboard, LogOut, Settings } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useDismiss } from '../hooks/useDismiss'
 import { cn } from '../lib/utils'
@@ -15,9 +15,10 @@ const ITEM_ICON = 'size-4 shrink-0 text-ink-3'
 export interface ProfileMenuProps {
   workspaceId: string
   onShowShortcuts?: () => void
+  onShowTour?: () => void
 }
 
-export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) {
+export function ProfileMenu({ workspaceId, onShowShortcuts, onShowTour }: ProfileMenuProps) {
   // The shortcuts sheet is keyboard-only; touch screens do not get an entry point.
   const touch = useCoarsePointer()
   const { profile, user, signOut } = useAuth()
@@ -82,6 +83,20 @@ export function ProfileMenu({ workspaceId, onShowShortcuts }: ProfileMenuProps) 
             <Settings aria-hidden="true" className={ITEM_ICON} />
             Settings
           </Link>
+          {onShowTour && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                onShowTour()
+              }}
+              className={ITEM}
+            >
+              <Compass aria-hidden="true" className={ITEM_ICON} />
+              Take the tour
+            </button>
+          )}
           {onShowShortcuts && !touch && (
             <button
               type="button"

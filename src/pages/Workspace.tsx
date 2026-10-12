@@ -44,6 +44,8 @@ import { useListWidth } from '../lib/listWidth'
 import { Skeleton } from '../components/Skeleton'
 import { Button, ButtonLink, Kbd } from '../components/ui'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
+import { TourDialog } from '../components/TourDialog'
+import { tourSeen } from '../lib/tour'
 import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, hasActiveFilters, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
@@ -116,7 +118,7 @@ export default function Workspace() {
     number?: string
   }>()
   const navigate = useNavigate()
-  const { search } = useLocation()
+  const { search, state: navState } = useLocation()
   const { user } = useAuth()
   const selfId = user?.id ?? ''
   const { toast } = useToast()
@@ -355,6 +357,10 @@ export default function Workspace() {
   const [assignRequest, setAssignRequest] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // Onboarding opens a new workspace with `{ tour: true }`; the tour offers itself once per browser.
+  const [tourOpen, setTourOpen] = useState(
+    () => (navState as { tour?: boolean } | null)?.tour === true && !tourSeen(),
+  )
   const [paletteOpen, setPaletteOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const [listWidth, setListWidth, resetListWidth] = useListWidth()
@@ -605,7 +611,12 @@ export default function Workspace() {
 
   useOverlayOpen(inviteOpen)
   const shortcutsEnabled =
-    !inviteOpen && !shortcutsOpen && !paletteOpen && !claude.setupOpen && ws.workspace !== null
+    !inviteOpen &&
+    !shortcutsOpen &&
+    !tourOpen &&
+    !paletteOpen &&
+    !claude.setupOpen &&
+    ws.workspace !== null
 
   const workspaceReady = ws.workspace !== null
   useEffect(() => {
@@ -1017,6 +1028,13 @@ export default function Workspace() {
       run: () => setTheme(NEXT_THEME[theme]),
     },
     {
+      id: 'tour',
+      label: 'Take the tour',
+      group: 'Help',
+      keywords: ['tutorial', 'help', 'onboarding', 'guide', 'learn'],
+      run: () => setTourOpen(true),
+    },
+    {
       id: 'shortcuts',
       label: 'Keyboard shortcuts',
       group: 'Help',
@@ -1113,6 +1131,7 @@ export default function Workspace() {
           steps={onboardingSteps(bugs, ws.members.length, claude.connected)}
           onInvite={() => setInviteOpen(true)}
           onClaudeSetup={claude.openSetup}
+          onTour={() => setTourOpen(true)}
         />
       </div>
     )
@@ -1183,6 +1202,7 @@ export default function Workspace() {
         selfId={selfId}
         onInvite={() => setInviteOpen(true)}
         onShowShortcuts={() => setShortcutsOpen(true)}
+        onShowTour={() => setTourOpen(true)}
         role={ws.role}
       />
       <ConnectionStatus />
@@ -1244,6 +1264,7 @@ export default function Workspace() {
               onCopy={claude.copyBugs}
               onInvite={() => setInviteOpen(true)}
               onClaudeSetup={claude.openSetup}
+              onTour={() => setTourOpen(true)}
               claudeConnected={claude.connected}
               claudeRuns={claude.runs}
               claudeRunList={claude.runList}
@@ -1279,6 +1300,7 @@ export default function Workspace() {
         onRegenerate={ws.regenerateInviteCode}
       />
       <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <TourDialog open={tourOpen} onClose={() => setTourOpen(false)} />
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}

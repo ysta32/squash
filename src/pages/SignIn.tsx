@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { safeNext } from '../lib/authRedirect'
 import { AuthLayout } from '../components/AuthLayout'
@@ -15,7 +15,7 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function emailProblem(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return 'Enter your email address.'
-  if (!EMAIL_SHAPE.test(trimmed)) return 'Enter a full email address, like you@company.com.'
+  if (!EMAIL_SHAPE.test(trimmed)) return 'Enter a full email address, like you@example.com.'
   return null
 }
 
@@ -173,8 +173,24 @@ export default function SignIn() {
       eyebrow="Sign in"
       title="Sign in to Squash"
       pitch
-      description="Use Google, or get a one-time link by email. New here? Signing in creates your account."
-      footer="Joining a teammate? Open their invite link first; it brings you back here and then into their workspace."
+      description="Use Google, or get a one-time link by email. New here? Signing in creates your free account; there is nothing to install or pay for."
+      footer={
+        <>
+          Joining a teammate? Open their invite link first; it brings you back here and then into
+          their workspace.
+          <span className="block pt-2">
+            By continuing you agree to the{' '}
+            <Link to="/terms" className={proseLinkClass}>
+              Terms
+            </Link>{' '}
+            and the{' '}
+            <Link to="/privacy" className={proseLinkClass}>
+              privacy notice
+            </Link>
+            .
+          </span>
+        </>
+      }
     >
       <div className="space-y-6">
         <Button
@@ -194,7 +210,7 @@ export default function SignIn() {
         </div>
 
         <form noValidate onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
-          <Field label="Work email" error={error}>
+          <Field label="Email" error={error}>
             {({ id, describedBy }) => (
               <Input
                 ref={emailRef}
@@ -203,7 +219,7 @@ export default function SignIn() {
                 required
                 autoComplete="email"
                 inputMode="email"
-                placeholder="you@company.com"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)

@@ -154,9 +154,11 @@ const GROUPS: { title: string; questions: Question[] }[] = [
             </p>
             <p>
               Claude Code then works with your normal Claude Code permissions: the folder is its
-              working directory, not a sandbox. Squash never receives your code. When a run ends,
-              its summary (and the branch, commit and pull request, if it reports them) is saved on
-              the bug. <DocLink to="/claude">The Claude Code guide</DocLink> covers the rest.
+              working directory, not a sandbox. Once its work is verified, Claude commits it and
+              pushes to your own git remote (never force-pushing), so review what it ships. Squash
+              never receives your code. When a run ends, its summary (and the branch, commit and
+              pull request, if it reports them) is saved on the bug.{' '}
+              <DocLink to="/claude">The Claude Code guide</DocLink> covers the rest.
             </p>
           </>
         ),

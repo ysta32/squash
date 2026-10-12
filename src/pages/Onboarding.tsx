@@ -292,12 +292,19 @@ function FirstBugStep({ workspace }: { workspace: Workspace }) {
             </span>
           )}
         </li>
+        <li className="flex items-baseline gap-4 border-b border-line py-3">
+          <span className="font-mono text-xs text-ink-3 nums">D</span>
+          <span>
+            Features, tests and to-dos have tabs of their own, and any item can go to Claude Code
+          </span>
+        </li>
       </ol>
       <Button
         variant="primary"
         size="lg"
         className="w-full"
-        onClick={() => navigate(`/app/${workspace.id}`)}
+        // The workspace offers a short tour of the rest on its first open.
+        onClick={() => navigate(`/app/${workspace.id}`, { state: { tour: true } })}
       >
         Open {workspace.name}
       </Button>

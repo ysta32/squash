@@ -341,6 +341,35 @@ export default function ClaudeGuide() {
         </section>
 
         <section className="mt-10 space-y-3">
+          <h2 id="shipping" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Shipping the work
+          </h2>
+          <ul className="space-y-1 text-sm leading-6 text-muted [&>li]:relative [&>li]:pl-5 [&>li]:before:absolute [&>li]:before:left-0 [&>li]:before:font-mono [&>li]:before:text-ink-3 [&>li]:before:content-['–']">
+            <li>
+              Once a fix is verified, Claude commits only its own changes and pushes the current
+              branch. It never force-pushes; if the push is rejected, it rebases and tries again.
+            </li>
+            <li>
+              <span className="text-fg">Ship to main</span>, on any item or in its … menu, has
+              Claude land the item’s work on the default branch, merge what landed meanwhile, push
+              it and check that the deploy is live.
+            </li>
+            <li>
+              The <span className="text-fg">Running</span> tab lists every run in the workspace at
+              once, with Claude’s summary when each one finishes.
+            </li>
+            <li>
+              <span className="text-fg">Auto-fix</span> (Settings → Claude Code) sends each item you
+              file straight to Claude. It is off by default and set per browser.
+            </li>
+          </ul>
+          <p className="text-sm leading-6 text-muted">
+            A project that deploys from git goes live from these pushes, so protect the branches
+            that matter and review what Claude ships.
+          </p>
+        </section>
+
+        <section className="mt-10 space-y-3">
           <h2
             id="troubleshooting"
             className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]"

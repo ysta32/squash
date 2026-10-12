@@ -59,6 +59,8 @@ export interface BugListProps {
   /** Opens the Claude Code setup guide (helper and project folder). */
   onClaudeSetup?: () => void
   onInvite?: () => void
+  /** Opens the product tour. */
+  onTour?: () => void
   claudeConnected?: boolean
   /** Latest Claude Code session per bug number, to mark rows Claude is working on. */
   claudeRuns?: Map<number, ClaudeRun>
@@ -252,6 +254,7 @@ export function BugList({
   onCopy,
   onClaudeSetup,
   onInvite,
+  onTour,
   claudeConnected = false,
   claudeRuns,
   claudeRunList = [],
@@ -467,6 +470,7 @@ export function BugList({
             steps={steps}
             onInvite={onInvite}
             onClaudeSetup={onClaudeSetup}
+            onTour={onTour}
           />
         )}
         {running ? (
@@ -506,6 +510,7 @@ export function BugList({
               steps={steps}
               onInvite={onInvite}
               onClaudeSetup={onClaudeSetup}
+              onTour={onTour}
             />
           )
         ) : visible.length === 0 ? (

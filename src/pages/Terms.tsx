@@ -9,7 +9,7 @@ export default function Terms() {
   return (
     <LegalLayout
       title="Terms"
-      updated="2026-10-07"
+      updated="2026-10-12"
       lead={
         <p>
           The terms for using the hosted instance of Squash, an open-source project run by its
@@ -41,9 +41,10 @@ export default function Terms() {
           title: 'Your content',
           body: (
             <p>
-              What you put into Squash (bugs, screenshots, comments) stays yours. You let the
-              service store it and show it to the members of the workspace you put it in, which is
-              what it is for. Only upload what you are allowed to share with those members.
+              What you put into Squash (bugs, features, tests, to-dos, screenshots, comments) stays
+              yours. You let the service store it and show it to the members of the workspace you
+              put it in, which is what it is for. Only upload what you are allowed to share with
+              those members.
             </p>
           ),
         },
@@ -69,14 +70,36 @@ export default function Terms() {
           ),
         },
         {
+          id: 'claude-code',
+          title: 'Claude Code',
+          body: (
+            <>
+              <p>
+                The Claude Code integration is optional. It runs Claude Code on your own computer,
+                in a project folder you choose, under your own Claude account and permissions.
+                Claude can change files there, and when it is done it commits and pushes to your git
+                remote; Ship to main lands work on your default branch, and Auto-fix starts a run
+                for every item you file. Your project’s deploy may follow from that push.
+              </p>
+              <p>
+                You are responsible for what you let it change, push and deploy: review its work,
+                protect branches that matter, and keep backups. The helper never force-pushes, but
+                Squash cannot undo a commit or a deploy for you. See the{' '}
+                <Link to="/claude">Claude Code guide</Link> for how it works.
+              </p>
+            </>
+          ),
+        },
+        {
           id: 'your-account',
           title: 'Your account',
           body: (
             <p>
-              Keep access to your email or Google account secure: it is how you sign in. Invite
-              links let anyone who has them join a workspace, so share them only with people you
-              mean to invite; an owner can regenerate the link at any time. You can export your bugs
-              and delete your account from the app whenever you like.
+              Anyone 13 or older can create an account; signing in creates one. Keep access to your
+              email or Google account secure: it is how you sign in. Invite links let anyone who has
+              them join a workspace, so share them only with people you mean to invite; an owner can
+              regenerate the link at any time. You can export your bugs and delete your account from
+              the app whenever you like.
             </p>
           ),
         },

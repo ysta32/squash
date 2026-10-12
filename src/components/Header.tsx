@@ -21,6 +21,7 @@ export interface HeaderProps {
   selfId: string
   onInvite: () => void
   onShowShortcuts?: () => void
+  onShowTour?: () => void
   role: MemberRole | null
 }
 
@@ -59,6 +60,7 @@ export function Header({
   selfId,
   onInvite,
   onShowShortcuts,
+  onShowTour,
   role,
 }: HeaderProps) {
   const [statsOpen, setStatsOpen] = useState(false)
@@ -123,7 +125,11 @@ export function Header({
         <span className="max-sm:hidden">
           <ThemeToggle />
         </span>
-        <ProfileMenu workspaceId={workspace.id} onShowShortcuts={onShowShortcuts} />
+        <ProfileMenu
+          workspaceId={workspace.id}
+          onShowShortcuts={onShowShortcuts}
+          onShowTour={onShowTour}
+        />
       </div>
     </header>
   )
