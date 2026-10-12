@@ -9,8 +9,10 @@ import { gzipSync } from 'node:zlib'
 // Budgets are ~10% above that, rounded; 1 kB = 1000 bytes. See .orch/DECISIONS.md D-15.
 // v2.0.0 added ~14 lazy marketing/docs routes (1.5–4 kB each, never downloaded together); the
 // total sums every chunk, so it rose to 302 kB while the entry stayed at 71.8 kB (D-16).
+// v2.0.x app features (Updates and Running tabs, Ask Claude, usage) took the total to ~323 kB with
+// the entry still near 72 kB; the total budget moved to 330 kB to keep ~3% headroom.
 export const BUDGET_ENTRY_KB = 83
-export const BUDGET_TOTAL_KB = 320
+export const BUDGET_TOTAL_KB = 330
 
 /** @param {number} entryBytes @param {number} totalJsBytes */
 export function checkBudgets(entryBytes, totalJsBytes) {
