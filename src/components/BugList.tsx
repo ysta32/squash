@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Copy,
   FolderCog,
+  Inbox,
   MessageCircleQuestionMark,
   Search,
   Sparkle,
@@ -22,6 +23,8 @@ import type { ListAction } from './BugFilters'
 import { isRunActive, type ClaudeRun } from '../lib/claudeExport'
 import { StatusGlyph } from './ClaudeProgress'
 import { RunningList } from './RunningList'
+import { UpdatesList } from './UpdatesList'
+import type { UpdateItem } from '../lib/updates'
 import { BugRow } from './BugRow'
 import { EmptyState, StatePanel } from './EmptyState'
 import { Tooltip } from './Tooltip'
@@ -79,8 +82,17 @@ export interface BugListProps {
   claudeRunList?: ClaudeRun[]
   /** The Running tab is showing instead of a kind's list. */
   running?: boolean
-  /** Switches to the Running tab, or back to a kind's list. */
-  onTab?: (tab: BugKind | 'running') => void
+  /** The Updates tab is showing instead of a kind's list. */
+  updates?: boolean
+  /** Recently resolved items for the Updates tab, and how many are new to this person. */
+  updateItems?: UpdateItem[]
+  updatesNew?: number
+  /** "Looks good" on the Updates tab. */
+  onReview?: (bugs: BugWithMeta[]) => void
+  /** "Reopen" on the Updates tab: the item is not done after all. */
+  onReopenUpdate?: (bug: BugWithMeta) => Promise<void>
+  /** Switches to the Running or Updates tab, or back to a kind's list. */
+  onTab?: (tab: ListTab) => void
   /** Number of the item open in the detail pane (Running marks its run). */
   selectedNumber?: number | null
   /** Opens an item by number (from a run on the Running tab). */
@@ -92,12 +104,12 @@ export interface BugListProps {
   onboardingInDetail?: boolean
 }
 
-/** A tab on the Bugs / Features / Tests / Running strip. */
-type ListTab = BugKind | 'running'
+/** A tab on the Bugs / Features / Tests / Updates / Running strip. */
+export type ListTab = BugKind | 'updates' | 'running'
 
 /**
- * Bugs / Features / Tests (and Running, when Claude Code is set up) as underline tabs: one 2px
- * accent bar that slides between them.
+ * Bugs / Features / Tests (and Updates and Running, when the page offers them) as underline tabs:
+ * one 2px accent bar that slides between them.
  */
 function KindTabs({
   kind,
@@ -106,16 +118,19 @@ function KindTabs({
   onChange,
   running,
   runningCount,
+  updatesNew,
 }: {
   kind: ListTab
   openByKind?: Record<BugKind, number>
   /** Counts are not known yet (first load): keep their space but show nothing. */
   countsPending?: boolean
   onChange: (tab: ListTab) => void
-  /** Shows the Running tab. */
+  /** Shows the Updates and Running tabs. */
   running: boolean
   /** Claude Code runs in progress, shown on the Running tab. */
   runningCount: number
+  /** Resolved items not reviewed yet, shown on the Updates tab. */
+  updatesNew: number
 }) {
   const listRef = useRef<HTMLDivElement>(null)
   const [bar, setBar] = useState<{ left: number; width: number } | null>(null)
@@ -134,7 +149,7 @@ function KindTabs({
     const observer = new ResizeObserver(measure)
     observer.observe(list)
     return () => observer.disconnect()
-  }, [kind, openByKind, running, runningCount])
+  }, [kind, openByKind, running, runningCount, updatesNew])
 
   // The first placement jumps into position; later tab changes slide.
   useLayoutEffect(() => {
@@ -144,7 +159,7 @@ function KindTabs({
     }
   }, [bar, settled])
 
-  const kinds: ListTab[] = running ? [...KINDS, 'running'] : KINDS
+  const kinds: ListTab[] = running ? [...KINDS, 'updates', 'running'] : KINDS
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
     event.preventDefault()
@@ -163,12 +178,47 @@ function KindTabs({
     <div
       ref={listRef}
       role="tablist"
-      aria-label={running ? 'Bugs, features, tests or running' : 'Bugs, features or tests'}
+      aria-label={running ? 'Bugs, features, tests, updates or running' : 'Bugs, features or tests'}
       onKeyDown={onKeyDown}
       className="relative flex h-full shrink-0 items-stretch gap-5"
     >
       {kinds.map((k) => {
         const active = kind === k
+        if (k === 'updates')
+          return (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-label={updatesNew > 0 ? `Updates, ${updatesNew} new` : 'Updates'}
+              tabIndex={active ? 0 : -1}
+              title="Everything finished lately, with what happened, to check off"
+              onClick={() => {
+                if (!active) onChange(k)
+              }}
+              className={cn(
+                't focus-ring-inset flex items-center gap-1.5 rounded-xs text-sm font-medium',
+                active ? 'text-ink' : 'text-ink-3 hover:text-ink',
+              )}
+            >
+              <Inbox
+                size={14}
+                strokeWidth={1.5}
+                aria-hidden="true"
+                className="@min-[440px]:hidden"
+              />
+              <span className="@max-[439px]:sr-only">Updates</span>
+              {updatesNew > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="inline-flex h-4 min-w-4 items-center justify-center rounded-xs bg-accent-tint px-1 font-mono text-label text-accent tabular-nums"
+                >
+                  {updatesNew}
+                </span>
+              )}
+            </button>
+          )
         if (k === 'running')
           return (
             <button
@@ -271,6 +321,11 @@ export function BugList({
   claudeRuns,
   claudeRunList = [],
   running = false,
+  updates = false,
+  updateItems = [],
+  updatesNew = 0,
+  onReview,
+  onReopenUpdate,
   onTab,
   selectedNumber = null,
   onOpenNumber,
@@ -327,8 +382,10 @@ export function BugList({
       : exportable.length !== counts[filters.tab]
         ? `${exportable.length} ${exportable.length === 1 ? KIND_LABEL[filters.kind].one.toLowerCase() : items} in view`
         : ''
-  const showBulk = Boolean(bulkActions && picked.length > 0 && !running)
-  const showSendBar = Boolean(onSend && exportable.length > 0 && !showBulk && !running)
+  /** Updates and Running replace the kind's list (and its search, filters and footer). */
+  const otherView = running || updates
+  const showBulk = Boolean(bulkActions && picked.length > 0 && !otherView)
+  const showSendBar = Boolean(onSend && exportable.length > 0 && !showBulk && !otherView)
   const activeRuns = claudeRunList.filter(isRunActive).length
 
   const actions: ListAction[] = []
@@ -373,19 +430,20 @@ export function BugList({
       <div className="shrink-0 border-b border-line">
         <div className="@container flex h-[2.8571rem] items-stretch justify-between gap-3 border-b border-line px-4 pointer-coarse:h-[3.1429rem]">
           <KindTabs
-            kind={running ? 'running' : filters.kind}
+            kind={running ? 'running' : updates ? 'updates' : filters.kind}
             openByKind={openByKind}
             countsPending={countsPending}
             onChange={(tab) => {
               if (onTab) onTab(tab)
-              else if (tab !== 'running') onFilters({ ...filters, kind: tab })
+              else if (tab !== 'running' && tab !== 'updates') onFilters({ ...filters, kind: tab })
             }}
             running={Boolean(onTab)}
             runningCount={activeRuns}
+            updatesNew={updatesNew}
           />
           {/* Status is a filter, so it is one compact menu at every width, never a second row
-              of tabs beside the Bugs / Features / Tests underline. Running has no status. */}
-          {!running && (
+              of tabs beside the Bugs / Features / Tests underline. Updates and Running have no status. */}
+          {!otherView && (
             <StatusMenu
               tab={filters.tab}
               counts={counts}
@@ -395,7 +453,7 @@ export function BugList({
             />
           )}
         </div>
-        <div className={cn('flex items-center gap-1 px-4 py-2', running && 'hidden')}>
+        <div className={cn('flex items-center gap-1 px-4 py-2', otherView && 'hidden')}>
           <div className="relative min-w-0 flex-1">
             <Search
               size={14}
@@ -456,7 +514,7 @@ export function BugList({
             actions={actions}
           />
         </div>
-        {!running && (
+        {!otherView && (
           <ActiveFilters
             filters={filters}
             onFilters={onFilters}
@@ -466,7 +524,7 @@ export function BugList({
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]" aria-busy={loading}>
-        {!running && !loading && error && bugs.length > 0 && (
+        {!otherView && !loading && error && bugs.length > 0 && (
           <div
             role="status"
             className="flex h-[2rem] items-center gap-2 border-b border-line bg-surface-3 px-4 text-xs text-ink-2"
@@ -483,7 +541,7 @@ export function BugList({
           </div>
         )}
         {/* While nothing is filed anywhere the checklist is the onboarding itself (below). */}
-        {!running && !loading && !error && workspaceId && !(firstItem && !steps.filed) && (
+        {!otherView && !loading && !error && workspaceId && !(firstItem && !steps.filed) && (
           <GettingStarted
             workspaceId={workspaceId}
             steps={steps}
@@ -492,7 +550,19 @@ export function BugList({
             onTour={onTour}
           />
         )}
-        {running ? (
+        {updates ? (
+          <UpdatesList
+            items={updateItems}
+            members={members}
+            selfId={selfId}
+            selectedNumber={selectedNumber}
+            onOpen={(n) => onOpenNumber?.(n)}
+            onReview={(items) => onReview?.(items)}
+            onReopen={async (bug) => {
+              await onReopenUpdate?.(bug)
+            }}
+          />
+        ) : running ? (
           <RunningList
             runs={claudeRunList}
             bugs={bugs}

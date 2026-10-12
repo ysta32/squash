@@ -862,3 +862,59 @@ describe('BugList Running tab', () => {
     expect(screen.queryByRole('tab', { name: /Running/ })).not.toBeInTheDocument()
   })
 })
+
+describe('BugList Updates tab', () => {
+  afterEach(cleanup)
+
+  const done = bugs[1]
+  const items = [{ bug: { ...done, resolution_note: 'Fixed the grid gap.' }, isNew: true }]
+
+  it('counts new updates on the tab and lists what happened, to check off or reopen', () => {
+    const onTab = vi.fn()
+    const onReview = vi.fn()
+    const onReopenUpdate = vi.fn(() => Promise.resolve())
+    const { rerender } = render(
+      <MemoryRouter>
+        <Harness onTab={onTab} updateItems={items} updatesNew={1} />
+      </MemoryRouter>,
+    )
+    const tab = screen.getByRole('tab', { name: 'Updates, 1 new' })
+    fireEvent.click(tab)
+    expect(onTab).toHaveBeenCalledWith('updates')
+
+    rerender(
+      <MemoryRouter>
+        <Harness
+          onTab={onTab}
+          updates
+          updateItems={items}
+          updatesNew={1}
+          onReview={onReview}
+          onReopenUpdate={onReopenUpdate}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: 'Updates, 1 new' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    const list = screen.getByRole('list', { name: 'Updates' })
+    expect(list).toHaveTextContent('Fixed layout')
+    expect(list).toHaveTextContent('Fixed the grid gap.')
+    expect(list).toHaveTextContent('Resolved by Ada')
+    expect(screen.queryByRole('button', { name: /^Status: / })).not.toBeInTheDocument()
+    fireEvent.click(within(list).getByRole('button', { name: /Looks good/ }))
+    expect(onReview).toHaveBeenCalledWith([items[0].bug])
+    fireEvent.click(within(list).getByRole('button', { name: /Reopen/ }))
+    expect(onReopenUpdate).toHaveBeenCalledWith(items[0].bug)
+  })
+
+  it('says when nothing has been finished yet', () => {
+    render(
+      <MemoryRouter>
+        <Harness onTab={vi.fn()} updates />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('No updates yet')
+  })
+})

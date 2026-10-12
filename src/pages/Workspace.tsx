@@ -13,6 +13,7 @@ import {
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Activity,
+  Inbox,
   ArrowLeft,
   Bug as BugIcon,
   CircleCheck,
@@ -31,7 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
-import { BugList } from '../components/BugList'
+import { BugList, type ListTab } from '../components/BugList'
 import { CaptureBar } from '../components/CaptureBar'
 import { Header } from '../components/Header'
 import { InviteDialog } from '../components/InviteDialog'
@@ -55,6 +56,7 @@ import { useClaudeQuestions } from '../hooks/useClaudeQuestions'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
+import { useUpdates } from '../hooks/useUpdates'
 import { isOverlayOpen, useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { useNotifications } from '../hooks/useNotifications'
@@ -192,6 +194,16 @@ export default function Workspace() {
     retryUploads,
     getBugByNumber,
   } = useBugs(workspaceId, { onRemoteInsert })
+  const updates = useUpdates(workspaceId, selfId, bugs)
+  const { markResolvedHere } = updates
+  // What you resolve yourself is never waiting for your review on the Updates tab.
+  const resolveHere = useCallback(
+    (id: string, note: string | null) => {
+      markResolvedHere([id])
+      return resolveBug(id, note)
+    },
+    [markResolvedHere, resolveBug],
+  )
 
   // Assignment changes this tab made (in flight, or just rolled back after a failure), so their
   // optimistic updates and rollbacks are never announced as a teammate's assignment.
@@ -233,7 +245,7 @@ export default function Workspace() {
 
   async function resolveWithUndo(id: string, note: string | null) {
     const before = bugs.find((bug) => bug.id === id)
-    await resolveBug(id, note)
+    await resolveHere(id, note)
     if (before && before.status === 'open')
       toastUndo(`Resolved #${before.number}`, () => reopenBug(id, before.resolution_note))
   }
@@ -345,11 +357,23 @@ export default function Workspace() {
   }, [])
   const clearPicked = useCallback(() => setPickedIds(new Set()), [])
   const claude = useClaudeExport(workspaceId, ws.workspace?.name ?? '', ws.members, toast)
+  // Items Claude resolves land on the Updates tab; the toast links there to check them.
+  const openUpdatesRef = useRef<() => void>(() => {})
+  const claudeToast = useCallback(
+    (msg: string) =>
+      toast(
+        msg,
+        /^Claude Code resolved/.test(msg)
+          ? { action: { label: 'Review', onAction: () => openUpdatesRef.current() } }
+          : undefined,
+      ),
+    [toast],
+  )
   useClaudeResults(
     workspaceId,
     (claude.status?.version ?? 0) >= AUTO_RESOLVE_VERSION,
     { getBugByNumber, resolveBug, updateBug },
-    toast,
+    claudeToast,
   )
   const [askOpen, setAskOpen] = useState(false)
   const [askItems, setAskItems] = useState<BugWithMeta[]>([])
@@ -430,7 +454,10 @@ export default function Workspace() {
   const presence = usePresence(workspaceId, selected?.id ?? null)
 
   /** The Running tab: every Claude Code run at once, kept in the URL as `?view=running`. */
-  const running = new URLSearchParams(search).get('view') === 'running'
+  const view = new URLSearchParams(search).get('view')
+  const running = view === 'running'
+  /** The Updates tab: what was finished lately, to check off, kept in the URL as `?view=updates`. */
+  const updatesView = view === 'updates'
 
   // The list follows the open item's kind: a deep link to a feature request (or moving the open
   // item between Bugs and Features) switches the list to match.
@@ -810,17 +837,32 @@ export default function Workspace() {
         : { search: nextSearch },
     )
   }
-  const switchTab = (tab: BugKind | 'running') => {
-    if (tab !== 'running') {
+  const switchTab = (tab: ListTab) => {
+    if (tab !== 'running' && tab !== 'updates') {
       showList({ ...filters, kind: tab })
       return
     }
-    if (running) return
+    if (view === tab) return
     const params = new URLSearchParams(search)
-    params.set('view', 'running')
+    params.set('view', tab)
     clearPicked()
     navigate({ search: params.toString() })
   }
+  /** Shows a view tab, leaving the open item first on phones (where it hides the list). */
+  const showView = (tab: 'running' | 'updates') => {
+    if (showDetail && !isDesktop()) {
+      const params = new URLSearchParams(search)
+      params.set('view', tab)
+      clearPicked()
+      setPendingId(null)
+      navigate({ pathname: basePath, search: params.toString() })
+      return
+    }
+    switchTab(tab)
+  }
+  useEffect(() => {
+    openUpdatesRef.current = () => showView('updates')
+  })
 
   const applyFilters = (next: typeof filters) => {
     // Switching between Bugs, Features and Tests starts fresh: no picks, nothing open.
@@ -959,7 +1001,7 @@ export default function Workspace() {
       keywords: ['filter', 'tab', ...words],
       run: () => {
         const nextFilters = { ...filters, ...next }
-        if (running) {
+        if (running || updatesView) {
           showList(nextFilters)
           return
         }
@@ -982,18 +1024,15 @@ export default function Workspace() {
       group: 'Navigate',
       icon: Activity,
       keywords: ['claude', 'runs', 'tasks', 'progress', 'status', 'live'],
-      run: () => {
-        if (showDetail && !isDesktop()) {
-          // On phones the open item hides the list; go back to it, on the Running tab.
-          const params = new URLSearchParams(search)
-          params.set('view', 'running')
-          clearPicked()
-          setPendingId(null)
-          navigate({ pathname: basePath, search: params.toString() })
-          return
-        }
-        switchTab('running')
-      },
+      run: () => showView('running'),
+    },
+    {
+      id: 'nav-updates',
+      label: 'Show updates: what was finished lately',
+      group: 'Navigate',
+      icon: Inbox,
+      keywords: ['updates', 'review', 'finished', 'done', 'resolved', 'inbox', 'claude', 'news'],
+      run: () => showView('updates'),
     },
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,
@@ -1299,7 +1338,7 @@ export default function Workspace() {
               pickedIds={effectivePickedIds}
               onTogglePick={togglePick}
               onClearPicked={clearPicked}
-              onResolve={resolveBug}
+              onResolve={resolveHere}
               onReopen={reopenBug}
               onAssign={assign}
               onToggleStatus={toggleStatus}
@@ -1313,6 +1352,17 @@ export default function Workspace() {
               claudeRuns={claude.runs}
               claudeRunList={claude.runList}
               running={running}
+              updates={updatesView}
+              updateItems={updates.items}
+              updatesNew={updates.newCount}
+              onReview={updates.markReviewed}
+              onReopenUpdate={(bug) =>
+                reopenWithUndo(bug.id, bug.resolution_note).catch((err: unknown) => {
+                  toast(err instanceof Error ? err.message : 'Could not reopen it.', {
+                    tone: 'error',
+                  })
+                })
+              }
               onTab={switchTab}
               selectedNumber={selected && !selected.optimistic ? selected.number : null}
               onOpenNumber={(n) => navigate(bugPath(n))}
