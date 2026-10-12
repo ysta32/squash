@@ -180,7 +180,7 @@ function KindTabs({
       role="tablist"
       aria-label={running ? 'Bugs, features, tests, updates or running' : 'Bugs, features or tests'}
       onKeyDown={onKeyDown}
-      className="relative flex h-full shrink-0 items-stretch gap-5"
+      className="relative flex h-full shrink-0 items-stretch gap-4 @max-[399px]:gap-3"
     >
       {kinds.map((k) => {
         const active = kind === k
@@ -206,9 +206,9 @@ function KindTabs({
                 size={14}
                 strokeWidth={1.5}
                 aria-hidden="true"
-                className="@min-[440px]:hidden"
+                className="@min-[560px]:hidden"
               />
-              <span className="@max-[439px]:sr-only">Updates</span>
+              <span className="@max-[559px]:sr-only">Updates</span>
               {updatesNew > 0 && (
                 <span
                   aria-hidden="true"
@@ -236,15 +236,16 @@ function KindTabs({
                 active ? 'text-ink' : 'text-ink-3 hover:text-ink',
               )}
             >
-              {/* A narrow list (phones, a 400px pane) shows the tab as an icon beside the
-                  status menu, so the strip never overflows. */}
+              {/* The list pane (400–480px) and phones show Updates and Running as icons, so the
+                  strip keeps room to breathe beside the status menu instead of crowding it. */}
               <Activity
                 size={14}
                 strokeWidth={1.5}
                 aria-hidden="true"
-                className="@min-[440px]:hidden"
+                // While runs are going their spinner already marks the tab.
+                className={cn('@min-[560px]:hidden', runningCount > 0 && '@max-[399px]:hidden')}
               />
-              <span className="@max-[439px]:sr-only">Running</span>
+              <span className="@max-[559px]:sr-only">Running</span>
               {runningCount > 0 && (
                 <span className="inline-flex items-center gap-1">
                   <StatusGlyph kind="working" className="size-3 text-status-progress" />
@@ -269,8 +270,13 @@ function KindTabs({
             )}
           >
             {KIND_LABEL[k].many}{' '}
-            {/* The active kind's count already shows on the status control beside it. */}
-            {openByKind && !active && <Count value={openByKind[k]} pending={countsPending} />}
+            {/* The active kind's count already shows on the status control beside it; on a
+                phone the other counts give way so the tabs never run off the edge. */}
+            {openByKind && !active && (
+              <span className="@max-[399px]:hidden">
+                <Count value={openByKind[k]} pending={countsPending} />
+              </span>
+            )}
           </button>
         )
       })}
