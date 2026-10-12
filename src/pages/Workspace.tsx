@@ -827,7 +827,10 @@ export default function Workspace() {
   useShortcut(
     'Escape',
     () => {
-      if (showDetail && !isDesktop()) deselect()
+      // Esc drops the picks first (the bulk bar offers it), whatever has focus; closing a menu
+      // or dialog with Esc leaves them alone.
+      if (pickedIds.size > 0 && !isOverlayOpen()) clearPicked()
+      else if (showDetail && !isDesktop()) deselect()
     },
     opts,
   )

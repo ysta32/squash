@@ -16,7 +16,7 @@ export interface BugRowProps {
   members: WorkspaceMember[]
   viewers: PresenceUser[]
   highlighted: boolean
-  /** Picked for a multi-bug export (⌘/Ctrl/Shift-click toggles). */
+  /** Picked for a multi-bug export (⌘/Ctrl/Shift-click toggles; a plain click unpicks). */
   picked?: boolean
   onTogglePick?: (id: string) => void
   /** State of the Claude Code session working on this bug, while it is in progress. */
@@ -111,7 +111,11 @@ export const BugRow = memo(function BugRow({
         data-status={bug.status}
         onClick={(e) => {
           if (onTogglePick && (e.metaKey || e.ctrlKey || e.shiftKey)) onTogglePick(bug.id)
-          else onSelect(bug.id)
+          else {
+            // A picked row shows a ticked box: a plain click unticks it as well as opening it.
+            if (picked && onTogglePick) onTogglePick(bug.id)
+            onSelect(bug.id)
+          }
         }}
         className={cn(
           ROW_BOX,
