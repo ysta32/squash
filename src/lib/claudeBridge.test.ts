@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ClaudeRun } from './claudeExport'
+import type { ClaudeLimits, ClaudeRun, ClaudeUsage } from './claudeExport'
 
 interface BridgeEvent {
   t: string
@@ -68,6 +68,14 @@ interface Bridge {
     live: boolean,
   ): { state: string; answer?: string; activity?: string; error?: string }
   BACKGROUND_TERMINAL_SCRIPT: string[]
+  runUsage(result: Record<string, unknown>): Record<string, unknown>
+  parseLimits(event: Record<string, unknown>, now?: Date): ClaudeLimits | null
+  summarizeUsage(
+    entries: Record<string, unknown>[],
+    workspaceId: string,
+    limits?: ClaudeLimits | null,
+    limit?: number,
+  ): ClaudeUsage
   validateProject(payload: unknown): {
     workspaceId: string
     workspaceName: string
@@ -976,5 +984,69 @@ describe('run terminals', () => {
     expect(script).not.toMatch(/^activate$/m)
     expect(script).toContain('path to frontmost application')
     expect(script).toContain('tell application previous to activate')
+  })
+})
+
+describe('usage', () => {
+  const result = {
+    type: 'result',
+    total_cost_usd: 1.38151600002,
+    num_turns: 38,
+    duration_ms: 233086,
+    usage: {
+      input_tokens: 72,
+      output_tokens: 14440,
+      cache_read_input_tokens: 2469500,
+      cache_creation_input_tokens: 74816,
+    },
+    modelUsage: { 'claude-opus-5-5[1m]': {} },
+  }
+
+  it('reads what a run used from its result event', () => {
+    expect(bridge.runUsage(result)).toEqual({
+      tokens: 72 + 14440 + 2469500 + 74816,
+      input: 72,
+      output: 14440,
+      cacheRead: 2469500,
+      cacheWrite: 74816,
+      costUsd: 1.3815,
+      turns: 38,
+      durationMs: 233086,
+      models: ['claude-opus-5-5[1m]'],
+    })
+    expect(bridge.runUsage({}).tokens).toBe(0)
+  })
+
+  it('reads plan limits from a rate limit event', () => {
+    const event = {
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        unifiedWindows: {
+          five_hour: { utilization: 0.03, resetsAt: 1791845400 },
+          seven_day: { utilization: 0.091, resetsAt: 1792141200 },
+        },
+      },
+    }
+    expect(bridge.parseLimits(event, at(0))).toEqual({
+      fiveHour: { usedPercent: 3, resetsAt: new Date(1791845400 * 1000).toISOString() },
+      sevenDay: { usedPercent: 9.1, resetsAt: new Date(1792141200 * 1000).toISOString() },
+      status: 'allowed',
+      updatedAt: at(0).toISOString(),
+    })
+    expect(bridge.parseLimits({ rate_limit_info: { status: 'allowed' } })).toBeNull()
+    expect(bridge.parseLimits({})).toBeNull()
+  })
+
+  it('totals a workspace and lists its runs newest first', () => {
+    const entries = [
+      { id: 'a', workspaceId: 'w1', kind: 'fix', bugs: [1, 2], tokens: 100, costUsd: 0.5 },
+      { id: 'b', workspaceId: 'w2', kind: 'fix', bugs: [1], tokens: 999, costUsd: 9 },
+      { id: 'c', workspaceId: 'w1', kind: 'question', bugs: [], tokens: 50, costUsd: 0.25 },
+    ]
+    const usage = bridge.summarizeUsage(entries, 'w1', null, 1)
+    expect(usage.total).toMatchObject({ runs: 2, tokens: 150, costUsd: 0.75 })
+    expect(usage.runs.map((r) => r.id)).toEqual(['c'])
+    expect(usage.limits).toBeNull()
   })
 })

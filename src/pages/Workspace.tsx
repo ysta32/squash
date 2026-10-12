@@ -63,7 +63,16 @@ import { useNotifications } from '../hooks/useNotifications'
 import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
-import { ASK_VERSION, AUTO_RESOLVE_VERSION, askBridge, getAutoSend } from '../lib/claudeExport'
+import {
+  ASK_VERSION,
+  AUTO_RESOLVE_VERSION,
+  USAGE_VERSION,
+  askBridge,
+  getAutoSend,
+  isRunActive,
+} from '../lib/claudeExport'
+import { usageByBug } from '../lib/claudeUsage'
+import { useClaudeUsage } from '../hooks/useClaudeUsage'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
 import { NEXT_THEME, useTheme } from '../lib/theme'
@@ -357,6 +366,17 @@ export default function Workspace() {
   }, [])
   const clearPicked = useCallback(() => setPickedIds(new Set()), [])
   const claude = useClaudeExport(workspaceId, ws.workspace?.name ?? '', ws.members, toast)
+  // Reload usage as soon as another run finishes, rather than on the next poll.
+  const finishedRuns = claude.runList.filter((r) => !isRunActive(r)).length
+  const claudeUsage = useClaudeUsage(
+    workspaceId,
+    (claude.status?.version ?? 0) >= USAGE_VERSION,
+    finishedRuns,
+  )
+  const usageByItem = useMemo(
+    () => usageByBug((claudeUsage?.runs ?? []).filter((r) => r.kind === 'fix')),
+    [claudeUsage],
+  )
   // Items Claude resolves land on the Updates tab; the toast links there to check them.
   const openUpdatesRef = useRef<() => void>(() => {})
   const claudeToast = useCallback(
@@ -1196,6 +1216,7 @@ export default function Workspace() {
         onShip={(bug) => claude.shipBugs([bug])}
         onCopy={(bug) => claude.copyBugs([bug])}
         claudeRun={!selected.optimistic ? claude.runs.get(selected.number) : undefined}
+        claudeUsage={!selected.optimistic ? usageByItem.get(selected.number) : undefined}
       />
     )
   } else if (!hasNumberParam && loading) {

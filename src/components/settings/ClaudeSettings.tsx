@@ -5,6 +5,7 @@ import { ClaudeSetupDialog } from '../ClaudeSetupDialog'
 import {
   BRIDGE_VERSION,
   LEGACY_RESULTS_VERSION,
+  USAGE_VERSION,
   getAutoSend,
   getBridgeFolder,
   pingBridge,
@@ -12,6 +13,8 @@ import {
   type BridgeStatus,
 } from '../../lib/claudeExport'
 import { cn } from '../../lib/utils'
+import { useClaudeUsage } from '../../hooks/useClaudeUsage'
+import { ClaudeUsagePanel } from './ClaudeUsagePanel'
 import { LedgerGroup, LedgerRow, SettingsPanel, TOUCH } from './Ledger'
 
 type Check =
@@ -98,6 +101,8 @@ export function ClaudeSettings({
   const status = check.state === 'done' ? check.status : null
   const connected = status !== null && status.version >= BRIDGE_VERSION
   const outdated = status !== null && (!connected || status.version < LEGACY_RESULTS_VERSION)
+  const tracksUsage = status !== null && status.version >= USAGE_VERSION
+  const usage = useClaudeUsage(workspaceId, tracksUsage)
 
   const helperText = checking
     ? 'Checking this computer…'
@@ -191,6 +196,9 @@ export function ClaudeSettings({
           }
         />
       </LedgerGroup>
+      {connected && (
+        <ClaudeUsagePanel workspaceId={workspaceId} usage={usage} outdated={!tracksUsage} />
+      )}
       <ClaudeSetupDialog
         open={setupOpen}
         onClose={() => {

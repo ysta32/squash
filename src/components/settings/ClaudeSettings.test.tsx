@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../lib/claudeExport', () => ({
   BRIDGE_VERSION: 2,
   LEGACY_RESULTS_VERSION: 12,
+  USAGE_VERSION: 13,
+  getBridgeUsage: () => Promise.reject(new Error('no usage')),
   pingBridge: () => mocks.pingBridge(),
   getBridgeFolder: (id: string) => mocks.getBridgeFolder(id),
   getAutoSend: () => false,

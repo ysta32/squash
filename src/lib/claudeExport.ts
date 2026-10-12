@@ -622,6 +622,8 @@ export const PROJECT_VERSION = 10
 export const ASK_VERSION = 11
 /** Oldest bridge that also applies results from runs an old helper (before v4) never picked up. */
 export const LEGACY_RESULTS_VERSION = 12
+/** Oldest bridge that records how much of Claude each run used, and the plan's limits. */
+export const USAGE_VERSION = 13
 
 export interface BridgeStatus {
   version: number
@@ -808,6 +810,58 @@ export function latestRunByBug(runs: ClaudeRun[]): Map<number, ClaudeRun> {
   const byBug = new Map<number, ClaudeRun>()
   for (const run of runs) for (const n of run.bugs) if (!byBug.has(n)) byBug.set(n, run)
   return byBug
+}
+
+/** How much of a plan window is used, as Claude Code last reported it. */
+export interface ClaudeLimitWindow {
+  usedPercent: number
+  resetsAt: string | null
+}
+
+/** The Claude plan's limits (subscriptions only), as of the last run on this computer. */
+export interface ClaudeLimits {
+  fiveHour: ClaudeLimitWindow | null
+  sevenDay: ClaudeLimitWindow | null
+  status: 'allowed' | 'allowed_warning' | 'rejected' | null
+  updatedAt: string
+}
+
+/** What one finished Claude Code run used. */
+export interface ClaudeUsageRun {
+  id: string
+  /** A fix (Send to Claude, Ship, Auto-fix) or a question (Ask). */
+  kind: 'fix' | 'question'
+  bugs: number[]
+  finishedAt: string | null
+  /** Every token the run processed: input, output and prompt cache reads and writes. */
+  tokens: number
+  /** What the run would cost at API prices (a subscription pays from its limits instead). */
+  costUsd: number
+  turns: number
+  durationMs: number
+  models: string[]
+}
+
+export interface ClaudeUsageTotal {
+  runs: number
+  tokens: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  costUsd: number
+}
+
+/** Claude usage for one workspace on this computer (bridge v13+). */
+export interface ClaudeUsage {
+  limits: ClaudeLimits | null
+  total: ClaudeUsageTotal
+  /** Newest first. */
+  runs: ClaudeUsageRun[]
+}
+
+export async function getBridgeUsage(workspaceId: string): Promise<ClaudeUsage> {
+  return bridgeRequest<ClaudeUsage>(`/workspaces/${encodeURIComponent(workspaceId)}/usage`)
 }
 
 /** A Claude Code run that has exited, with what Claude reported back. */

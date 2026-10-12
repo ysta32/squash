@@ -21,6 +21,7 @@ import { useFixRuns } from '../hooks/useFixRuns'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { ClaudeRun } from '../lib/claudeExport'
+import { formatTokens, formatUsd, type ItemUsage } from '../lib/claudeUsage'
 import { shortSha } from '../lib/fixRuns'
 import type {
   Bug,
@@ -83,6 +84,8 @@ export interface BugDetailProps {
   onCopy?: (bug: BugWithMeta) => void
   /** The latest Claude Code session sent this bug, with what it is doing. */
   claudeRun?: ClaudeRun
+  /** What Claude Code has used on this bug across its runs (helper v13+). */
+  claudeUsage?: ItemUsage
 }
 
 type PopoverState = { bugId: string; mode: 'resolve' | 'reopen' } | null
@@ -191,6 +194,7 @@ function BugBody({
   onShip,
   onCopy,
   claudeRun,
+  claudeUsage,
   popover,
   onPopover,
 }: BugBodyProps) {
@@ -769,6 +773,21 @@ function BugBody({
           )}
 
           {claudeRun && <ClaudeProgress run={claudeRun} />}
+
+          {claudeUsage && claudeUsage.runs > 0 && (
+            <p
+              aria-label="Claude usage"
+              className="flex min-w-0 items-center gap-2 font-mono text-xs text-ink-3 nums"
+              title="Tokens Claude Code used on this item, and what that would cost at API prices. Runs sent with several items are split evenly between them."
+            >
+              <SparkMark className="shrink-0 text-ink-3" />
+              <span className="min-w-0 truncate">
+                Claude used {formatTokens(claudeUsage.tokens)} tokens ·{' '}
+                {formatUsd(claudeUsage.costUsd)} at API prices · {claudeUsage.runs}{' '}
+                {claudeUsage.runs === 1 ? 'run' : 'runs'}
+              </span>
+            </p>
+          )}
 
           <FixRecord bugId={bug.id} fix={fix} attachments={bug.attachments} />
 

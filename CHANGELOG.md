@@ -10,6 +10,7 @@
 - Auto-fix new items (Settings → Claude Code): when on, each bug or feature request you file goes straight to Claude Code once its screenshots upload. Off by default, per browser.
 - A short tour of Squash (filing, the four kinds of item, working the list, Claude Code with the Running tab, Ship to main and Auto-fix, inviting your team). A new workspace offers it on its first open, and **Take the tour** in the command palette, the profile menu and the Get started checklist opens it again.
 - Ask Claude about the project: ask a question ("Has #12 been fixed and deployed yet?"), optionally about picked items and with files attached, from **Ask** on the selection bar, the list's … menu or the command palette. Claude Code answers read-only in the background, with no terminal, and the answer shows in Squash. Needs helper v11.
+- Claude usage (Settings → Claude Code): how much of your Claude plan is left (the 5-hour and weekly limits, with when each resets), what Claude Code used on this project in tokens and API-price cost, and which items used the most. Each item also shows what Claude used on it under its progress. Recorded by the helper for every run on this computer; needs helper v13.
 
 ### Changed
 

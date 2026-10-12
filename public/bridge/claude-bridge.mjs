@@ -32,6 +32,11 @@
 // workspace and maps the workspace to it; Squash then sends the project's first feature as a run
 // that builds it, creates the GitHub repo and pushes.
 //
+// Usage: each run's runner records what Claude used (tokens, API-price cost, turns) in
+// ~/.squash/usage.jsonl, with the workspace and item numbers it ran for, and the latest plan limits
+// Claude Code reports (5-hour and weekly windows) in ~/.squash/limits.json. Squash reads both through
+// GET /workspaces/<id>/usage.
+//
 // SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
 // with e.g. "--permission-mode acceptEdits"), SQUASH_DOWNLOAD_HOSTS (comma-separated extra hosts
 // screenshots may be downloaded from), SQUASH_SUPABASE_HOST (this app's Supabase project host).
@@ -55,7 +60,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 12
+const VERSION = 13
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -65,6 +70,10 @@ const CONFIG_DIR = join(homedir(), '.squash')
 const CONFIG_FILE = join(CONFIG_DIR, 'bridge.json')
 const RUNS_FILE = join(CONFIG_DIR, 'runs.json')
 const QUESTIONS_FILE = join(CONFIG_DIR, 'questions.json')
+const USAGE_FILE = join(CONFIG_DIR, 'usage.jsonl')
+const LIMITS_FILE = join(CONFIG_DIR, 'limits.json')
+// Runs the usage route returns per workspace, newest first (totals still count every run).
+const USAGE_RUNS = 500
 const MAX_QUESTIONS = 30
 const MAX_RUNS = 50
 const RUNS_PER_WORKSPACE = 10
@@ -848,7 +857,7 @@ async function runBatch(batchDir, runId) {
   if (RUN_ID.test(runId ?? '')) {
     await writePrivate(runnerPidFile(batchDir, runId), String(process.pid), { flag: 'wx' })
   }
-  const { args = [] } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
+  const { args = [], usage: usageMeta = null } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
   const prompt = await readFile(join(batchDir, 'prompt.md'), 'utf8')
   const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a', mode: FILE_MODE })
   console.log(`Squash → Claude Code in ${process.cwd()}`)
@@ -873,6 +882,7 @@ async function runBatch(batchDir, runId) {
   child.stdin.end(prompt)
   // Claude's final reply (the stream's closing `result` event): the answer to a question.
   let answer = ''
+  let usage = null
   for await (const line of createInterface({ input: child.stdout })) {
     log.write(line + '\n')
     let event
@@ -882,6 +892,11 @@ async function runBatch(batchDir, runId) {
       continue
     }
     if (event.type === 'result' && typeof event.result === 'string') answer = event.result.trim()
+    if (event.type === 'result') usage = runUsage(event)
+    if (event.type === 'rate_limit_event') {
+      const limits = parseLimits(event)
+      if (limits) await writePrivate(LIMITS_FILE, JSON.stringify(limits) + '\n').catch(() => {})
+    }
     if (event.type !== 'assistant') continue
     for (const block of event.message?.content ?? []) {
       if (block.type === 'text' && block.text.trim()) console.log(`\n${block.text.trim()}\n`)
@@ -900,13 +915,133 @@ async function runBatch(batchDir, runId) {
   })
   await writePrivate(
     join(batchDir, DONE_FILE),
-    JSON.stringify({ exitCode, result, git, answer: clip(answer, MAX_ANSWER), finishedAt: t }),
+    JSON.stringify({
+      exitCode,
+      result,
+      git,
+      answer: clip(answer, MAX_ANSWER),
+      usage,
+      finishedAt: t,
+    }),
   )
+  if (usage && usageMeta?.workspaceId) {
+    const entry = {
+      id: basename(batchDir),
+      workspaceId: usageMeta.workspaceId,
+      kind: usageMeta.kind === 'question' ? 'question' : 'fix',
+      bugs: Array.isArray(usageMeta.bugs) ? usageMeta.bugs : [],
+      finishedAt: t,
+      ...usage,
+    }
+    await appendFile(USAGE_FILE, JSON.stringify(entry) + '\n', { mode: FILE_MODE }).catch(() => {})
+  }
   console.log(
     result
       ? '\n✓ Done. Squash will update the bugs. Closing this window…'
       : `\n✗ Claude finished without a result (exit ${exitCode}). Closing this window…`,
   )
+}
+
+// ── Usage ────────────────────────────────────────────────────────────────────────────────────
+
+const count = (n) => (Number.isFinite(n) && n > 0 ? Math.round(n) : 0)
+
+/** What a run used, from the closing `result` event of `claude -p --output-format stream-json`. */
+export function runUsage(result) {
+  const u = result?.usage ?? {}
+  const input = count(u.input_tokens)
+  const output = count(u.output_tokens)
+  const cacheRead = count(u.cache_read_input_tokens)
+  const cacheWrite = count(u.cache_creation_input_tokens)
+  const cost = Number(result?.total_cost_usd)
+  return {
+    tokens: input + output + cacheRead + cacheWrite,
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    costUsd: Number.isFinite(cost) && cost > 0 ? Math.round(cost * 10_000) / 10_000 : 0,
+    turns: count(result?.num_turns),
+    durationMs: count(result?.duration_ms),
+    models: Object.keys(result?.modelUsage ?? {})
+      .filter((m) => typeof m === 'string' && m.length <= 100)
+      .slice(0, 5),
+  }
+}
+
+const utilization = (window) => {
+  const used = Number(window?.utilization)
+  const resets = Number(window?.resetsAt)
+  if (!Number.isFinite(used)) return null
+  return {
+    // 0..1 in the event; a percentage here.
+    usedPercent: Math.min(100, Math.max(0, Math.round(used * 1000) / 10)),
+    resetsAt: Number.isFinite(resets) && resets > 0 ? new Date(resets * 1000).toISOString() : null,
+  }
+}
+
+/**
+ * Plan limits from a stream-json `rate_limit_event` (Claude subscriptions only): how much of the
+ * 5-hour and weekly windows is used and when each resets. Null when the event carries none.
+ */
+export function parseLimits(event, now = new Date()) {
+  const info = event?.rate_limit_info
+  if (!info || typeof info !== 'object') return null
+  const windows = info.unifiedWindows ?? {}
+  const fiveHour = utilization(windows.five_hour)
+  const sevenDay = utilization(windows.seven_day)
+  if (!fiveHour && !sevenDay) return null
+  return {
+    fiveHour,
+    sevenDay,
+    status: ['allowed', 'allowed_warning', 'rejected'].includes(info.status) ? info.status : null,
+    updatedAt: now.toISOString(),
+  }
+}
+
+/**
+ * A workspace's usage from the ledger's entries (oldest first, as appended): totals over every run,
+ * the newest `limit` runs, and the account's latest plan limits.
+ */
+export function summarizeUsage(entries, workspaceId, limits = null, limit = USAGE_RUNS) {
+  const total = { runs: 0, tokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0 }
+  const runs = []
+  for (const e of entries) {
+    if (e?.workspaceId !== workspaceId) continue
+    total.runs++
+    for (const key of ['tokens', 'input', 'output', 'cacheRead', 'cacheWrite', 'costUsd']) {
+      total[key] += Number.isFinite(e[key]) ? e[key] : 0
+    }
+    runs.push({
+      id: String(e.id ?? ''),
+      kind: e.kind === 'question' ? 'question' : 'fix',
+      bugs: Array.isArray(e.bugs) ? e.bugs.filter(Number.isInteger) : [],
+      finishedAt: typeof e.finishedAt === 'string' ? e.finishedAt : null,
+      tokens: count(e.tokens),
+      costUsd: Number.isFinite(e.costUsd) ? e.costUsd : 0,
+      turns: count(e.turns),
+      durationMs: count(e.durationMs),
+      models: Array.isArray(e.models) ? e.models.filter((m) => typeof m === 'string') : [],
+    })
+  }
+  total.costUsd = Math.round(total.costUsd * 10_000) / 10_000
+  return { limits, total, runs: runs.reverse().slice(0, limit) }
+}
+
+async function workspaceUsage(workspaceId) {
+  let entries = []
+  try {
+    entries = (await readFile(USAGE_FILE, 'utf8')).split('\n').flatMap((line) => {
+      try {
+        return line ? [JSON.parse(line)] : []
+      } catch {
+        return []
+      }
+    })
+  } catch {
+    // No runs recorded yet.
+  }
+  return summarizeUsage(entries, workspaceId, await readJson(LIMITS_FILE))
 }
 
 // ── Proof of fix ─────────────────────────────────────────────────────────────────────────────
@@ -1098,12 +1233,18 @@ export const BACKGROUND_TERMINAL_SCRIPT = [
  * Runs Claude Code on the batch: in a new background Terminal window on macOS, headless elsewhere
  * and for questions (`headless`), whose answers show in Squash instead.
  */
-async function launch(folder, batchDir, runId, { args = CLAUDE_ARGS, headless = false } = {}) {
+async function launch(
+  folder,
+  batchDir,
+  runId,
+  { args = CLAUDE_ARGS, headless = false, usage = null } = {},
+) {
   await writePrivate(
     join(batchDir, 'settings.json'),
     JSON.stringify(hookSettings(batchDir), null, 2) + '\n',
   )
-  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args }))
+  // `usage` says whose run this is ({ workspaceId, kind, bugs }), for the usage ledger.
+  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args, usage }))
   if (MAC && !headless) {
     const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)} ${runId}; exit`
     const windowId = await osascript(BACKGROUND_TERMINAL_SCRIPT, [command])
@@ -1150,7 +1291,7 @@ async function handleSend(payload) {
     })
     const runId = randomBytes(16).toString('hex')
     slot.track({ pidFile: runnerPidFile(batchDir, runId) })
-    await launch(folder, batchDir, runId)
+    await launch(folder, batchDir, runId, { usage: { workspaceId, kind: 'fix', bugs } })
     console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
     return { ok: true, folder }
   } catch (err) {
@@ -1458,7 +1599,11 @@ async function handleAsk(workspaceIdFromPath, payload) {
     }
     await saveQuestions([record, ...(await loadQuestions()).filter((q) => q.id !== ask.id)])
     slot.track({ pidFile: runnerPidFile(dir, runId) })
-    await launch(folder, dir, runId, { args: askArgs(), headless: true })
+    await launch(folder, dir, runId, {
+      args: askArgs(),
+      headless: true,
+      usage: { workspaceId: ask.workspaceId, kind: 'question', bugs: ask.bugs },
+    })
     console.log(`? ${ask.name}: Claude Code is answering a question in ${folder}`)
     return { ok: true, id: ask.id }
   } catch (err) {
@@ -1508,6 +1653,7 @@ function serve() {
         /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/files\/([A-Za-z0-9_.-]{1,84})$/.exec(
           path,
         )
+      const usageRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/usage$/.exec(path)
       const questionsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/questions$/.exec(path)
       const forgetRoute =
         /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/questions\/([A-Za-z0-9_.-]{1,80})\/forget$/.exec(
@@ -1528,6 +1674,9 @@ function serve() {
       }
       if (req.method === 'GET' && fileRoute) {
         return await sendScreenshot(res, fileRoute[1], fileRoute[2], fileRoute[3], origin)
+      }
+      if (req.method === 'GET' && usageRoute) {
+        return send(res, 200, await workspaceUsage(usageRoute[1]), origin)
       }
       if (req.method === 'GET' && questionsRoute) {
         return send(res, 200, { questions: await workspaceQuestions(questionsRoute[1]) }, origin)
@@ -1599,7 +1748,7 @@ if (isMain()) {
   }
   // Tighten files left readable by older versions of the bridge.
   await mkdirPrivate(CONFIG_DIR)
-  for (const file of [CONFIG_FILE, RUNS_FILE]) {
+  for (const file of [CONFIG_FILE, RUNS_FILE, USAGE_FILE, LIMITS_FILE]) {
     if (existsSync(file)) await chmod(file, FILE_MODE)
   }
   serve()
