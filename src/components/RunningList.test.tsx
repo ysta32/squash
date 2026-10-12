@@ -92,6 +92,24 @@ describe('RunningList', () => {
     expect(onOpen).toHaveBeenCalledWith(9)
   })
 
+  it('opens the item when the card is clicked anywhere, not just on its line', () => {
+    const onOpen = vi.fn()
+    render(
+      <RunningList
+        runs={[run({ id: 'r2', bugs: [9], state: 'done', activity: null, message: 'Shipped it.' })]}
+        bugs={bugs}
+        selectedNumber={null}
+        onOpen={onOpen}
+        claudeConnected
+      />,
+    )
+    fireEvent.click(screen.getByText('Shipped it.'))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen).toHaveBeenCalledWith(9)
+    fireEvent.click(screen.getByRole('button', { name: /Dark mode/ }))
+    expect(onOpen).toHaveBeenCalledTimes(2)
+  })
+
   it('explains the view when nothing has run yet', () => {
     const onClaudeSetup = vi.fn()
     render(

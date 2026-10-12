@@ -1,4 +1,5 @@
 import { Activity } from 'lucide-react'
+import type { MouseEvent } from 'react'
 import { useNow } from '../hooks/useNow'
 import { isRunActive, type ClaudeRun } from '../lib/claudeExport'
 import { STATE_GLYPH, STATE_LABEL, elapsed, orderRuns } from '../lib/claudeRunView'
@@ -43,12 +44,24 @@ function RunCard({
   const doneTodos = todos.filter((t) => t.status === 'completed').length
   const current = todos.find((t) => t.status === 'in_progress')
   const selected = selectedNumber !== null && run.bugs.includes(selectedNumber)
+  const first = run.bugs[0]
+
+  // A click anywhere on the card opens its (first) item, like the item line itself. The item
+  // buttons stay the keyboard targets; clicks on them, and drags that select text, pass through.
+  function openFromCard(e: MouseEvent<HTMLLIElement>) {
+    if (first === undefined) return
+    if ((e.target as HTMLElement).closest('button, a')) return
+    if (window.getSelection()?.toString()) return
+    onOpen(first)
+  }
 
   return (
     <li
       aria-label={`${STATE_LABEL[run.state]}: ${run.bugs.map((n) => `#${n}`).join(', ')}`}
+      onClick={openFromCard}
       className={cn(
         'border-b border-line px-4 py-3',
+        first !== undefined && 't cursor-pointer hover:bg-surface-2',
         selected && 'bg-surface-2',
         waiting && 'border-l-2 border-l-warning',
       )}
