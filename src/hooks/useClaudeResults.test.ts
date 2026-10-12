@@ -205,3 +205,53 @@ describe('applyClaudeRun', () => {
     )
   })
 })
+
+describe('applyClaudeRun with an after screenshot', () => {
+  it('attaches the screenshot and records it as the run’s after shot', async () => {
+    const a = actions([bug(4)])
+    const recordFixRun = vi.fn(async () => null)
+    const attachScreenshot = vi.fn(async () => 'att-1')
+    await applyClaudeRun(
+      {
+        batch: 'run',
+        exitCode: 0,
+        result: {
+          bugs: [{ number: 4, resolved: true, summary: 'Done', screenshot: 'after-4.png' }],
+        },
+      },
+      { ...a, recordFixRun, attachScreenshot },
+    )
+    expect(attachScreenshot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'b4' }),
+      'run',
+      'after-4.png',
+    )
+    expect(recordFixRun).toHaveBeenCalledWith(
+      expect.objectContaining({ afterAttachmentId: 'att-1' }),
+    )
+    expect(a.resolveBug).toHaveBeenCalledWith('b4', 'Done')
+  })
+
+  it('still resolves the bug when the screenshot cannot be attached', async () => {
+    const a = actions([bug(4)])
+    const recordFixRun = vi.fn(async () => null)
+    const attachScreenshot = vi.fn(async () => {
+      throw new Error('gone')
+    })
+    const msg = await applyClaudeRun(
+      {
+        batch: 'run',
+        exitCode: 0,
+        result: {
+          bugs: [{ number: 4, resolved: true, summary: 'Done', screenshot: 'after-4.png' }],
+        },
+      },
+      { ...a, recordFixRun, attachScreenshot },
+    )
+    expect(a.resolveBug).toHaveBeenCalledWith('b4', 'Done')
+    expect(recordFixRun).toHaveBeenCalledWith(
+      expect.not.objectContaining({ afterAttachmentId: expect.anything() }),
+    )
+    expect(msg).toBe('Claude Code resolved #4. Could not attach Claude’s screenshot for #4.')
+  })
+})

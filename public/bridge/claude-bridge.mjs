@@ -18,6 +18,14 @@
 // polls GET /workspaces/<id>/runs to show it on the bug.
 //
 // Env: SQUASH_BRIDGE_PORT (4317), SQUASH_ORIGINS (comma-separated allowed app origins),
+// After screenshots: Claude may save a screenshot of its fix in the batch folder and name it in
+// result.json; Squash fetches it through GET .../results/<batch>/files/<file> and attaches it to the
+// bug as the "after" shot.
+//
+// New projects: POST /projects creates an empty folder (a fresh git repo on main) for a new Squash
+// workspace and maps the workspace to it; Squash then sends the project's first feature as a run
+// that builds it, creates the GitHub repo and pushes.
+//
 // SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
 // with e.g. "--permission-mode acceptEdits"), SQUASH_DOWNLOAD_HOSTS (comma-separated extra hosts
 // screenshots may be downloaded from), SQUASH_SUPABASE_HOST (this app's Supabase project host).
@@ -34,14 +42,14 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs'
-import { appendFile, chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 9
+const VERSION = 10
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -81,8 +89,11 @@ const SHIP_TOOLS = [
       'status',
       'log',
       'diff',
+      'init',
+      'remote',
     ]
       .map((cmd) => `Bash(git ${cmd}:*)`)
+      .concat('Bash(gh repo create:*)', 'Bash(gh repo view:*)')
       .join(','),
   '--disallowedTools=Bash(git push --force:*),Bash(git push -f:*),Bash(git push --force-with-lease:*)',
 ]
@@ -139,6 +150,12 @@ const FULL_SHA = /^[0-9a-f]{40}$/
 const BRANCH_NAME = /^[^\s\p{Cc}-][^\s\p{Cc}]{0,254}$/u
 const PR_URL = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?\/[!-~]*$/
 const PR_URL_MAX = 500
+// After screenshots Claude saves in a batch folder: an image file, at most this big.
+const SCREENSHOT_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}\.(png|jpe?g|webp)$/i
+const MAX_SCREENSHOT = 5 * 1024 * 1024
+const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }
+// New project folders: a plain name, created inside an existing parent folder.
+const PROJECT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
 
 // ── Hook mode ────────────────────────────────────────────────────────────────────────────────
 // Claude Code runs `node claude-bridge.mjs --hook <run folder>` on each hook event with the event
@@ -615,6 +632,26 @@ async function pickFolder(name) {
   return path.replace(/\/$/, '')
 }
 
+/** Native picker for the folder a new project is created in. */
+async function pickParent(name) {
+  if (!MAC) throw new HttpError(409, 'no_folder', `Type the folder to create "${name}" in`)
+  const path = await osascript(
+    [
+      'on run argv',
+      'tell application "Terminal"',
+      'activate',
+      'return POSIX path of (choose folder with prompt (item 1 of argv))',
+      'end tell',
+      'end run',
+    ],
+    [`Choose where to create the folder for “${name}”`],
+  )
+  return path.replace(/\/$/, '')
+}
+
+/** Expands a leading ~ and resolves a typed folder path. */
+const expandHome = (path) => resolve(path.trim().replace(/^~(?=$|\/)/, homedir()))
+
 async function folderFor(workspaceId, name) {
   const saved = (await loadConfig()).workspaces[workspaceId]?.folder
   if (saved && isDir(saved)) return saved
@@ -1044,7 +1081,7 @@ async function handleSetFolder(workspaceId, payload) {
   const name = workspaceName(payload.workspaceName)
   let folder
   if (typeof payload.folder === 'string' && payload.folder.trim()) {
-    folder = resolve(payload.folder.trim().replace(/^~(?=$|\/)/, homedir()))
+    folder = expandHome(payload.folder)
     if (!isAbsolute(folder) || !isDir(folder)) throw bad(`Not a folder: ${folder}`)
   } else {
     folder = await pickFolder(name)
@@ -1091,6 +1128,90 @@ async function claimResult(workspaceId, batch) {
   }
 }
 
+/**
+ * An after screenshot Claude saved in a run's batch folder: a plain image file (never a symlink),
+ * named in SCREENSHOT_FILE form, not one of the bridge's own files, at most MAX_SCREENSHOT bytes.
+ */
+export async function readScreenshot(dir, file) {
+  if (typeof file !== 'string' || !SCREENSHOT_FILE.test(file) || isReservedName(file)) {
+    throw bad('Invalid screenshot name')
+  }
+  const path = join(dir, file)
+  let info
+  try {
+    info = await lstat(path)
+  } catch {
+    throw new HttpError(404, 'not_found', 'No such screenshot')
+  }
+  if (!info.isFile()) throw new HttpError(404, 'not_found', 'No such screenshot')
+  if (info.size > MAX_SCREENSHOT) throw new HttpError(413, 'too_large', 'Screenshot too large')
+  const data = await readFile(path)
+  const ext = file.split('.').pop().toLowerCase()
+  return { data, type: IMAGE_TYPES[ext] }
+}
+
+async function sendScreenshot(res, workspaceId, batch, file, origin) {
+  const run = await findRun(workspaceId, batch)
+  if (!run?.dir) throw new HttpError(404, 'not_found', 'No such run')
+  const { data, type } = await readScreenshot(run.dir, file)
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Content-Length': data.length,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Access-Control-Allow-Origin': origin,
+    Vary: 'Origin',
+  })
+  res.end(data)
+}
+
+/** Validates a new project request: the workspace, a plain folder name and an optional parent. */
+export function validateProject(payload) {
+  const { workspaceId, name, parent } = payload ?? {}
+  if (typeof workspaceId !== 'string' || !SAFE_NAME.test(workspaceId)) {
+    throw bad('Invalid workspace')
+  }
+  if (typeof name !== 'string' || !PROJECT_NAME.test(name) || name.includes('..')) {
+    throw bad('Use letters, numbers, dots, dashes and underscores for the folder name')
+  }
+  if (parent !== undefined && parent !== null && typeof parent !== 'string') {
+    throw bad('Invalid parent folder')
+  }
+  return {
+    workspaceId,
+    workspaceName: workspaceName(payload.workspaceName),
+    name,
+    parent: typeof parent === 'string' && parent.trim() ? parent : null,
+  }
+}
+
+/**
+ * Creates a new project's folder: `<parent>/<name>`, empty, a git repo on `main`, and maps the
+ * workspace to it so its runs open there. An existing folder is used only when it is empty.
+ */
+async function handleProject(payload) {
+  const { workspaceId, workspaceName: label, name, parent: typed } = validateProject(payload)
+  const parent = typed ? expandHome(typed) : await pickParent(name)
+  if (!isAbsolute(parent) || !isDir(parent)) throw bad(`Not a folder: ${parent}`)
+  const folder = join(parent, name)
+  if (basename(folder) !== name) throw bad('Invalid folder name')
+  if (existsSync(folder)) {
+    if (!isDir(folder) || (await readdir(folder)).length > 0) {
+      throw new HttpError(409, 'exists', `${folder} already exists and is not empty`)
+    }
+  } else {
+    await mkdir(folder)
+  }
+  if ((await execQuiet('git', ['init', '-b', 'main'], { cwd: folder })) === null) {
+    // Older git has no -b: init, then point HEAD at main.
+    await execQuiet('git', ['init'], { cwd: folder })
+    await execQuiet('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: folder })
+  }
+  await saveFolder(workspaceId, label, folder)
+  console.log(`✓ New project ${label} → ${folder}`)
+  return { folder }
+}
+
 function serve() {
   const server = createServer(async (req, res) => {
     const origin = req.headers.origin?.replace(/\/$/, '')
@@ -1119,6 +1240,10 @@ function serve() {
       const resultsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results$/.exec(path)
       const claimRoute =
         /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/claim$/.exec(path)
+      const fileRoute =
+        /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/files\/([A-Za-z0-9_.-]{1,84})$/.exec(
+          path,
+        )
       if (req.method === 'GET' && path === '/health') {
         return send(res, 200, { ok: true, version: VERSION, platform: process.platform }, origin)
       }
@@ -1131,6 +1256,12 @@ function serve() {
       }
       if (req.method === 'GET' && resultsRoute) {
         return send(res, 200, { runs: await workspaceResults(resultsRoute[1]) }, origin)
+      }
+      if (req.method === 'GET' && fileRoute) {
+        return await sendScreenshot(res, fileRoute[1], fileRoute[2], fileRoute[3], origin)
+      }
+      if (req.method === 'POST' && path === '/projects') {
+        return send(res, 200, await handleProject(await readBody(req)), origin)
       }
       if (req.method === 'POST' && claimRoute) {
         return send(res, 200, await claimResult(claimRoute[1], claimRoute[2]), origin)

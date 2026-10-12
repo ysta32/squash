@@ -116,6 +116,16 @@ export interface ClaudeResultItem {
   number: number
   resolved: boolean
   summary: string
+  /** An after screenshot Claude saved in the batch folder (a file name, never a path). */
+  screenshot?: string
+}
+
+/** File names Claude may give an after screenshot: an image in the batch folder itself. */
+const SCREENSHOT_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}\.(png|jpe?g|webp)$/i
+
+/** Asks for a screenshot of a visible change, saved next to the result file and named in it. */
+function screenshotInstructions(noun: string, localDir: string): string {
+  return `When ${noun === 'item' ? 'an item' : `the ${noun}`} changes something people can see (a page, a component, a layout), finish by taking a screenshot of the result working: run the app and capture it with whatever you have (Playwright, a headless browser, a browser tool or \`screencapture\` on macOS). Save it as \`${localDir}/after-<number>.png\` (PNG, JPEG or WebP, under 5 MB) and add \`"screenshot": "after-<number>.png"\` to that entry below. Squash shows it on the ${noun} next to your summary. Skip it when there is nothing to see.`
 }
 
 /**
@@ -153,6 +163,8 @@ function resultInstructions(bugs: BugWithMeta[], noun: string, localDir: string)
     '',
     shipInstructions(noun),
     '',
+    screenshotInstructions(noun, localDir),
+    '',
     `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
     '',
     '```json',
@@ -169,13 +181,14 @@ export function parseClaudeResult(value: unknown): ClaudeResultItem[] {
   if (!Array.isArray(list)) return []
   const items: ClaudeResultItem[] = []
   for (const entry of list as unknown[]) {
-    const { number, resolved, summary } = (entry ?? {}) as Record<string, unknown>
+    const { number, resolved, summary, screenshot } = (entry ?? {}) as Record<string, unknown>
     if (typeof number !== 'number' || !Number.isInteger(number) || number < 1) continue
     if (typeof summary !== 'string' || !summary.trim()) continue
     items.push({
       number,
       resolved: resolved === true,
       summary: summary.trim().slice(0, RESULT_SUMMARY_MAX),
+      ...(typeof screenshot === 'string' && SCREENSHOT_FILE.test(screenshot) ? { screenshot } : {}),
     })
   }
   return items
@@ -333,6 +346,8 @@ export function formatShipPrompt({
     '6. Push the default branch to its remote. Never force-push. If the push is rejected because the remote moved on, pull with rebase, resolve, re-check and push again.',
     '7. If the project deploys from its remote (Vercel, Netlify, GitHub Actions and the like), check that the deploy of your commit succeeded with the tools you have (for example `gh run list` or `vercel ls`). If it failed, fix it and ship again.',
     '',
+    screenshotInstructions(noun, localDir),
+    '',
     `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
     '',
     '```json',
@@ -340,6 +355,70 @@ export function formatShipPrompt({
     '```',
     '',
     `Set "resolved" to true only when the work is committed on the default branch, pushed and (where you could check) live: Squash then marks the ${noun} resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write each summary as a short plain-language statement of what you shipped (the commit, the branch, whether the deploy is live). The terminal closes on its own once you finish.`,
+  ]
+  return [intro.join('\n'), ...sections].join('\n\n') + '\n'
+}
+
+/** A brand-new project: the folder the helper made for it and how its GitHub repo is created. */
+export interface NewProject {
+  /** Folder and repo name, e.g. `recipe-box`. */
+  name: string
+  /** Whether the GitHub repo is public. */
+  public: boolean
+}
+
+/** Input for a "New project" run: the project's first item, which describes what to build. */
+export interface CreatePromptInput extends ShipPromptInput {
+  project: NewProject
+}
+
+/**
+ * Prompt for a "New project" run: Claude starts in an empty folder (a fresh git repo on `main`),
+ * builds a first working version of what the item describes, creates the GitHub repo, pushes and,
+ * where it can, deploys, so a project goes from an idea to live without anyone setting it up.
+ */
+export function formatCreatePrompt({
+  bugs,
+  workspaceName,
+  origin,
+  localDir,
+  project,
+}: CreatePromptInput): string {
+  const noun = 'item'
+  const refs = bugs.map((b) => `#${b.number}`).join(', ')
+  const sections = bugs.map((bug) => {
+    const lines = [
+      `## ${KIND_PROMPT[bug.kind].heading} #${bug.number}: ${bug.title}`,
+      '',
+      `- Link: ${origin}/app/${bug.workspace_id}/bug/${bug.number}`,
+    ]
+    if (bug.description.trim() && bug.description.trim() !== bug.title.trim()) {
+      lines.push('', 'What they want:', indent(bug.description))
+    }
+    return lines.join('\n')
+  })
+  const visibility = project.public ? '--public' : '--private'
+  const intro = [
+    `Start a brand-new project, "${project.name}", for the Squash workspace "${workspaceName}". The folder you are in was just created for it: it is empty and a fresh git repo on \`main\`, with no commits and no remote yet. Build what ${refs} below asks for.`,
+    '',
+    'This session runs unattended: nobody will answer questions, so make reasonable decisions yourself instead of asking.',
+    '',
+    '1. Choose a stack: use what the description names; otherwise pick a simple, well-supported one that suits it and deploys easily (for a website or web app, a Vite + React + TypeScript app is a good default).',
+    '2. Scaffold the project here (in this folder, not a subfolder) and build a first working version of what is asked. Add a short README saying what it is and how to run it, and a .gitignore that keeps out dependencies, build output, `.env` files and `.squash/`.',
+    '3. Verify it: install dependencies, then run the typecheck, lint, tests and build the project has. Fix what fails.',
+    `4. Commit it on \`main\` with a message that names ${refs} (never commit \`.squash/\` or secrets).`,
+    `5. Create the GitHub repo and push: \`gh repo create ${project.name} ${visibility} --source . --remote origin --push\`. If that name is taken, add a short suffix. If \`gh\` is missing or not signed in, keep the commit local and say so in your summary. Never force-push.`,
+    '6. If you can deploy it with the tools you have (for example the `vercel` CLI when it is signed in: `vercel --prod --yes`), deploy it, check the deploy succeeded and put its URL in your summary. Otherwise say how to deploy it.',
+    '',
+    screenshotInstructions(noun, localDir),
+    '',
+    `As your very last step, report back to Squash by writing \`${localDir}/${RESULT_FILE}\` with one entry per ${noun}:`,
+    '',
+    '```json',
+    resultExample(bugs),
+    '```',
+    '',
+    'Set "resolved" to true only when the first version works, is committed and is pushed to its new GitHub repo: Squash then marks the item resolved with your summary as its resolution note. Otherwise set it to false and say what is left. Write the summary as a short plain-language statement of what you built, the repo URL and, if deployed, the live URL. The terminal closes on its own once you finish.',
   ]
   return [intro.join('\n'), ...sections].join('\n\n') + '\n'
 }
@@ -397,6 +476,8 @@ export const AUTO_RESOLVE_VERSION = 4
 export const HARDENED_VERSION = 6
 /** Oldest bridge that reports the commit, branch, PR and diff a run left behind (proof of fix). */
 export const PROOF_VERSION = 7
+/** Oldest bridge that serves after screenshots and creates new project folders. */
+export const PROJECT_VERSION = 10
 
 export interface BridgeStatus {
   version: number
@@ -501,24 +582,29 @@ export function batchName(bugs: BugWithMeta[], now = new Date()): string {
 
 /**
  * What a run asks of Claude: `fix` works on the items (and ships the result); `ship` lands work
- * already done for them on the default branch, pushed and live.
+ * already done for them on the default branch, pushed and live; `create` builds a new project
+ * from scratch in the empty folder made by createBridgeProject (pass `project`).
  */
-export type ClaudeRunMode = 'fix' | 'ship'
+export type ClaudeRunMode = 'fix' | 'ship' | 'create'
 
 /** Hands the bugs to the local bridge, which downloads screenshots and launches Claude Code. */
 export async function sendToBridge(
   input: Omit<ClaudeExportInput, 'urls' | 'comments' | 'localDir'> & {
     workspaceId: string
     mode?: ClaudeRunMode
+    project?: NewProject
   },
 ): Promise<void> {
-  const { workspaceId, mode = 'fix', ...rest } = input
+  const { workspaceId, mode = 'fix', project, ...rest } = input
   const batch = batchName(rest.bugs)
   const localDir = `.squash/bugs/${batch}`
+  if (mode === 'create' && !project) throw new Error('A new project needs a name.')
   const { prompt, downloads } =
-    mode === 'ship'
-      ? { prompt: formatShipPrompt({ ...rest, localDir }), downloads: [] }
-      : await buildClaudeExport({ ...rest, localDir })
+    mode === 'create' && project
+      ? { prompt: formatCreatePrompt({ ...rest, localDir, project }), downloads: [] }
+      : mode === 'ship'
+        ? { prompt: formatShipPrompt({ ...rest, localDir }), downloads: [] }
+        : await buildClaudeExport({ ...rest, localDir })
   await bridgeRequest('/claude', {
     workspaceId,
     workspaceName: rest.workspaceName,
@@ -606,4 +692,44 @@ export async function claimBridgeResult(workspaceId: string, batch: string): Pro
     {},
   )
   return claimed
+}
+
+/**
+ * Creates a new project's folder through the bridge: `<parent>/<name>`, empty and a git repo on
+ * `main`, mapped to the workspace. Without `parent` the bridge asks with a native folder picker.
+ */
+export async function createBridgeProject(input: {
+  workspaceId: string
+  workspaceName: string
+  name: string
+  parent?: string
+}): Promise<string> {
+  const { folder } = await bridgeRequest<{ folder: string }>('/projects', input)
+  return folder
+}
+
+/** An after screenshot Claude saved for a finished run, as an image Blob. */
+export async function getBridgeScreenshot(
+  workspaceId: string,
+  batch: string,
+  file: string,
+): Promise<Blob> {
+  const res = await fetch(
+    `${BRIDGE_URL}/workspaces/${encodeURIComponent(workspaceId)}/results/${encodeURIComponent(batch)}/files/${encodeURIComponent(file)}`,
+  )
+  if (!res.ok) throw new BridgeError(`Could not get the screenshot (${res.status})`)
+  const blob = await res.blob()
+  if (!blob.type.startsWith('image/')) throw new BridgeError('The screenshot is not an image')
+  return blob
+}
+
+/** A folder name for a new project from its display name: `Recipe Box!` → `recipe-box`. */
+export function projectSlug(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^[-._]+|[-._]+$/g, '')
+    .slice(0, 100)
 }

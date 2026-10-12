@@ -4,9 +4,11 @@ import {
   MAX_REGIONS_PER_SCREENSHOT,
   batchName,
   formatClaudePrompt,
+  formatCreatePrompt,
   formatShipPrompt,
   getAutoSend,
   parseClaudeResult,
+  projectSlug,
   setAutoSend,
 } from './claudeExport'
 
@@ -352,4 +354,58 @@ it.each([undefined, '.squash/bugs/run'])('includes context in Claude export (%s)
   expect(prompt).toContain(
     '- Context: https://example.com/checkout · 1440×900 @2x · Chrome 131 · macOS · abc123',
   )
+})
+
+describe('after screenshots', () => {
+  it('asks fix, ship and create runs for a screenshot of a visible change', () => {
+    const localDir = '.squash/bugs/run'
+    const fix = formatClaudePrompt({ ...base, bugs: [bug()], localDir }).prompt
+    const ship = formatShipPrompt({ ...base, bugs: [bug()], localDir })
+    const create = formatCreatePrompt({
+      ...base,
+      bugs: [bug({ kind: 'feature', number: 1 })],
+      localDir,
+      project: { name: 'recipe-box', public: false },
+    })
+    for (const prompt of [fix, ship, create]) {
+      expect(prompt).toContain(`${localDir}/after-<number>.png`)
+      expect(prompt).toContain('"screenshot": "after-<number>.png"')
+    }
+  })
+
+  it('keeps a screenshot file name from the result and drops paths', () => {
+    const items = parseClaudeResult({
+      bugs: [
+        { number: 1, resolved: true, summary: 'a', screenshot: 'after-1.png' },
+        { number: 2, resolved: true, summary: 'b', screenshot: '../../etc/passwd' },
+        { number: 3, resolved: true, summary: 'c', screenshot: 'after-3.gif' },
+        { number: 4, resolved: true, summary: 'd', screenshot: 'sub/after-4.webp' },
+      ],
+    })
+    expect(items.map((i) => i.screenshot)).toEqual(['after-1.png', undefined, undefined, undefined])
+  })
+})
+
+describe('new projects', () => {
+  it('builds in the empty folder, creates the GitHub repo and pushes', () => {
+    const prompt = formatCreatePrompt({
+      ...base,
+      bugs: [
+        bug({ kind: 'feature', number: 1, title: 'Build Recipe Box', description: 'Save recipes' }),
+      ],
+      localDir: '.squash/bugs/run',
+      project: { name: 'recipe-box', public: true },
+    })
+    expect(prompt).toContain('Start a brand-new project, "recipe-box"')
+    expect(prompt).toContain('gh repo create recipe-box --public --source . --remote origin --push')
+    expect(prompt).toContain('Save recipes')
+    expect(prompt).toContain('.squash/bugs/run/result.json')
+  })
+
+  it('makes a folder name from a display name', () => {
+    expect(projectSlug('Recipe Box!')).toBe('recipe-box')
+    expect(projectSlug('  Café  Über ')).toBe('cafe-uber')
+    expect(projectSlug('../..')).toBe('')
+    expect(projectSlug('!!!')).toBe('')
+  })
 })

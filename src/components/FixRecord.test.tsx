@@ -22,6 +22,8 @@ vi.mock('../hooks/useSignedUrl', () => ({
       : h.unsigned.has(path)
         ? { url: null, failed: true }
         : { url: `https://cdn.test/${path}`, failed: false },
+  useSignedUrl: (path: string | null) =>
+    path && !h.unsigned.has(path) ? `https://cdn.test/${path}` : null,
 }))
 vi.mock('./BeforeAfter', async (load) => {
   const actual = await load<typeof BeforeAfterModule>()
@@ -224,6 +226,14 @@ describe('FixRecord', () => {
   it('has no comparison when the bug has no before screenshot', () => {
     show([run({ after_attachment_id: 'a2' })], {}, [attachment('a2')])
     expect(screen.queryByRole('slider')).toBeNull()
+  })
+
+  it('shows Claude’s after screenshot on its own when there is no before', () => {
+    show([run({ after_attachment_id: 'a2' })], {}, [attachment('a2')])
+    expect(screen.getByAltText('Screenshot after fix e3f9a12')).toHaveAttribute(
+      'src',
+      'https://cdn.test/' + attachment('a2').storage_path,
+    )
   })
 })
 

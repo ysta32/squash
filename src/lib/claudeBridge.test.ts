@@ -1,7 +1,7 @@
 // @vitest-environment node
 /// <reference types="node" />
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -49,6 +49,13 @@ interface Bridge {
     start: string | null,
     options?: { run?: Exec; startedAt?: string | null },
   ): Promise<GitReport | null>
+  readScreenshot(dir: string, file: string): Promise<{ data: Buffer; type: string }>
+  validateProject(payload: unknown): {
+    workspaceId: string
+    workspaceName: string
+    name: string
+    parent: string | null
+  }
 }
 interface ExecOptions {
   cwd?: string
@@ -792,5 +799,47 @@ describe('proof of fix', () => {
       deletions: 0,
     })
     expect(await bridge.startSha(tmpdir())).toBeNull()
+  })
+})
+
+describe('readScreenshot', () => {
+  it('serves an image Claude saved in the batch folder', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'squash-shot-'))
+    writeFileSync(join(dir, 'after-4.png'), 'png-bytes')
+    const shot = await bridge.readScreenshot(dir, 'after-4.png')
+    expect(shot.type).toBe('image/png')
+    expect(shot.data.toString()).toBe('png-bytes')
+  })
+
+  it('refuses paths, non-images, bridge files, symlinks and missing files', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'squash-shot-'))
+    writeFileSync(join(dir, 'secret.png'), 'x')
+    symlinkSync(join(dir, 'secret.png'), join(dir, 'link.png'))
+    await expect(bridge.readScreenshot(dir, '../secret.png')).rejects.toThrow('Invalid')
+    await expect(bridge.readScreenshot(dir, 'prompt.md')).rejects.toThrow('Invalid')
+    await expect(bridge.readScreenshot(dir, 'link.png')).rejects.toThrow('No such')
+    await expect(bridge.readScreenshot(dir, 'missing.png')).rejects.toThrow('No such')
+  })
+})
+
+describe('validateProject', () => {
+  it('accepts a plain folder name and an optional parent', () => {
+    expect(
+      bridge.validateProject({
+        workspaceId: 'ws1',
+        workspaceName: 'Recipe Box',
+        name: 'recipe-box',
+      }),
+    ).toEqual({ workspaceId: 'ws1', workspaceName: 'Recipe Box', name: 'recipe-box', parent: null })
+    expect(
+      bridge.validateProject({ workspaceId: 'ws1', name: 'app', parent: '~/Projects' }).parent,
+    ).toBe('~/Projects')
+  })
+
+  it('refuses names that could leave the parent folder', () => {
+    for (const name of ['..', '../x', 'a/b', '.hidden', '', 'a..b']) {
+      expect(() => bridge.validateProject({ workspaceId: 'ws1', name })).toThrow()
+    }
+    expect(() => bridge.validateProject({ workspaceId: '../x', name: 'ok' })).toThrow()
   })
 })

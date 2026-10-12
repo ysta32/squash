@@ -3,12 +3,15 @@ import { requireUserId } from './useBug'
 import {
   claimBridgeResult,
   getBridgeResults,
+  getBridgeScreenshot,
   parseClaudeResult,
   type FinishedRun,
 } from '../lib/claudeExport'
 import { parseFixReport, type FixRunInput } from '../lib/fixRuns'
 import { supabase } from '../lib/supabase'
+import { uploadAttachment } from '../lib/upload'
 import { recordFixRun } from './useFixRuns'
+import { compressImage } from './useImageCompression'
 import type { BugWithMeta } from '../lib/types'
 
 const POLL_MS = 5000
@@ -19,6 +22,31 @@ export interface ClaudeResultActions {
   addComment(bugId: string, body: string): Promise<void>
   /** Stores the run's git evidence for a bug it resolved (proof of fix). */
   recordFixRun?(input: FixRunInput): Promise<unknown>
+  /**
+   * Attaches the after screenshot Claude saved for a bug (`file` in the run's batch folder) and
+   * returns the new attachment's id.
+   */
+  attachScreenshot?(bug: BugWithMeta, batch: string, file: string): Promise<string>
+}
+
+/** Fetches an after screenshot from the helper and attaches it to the bug like any screenshot. */
+export async function attachRunScreenshot(
+  bug: BugWithMeta,
+  batch: string,
+  file: string,
+): Promise<string> {
+  const blob = await getBridgeScreenshot(bug.workspace_id, batch, file)
+  const image = await compressImage(blob)
+  try {
+    const attachment = await uploadAttachment({
+      workspaceId: bug.workspace_id,
+      bugId: bug.id,
+      image,
+    })
+    return attachment.id
+  } finally {
+    URL.revokeObjectURL(image.previewUrl)
+  }
 }
 
 /** Posts a comment on any bug in the workspace as the signed-in user. */
@@ -76,6 +104,7 @@ export async function applyClaudeRun(
   const resolved: number[] = []
   const open: number[] = []
   const unrecorded: number[] = []
+  const noScreenshot: number[] = []
   let recordError: string | null = null
   const report = parseFixReport(run.git)
   const list = (ns: number[]) => ns.map((n) => `#${n}`).join(', ')
@@ -84,6 +113,15 @@ export async function applyClaudeRun(
       const bug = await actions.getBugByNumber(item.number)
       if (!bug) continue
       if (item.resolved && bug.status === 'open') {
+        // The screenshot is a bonus: a bug is resolved whether or not it can be attached.
+        let afterAttachmentId: string | null = null
+        if (item.screenshot && actions.attachScreenshot) {
+          try {
+            afterAttachmentId = await actions.attachScreenshot(bug, run.batch, item.screenshot)
+          } catch {
+            noScreenshot.push(item.number)
+          }
+        }
         await withRetry(() => actions.resolveBug(bug.id, item.summary))
         resolved.push(item.number)
         if (actions.recordFixRun) {
@@ -95,6 +133,7 @@ export async function applyClaudeRun(
               status: 'succeeded',
               summary: item.summary,
               report,
+              ...(afterAttachmentId ? { afterAttachmentId } : {}),
             })
           } catch (err) {
             unrecorded.push(item.number)
@@ -119,9 +158,14 @@ export async function applyClaudeRun(
   if (open.length > 0) parts.push(`left ${list(open)} open with a comment`)
   const message =
     parts.length > 0 ? `Claude Code ${parts.join(' and ')}.` : 'Claude Code reported back.'
-  return unrecorded.length > 0
-    ? `${message} Could not save the proof of fix for ${list(unrecorded)} (${recordError}).`
-    : message
+  const notes = [message]
+  if (unrecorded.length > 0) {
+    notes.push(`Could not save the proof of fix for ${list(unrecorded)} (${recordError}).`)
+  }
+  if (noScreenshot.length > 0) {
+    notes.push(`Could not attach Claude’s screenshot for ${list(noScreenshot)}.`)
+  }
+  return notes.join(' ')
 }
 
 /**
@@ -153,7 +197,14 @@ export function useClaudeResults(
           if (!(await claimBridgeResult(workspaceId, run.batch))) continue
           const { onToast: toast, ...rest } = latest.current
           try {
-            toast(await applyClaudeRun(run, { ...rest, addComment: postComment, recordFixRun }))
+            toast(
+              await applyClaudeRun(run, {
+                ...rest,
+                addComment: postComment,
+                recordFixRun,
+                attachScreenshot: attachRunScreenshot,
+              }),
+            )
           } catch (err) {
             toast(err instanceof Error ? err.message : 'Could not apply Claude Code’s result.')
           }
