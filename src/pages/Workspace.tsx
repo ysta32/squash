@@ -56,6 +56,7 @@ import { useClaudeQuestions } from '../hooks/useClaudeQuestions'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
+import { useAppUpdate } from '../hooks/useAppUpdate'
 import { useUpdates } from '../hooks/useUpdates'
 import { isOverlayOpen, useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
@@ -140,6 +141,17 @@ export default function Workspace() {
   const { notify } = useNotifications()
   const [unreadCount, setUnreadCount] = useState(0)
   useUnreadTitle(unreadCount)
+  // A tab left open across releases keeps sending Claude the old prompts until it reloads.
+  useAppUpdate(
+    useCallback(
+      () =>
+        toast('A new version of Squash is out.', {
+          action: { label: 'Reload', onAction: () => window.location.reload() },
+          duration: 60_000,
+        }),
+      [toast],
+    ),
+  )
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') setUnreadCount(0)
