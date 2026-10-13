@@ -1,13 +1,13 @@
 import { useId } from 'react'
 import { cn } from '../../lib/utils'
-import { APP_ICON_GRID, PIN_GRID, PIN_HEAD, PIN_NEEDLE, PIN_STROKE, appIconShapes } from './pinMark'
+import { APP_ICON_GRID, MARK_GRID, appIconShapes, markShapes } from './mark'
 
 /**
- * The app icon (same artwork as public/favicon.svg and the PWA icons): the pin on a viridian
+ * The app icon (same artwork as public/favicon.svg and the PWA icons): the beetle on a viridian
  * squircle. Fixed colors, so it looks the same on paper and in the darkroom.
  */
 export function AppIcon({ size = 16, className }: { size?: number; className?: string }) {
-  // Gradient ids must be unique per page; useId's punctuation is not safe inside url(#…).
+  // Mask ids must be unique per page; useId's punctuation is not safe inside url(#…).
   const id = `app-icon-${useId().replace(/[^\w-]/g, '')}`
   return (
     <svg
@@ -17,35 +17,29 @@ export function AppIcon({ size = 16, className }: { size?: number; className?: s
       aria-hidden="true"
       focusable="false"
       className={cn('shrink-0', className)}
-      // Static markup from pinMark.ts, never user input.
+      // Static markup from mark.ts, never user input.
       dangerouslySetInnerHTML={{ __html: appIconShapes(id) }}
     />
   )
 }
 
 /**
- * The specimen pin mark (same artwork as public/favicon.svg): a pin head in the current accent
- * and a needle in ink, so it reads on paper and in the darkroom alike.
+ * The beetle mark on its own (same artwork as the app icon, without the tile) in the current
+ * accent, so it reads on paper and in the darkroom alike.
  */
 export function LogoMark({ size = 16, className }: { size?: number; className?: string }) {
+  const id = `logo-mark-${useId().replace(/[^\w-]/g, '')}`
   return (
     <svg
-      viewBox={`0 0 ${PIN_GRID} ${PIN_GRID}`}
+      viewBox={`0 0 ${MARK_GRID} ${MARK_GRID}`}
       width={size}
       height={size}
       aria-hidden="true"
       focusable="false"
       className={cn('shrink-0', className)}
-    >
-      <path
-        d={`M${PIN_NEEDLE.x1} ${PIN_NEEDLE.y1} ${PIN_NEEDLE.x2} ${PIN_NEEDLE.y2}`}
-        fill="none"
-        stroke="var(--text-1)"
-        strokeWidth={PIN_STROKE}
-        strokeLinecap="round"
-      />
-      <circle cx={PIN_HEAD.cx} cy={PIN_HEAD.cy} r={PIN_HEAD.r} fill="var(--accent)" />
-    </svg>
+      // Static markup from mark.ts, never user input.
+      dangerouslySetInnerHTML={{ __html: markShapes('var(--accent)', id) }}
+    />
   )
 }
 

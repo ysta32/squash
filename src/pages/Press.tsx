@@ -121,11 +121,15 @@ export default function Press() {
       <section aria-labelledby="logos-heading" className="border-t border-line py-16 lg:py-24">
         <div className={MK_CONTAINER}>
           <Reveal>
-            <SectionHead id="logos-heading" eyebrow="01 · Logo" title="The pin and the wordmark.">
+            <SectionHead
+              id="logos-heading"
+              eyebrow="01 · Logo"
+              title="The beetle and the wordmark."
+            >
               <p>
-                A specimen pin, then “squash” in lowercase IBM Plex Sans. Keep at least the width of
-                the pin head clear around it, do not recolour or stretch it, and use the darkroom
-                version on dark backgrounds.
+                A beetle with a check cut out of its shell, then “squash” in lowercase IBM Plex
+                Sans. Keep at least the width of the beetle’s head clear around it, do not recolour
+                or stretch it, and use the darkroom version on dark backgrounds.
               </p>
             </SectionHead>
           </Reveal>

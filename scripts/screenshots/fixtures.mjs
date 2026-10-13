@@ -235,7 +235,7 @@ ${fontFaces()}
     box-shadow: 0 40px 80px rgba(0,0,0,.55); }
 </style></head><body>
   <div class="copy">
-    <div class="logo">${markSvg({ needle: t['text-1'], head: t.accent })}squash</div>
+    <div class="logo">${markSvg({ paint: t.accent })}squash</div>
     <h1>Bug reports your cofounder actually reads.</h1>
     <p>Paste a screenshot, press Enter, and it's on your teammate's screen. Then let Claude Code fix it.</p>
   </div>

@@ -49,7 +49,7 @@ export function ThemeToggle() {
 
 /**
  * App shell header (DESIGN.md section 5): 48px on the paper background with a hairline rule.
- * Left: the pin mark (plus the wordmark from `sm` up) and the workspace switcher. Right:
+ * Left: the app icon (plus the wordmark from `sm` up) and the workspace switcher. Right:
  * presence, Invite, stats, theme and the profile menu.
  */
 export function Header({
@@ -76,7 +76,7 @@ export function Header({
           aria-label="Squash: your workspaces"
           className="t focus-ring -ml-1 flex h-[2.2857rem] shrink-0 items-center rounded-md px-1 text-base pointer-coarse:h-[3.1429rem] pointer-coarse:min-w-[3.1429rem] pointer-coarse:justify-center"
         >
-          {/* Wordmark from 360px up; only the narrowest phones fall back to the bare pin. Wrapped
+          {/* Wordmark from 360px up; only the narrowest phones fall back to the bare icon. Wrapped
               because Logo sets its own display and cn() does not merge conflicting classes. */}
           <span className="inline-flex min-[360px]:hidden">
             <AppIcon size={20} />

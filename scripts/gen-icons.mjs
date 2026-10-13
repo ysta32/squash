@@ -1,4 +1,4 @@
-// Generates the favicon + PWA icon set from the app icon (src/components/ui/pinMark.ts) and the
+// Generates the favicon + PWA icon set from the app icon (src/components/ui/mark.ts) and the
 // design tokens in src/index.css. Run `npm run gen:icons` after changing either; outputs are
 // committed:
 //   public/favicon.svg            the app icon squircle (modern browsers)
@@ -8,7 +8,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
-import { appIconSvg } from '../src/components/ui/pinMark.ts'
+import { appIconSvg } from '../src/components/ui/mark.ts'
 import { readTokens, root } from './brand.mjs'
 
 const { light } = readTokens()
@@ -24,7 +24,7 @@ const png = (svg, size) =>
     .toBuffer()
 
 const outputs = [
-  // iOS and maskable icons get rounded by the platform: full bleed. The pin sits well inside
+  // iOS and maskable icons get rounded by the platform: full bleed. The beetle sits well inside
   // the maskable 80% safe circle.
   ['icons/apple-touch-icon.png', appIconSvg({ bleed: true }), 180],
   ['icons/icon-192.png', appIconSvg(), 192],

@@ -112,19 +112,19 @@ describe('Label, Badge, Section, Logo', () => {
     expect(container).toHaveTextContent('squash')
     const svg = container.querySelector('svg')
     expect(svg).toHaveAttribute('aria-hidden', 'true')
-    const bg = svg?.querySelector('linearGradient')?.id
-    expect(bg).toMatch(/^app-icon-[\w-]*-bg$/)
-    expect(svg?.querySelector(`[fill="url(#${bg})"]`)).not.toBeNull()
+    const cut = svg?.querySelector('mask')?.id
+    expect(cut).toMatch(/^app-icon-[\w-]*-cut$/)
+    expect(svg?.querySelector(`[mask="url(#${cut})"]`)).not.toBeNull()
   })
 
-  it('gives every app icon its own gradient ids', () => {
+  it('gives every app icon its own mask ids', () => {
     const { container } = render(
       <>
         <Logo />
         <Logo />
       </>,
     )
-    const ids = [...container.querySelectorAll('linearGradient')].map((g) => g.id)
+    const ids = [...container.querySelectorAll('mask')].map((g) => g.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 })
