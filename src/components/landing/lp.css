@@ -1,66 +1,61 @@
 /* The home page's own world.
  *
- * Every other page on the site is paper. The home page is the inside of the product: a dark
- * light-table with the bug under inspection on it, drafting guides running the full height of the
- * page, and the app's own status bar pinned to the bottom of the window. It keeps that world in
- * both themes on purpose — it is a capture of Squash running, and a capture does not have a light
- * mode. Everything below is scoped to `.lp`, so the token-based utilities inside simply follow.
+ * Every other page on the site is paper and viridian. The home page is black on white with one
+ * red: the red of the marker you draw on a screenshot with, which is the only thing Squash asks
+ * you to do. Nothing else on the page carries colour, so the red always means the same thing.
+ * It keeps that world in both themes on purpose. Everything is scoped to `.lp`, so the
+ * token-based utilities inside simply follow.
  */
+@import '@fontsource-variable/archivo/wght.css';
 
 .lp {
-  /* The ground is a colour, not a tinted black: deep petrol, the darkest value in the palette. */
-  --bg: #06181a;
-  --surface-1: #0a2125;
-  --surface-2: #0d2a2e;
-  --surface-3: #123339;
-  --skeleton: #163a40;
-  --text-1: #e9f2ec;
-  --text-2: #9db6b2;
-  --text-3: #86a39f;
-  --border-1: #15343a;
-  --border-2: #1f474d;
-  --border-input: #3b6a6f;
-  --accent: #30d39a;
-  --accent-strong: #5ae0b3;
-  --accent-fg: #04181a;
-  --accent-tint: #0c2f2b;
-  --focus: #5ae0b3;
-  --markup: #ff4b35;
-  --highlight: #ffd84d;
-  --status-open: #9db6b2;
-  --status-resolved: #30d39a;
-  --sev-critical: #ff4b35;
-  --sev-high: #ff8a3d;
-  --sev-medium: #e0b93c;
-  --sev-low: #86a39f;
-  --success: #30d39a;
-  --scrim-strong: rgb(2 12 13 / 0.78);
-  --scrim: rgb(2 12 13 / 0.7);
-  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5);
-  --elev-2: 0 0 0 1px rgb(0 0 0 / 0.4), 0 14px 32px -10px rgb(0 0 0 / 0.75);
-  --elev-3: 0 0 0 1px rgb(0 0 0 / 0.45), 0 32px 64px -16px rgb(0 0 0 / 0.85);
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.84 0 0 0 0 0.95 0 0 0 0 0.92 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  --bg: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #ffffff;
+  --surface-3: #f1f1f1;
+  --skeleton: #ebebeb;
+  --text-1: #000000;
+  --text-2: rgb(0 0 0 / 0.72);
+  --text-3: rgb(0 0 0 / 0.58);
+  --border-1: rgb(0 0 0 / 0.12);
+  --border-2: rgb(0 0 0 / 0.26);
+  --border-input: rgb(0 0 0 / 0.45);
+  /* The one colour, in two values of the same red: the marker red is drawn, never read, so it
+     stays bright; anything set in red as type steps down to a value that holds AA on white. */
+  --accent: #c92a14;
+  --accent-strong: #a72110;
+  --accent-fg: #ffffff;
+  --accent-tint: #fff0ed;
+  --focus: #c92a14;
+  --markup: #ff3b20;
+  --highlight: #ffe9e5;
+  --status-open: #000000;
+  --status-resolved: #000000;
+  --sev-critical: #ff3b20;
+  --sev-high: #000000;
+  --sev-medium: rgb(0 0 0 / 0.5);
+  --sev-low: rgb(0 0 0 / 0.3);
+  --success: #000000;
+  --scrim: rgb(0 0 0 / 0.35);
+  --scrim-strong: rgb(0 0 0 / 0.6);
+  --grain: none;
+  --elev-1: none;
+  --elev-2: 0 1px 0 rgb(0 0 0 / 0.08);
+  --elev-3: 0 2px 0 rgb(0 0 0 / 0.08);
 
   position: relative;
   color: var(--text-1);
   background-color: var(--bg);
-  /* The field under everything: registration crosses on a 72px lattice, the way a screenshot
-     looks under a loupe, with the grain over it and a cold wash falling from the top left. */
-  background-image:
-    var(--grain), radial-gradient(110% 80% at 10% -12%, rgb(48 211 154 / 0.09) 0%, transparent 62%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cpath d='M36 31.5v9M31.5 36h9' stroke='%231f474d' stroke-width='1'/%3E%3C/svg%3E");
-  background-position:
-    0 0,
-    0 0,
-    36px 0;
-  background-repeat: repeat, no-repeat, repeat;
+  /* Registration crosses on a 72px lattice: the page is set on a sheet, not floating. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cpath d='M36 31.5v9M31.5 36h9' stroke='rgba(0,0,0,0.1)' stroke-width='1'/%3E%3C/svg%3E");
+  background-position: 36px 0;
   padding-bottom: 2.5rem;
 }
 
 /* ------------------------------------------------------------- guides --- */
 
-/* Drafting guides: four hairlines on the page's own columns, running the whole window. They are
-   the only structure the page needs — nothing is boxed in a card. */
+/* Four hairlines on the page's own columns, running the whole window. They are the only
+   structure the page needs — nothing is boxed in a card. */
 .lp-guides {
   position: fixed;
   inset: 0;
@@ -87,7 +82,6 @@
 
 .lp-guides > div > span {
   border-left: 1px solid var(--border-1);
-  opacity: 0.8;
 }
 
 .lp-guides > div > span:last-child {
@@ -102,59 +96,64 @@
 
 /* ---------------------------------------------------------------- type --- */
 
-/* Display is Plex Mono, set as large and as tight as it will take. A Squash bug begins as text
-   typed into a box; the headlines are set in the face of that box, at poster size. */
+/* Display is Archivo: a grotesque drawn for headlines, set heavy and tight so the words make
+   the shape of the page. Running text stays IBM Plex Sans, the face the rest of the site uses. */
 .lp-display {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  letter-spacing: -0.055em;
-  line-height: 0.96;
+  font-family: 'Archivo Variable', var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
   text-wrap: balance;
 }
 
 .lp-h1 {
-  font-size: clamp(2.65rem, 8.4vw, 7.4rem);
+  font-size: clamp(2.9rem, 9vw, 8rem);
+  letter-spacing: -0.045em;
 }
 
 .lp-h2 {
   font-size: clamp(2rem, 4.6vw, 3.6rem);
-  letter-spacing: -0.05em;
+  letter-spacing: -0.04em;
 }
 
 .lp-h3 {
-  font-size: clamp(1.25rem, 1.9vw, 1.6rem);
-  letter-spacing: -0.035em;
-  line-height: 1.12;
+  font-size: clamp(1.3rem, 2vw, 1.7rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .lp-read {
-  font-size: 1.0714rem;
-  line-height: 1.65;
-  max-width: 58ch;
+  font-size: 1.1429rem;
+  line-height: 1.6;
+  max-width: 54ch;
   text-wrap: pretty;
   color: var(--text-2);
 }
 
-/* The page's small voice: lowercase mono, the same size the app's own status line uses. */
-.lp-mono {
-  font-family: var(--font-mono);
-  font-size: 0.7857rem;
-  line-height: 1.2857rem;
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
+/* The page's small voice: plain sans, sentence case, never tracked-out capitals. */
+.lp-small {
+  font-size: 0.9286rem;
+  line-height: 1.4286rem;
   color: var(--text-3);
 }
 
-/* A section marker: a slash and the section's name, hung at the start of the band. */
-.lp-mark {
+/* Numbers that have to line up — times, sizes, file names — keep the mono face. */
+.lp-data {
   font-family: var(--font-mono);
-  font-size: 0.7857rem;
+  font-size: 0.8571rem;
+  line-height: 1.2857rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A section marker: a red slash and the section's name. */
+.lp-mark {
+  font-size: 0.9286rem;
   color: var(--text-3);
 }
 
 .lp-mark::before {
   content: '/ ';
-  color: var(--markup);
+  color: var(--accent);
 }
 
 /* ---------------------------------------------------------- status bar --- */
@@ -171,9 +170,8 @@
   gap: 1rem;
   height: 2.5rem;
   padding-inline: 0.875rem;
-  border-top: 1px solid var(--border-2);
-  background: color-mix(in oklab, var(--surface-1) 88%, transparent);
-  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--text-1);
+  background: var(--bg);
   font-family: var(--font-mono);
   font-size: 0.7857rem;
   color: var(--text-3);
@@ -189,7 +187,7 @@
   position: absolute;
   inset-inline: 0;
   top: -1px;
-  height: 1px;
+  height: 2px;
   background: var(--markup);
   transform-origin: 0 50%;
 }
@@ -199,34 +197,38 @@
   align-items: baseline;
   gap: 0.4286rem;
   padding: 0.25rem 0.4286rem;
-  border-radius: var(--radius-xs);
   color: var(--text-3);
   white-space: nowrap;
 }
 
 .lp-key > b {
   font-weight: 600;
-  color: var(--markup);
-}
-
-.lp-key:hover {
-  background: var(--surface-3);
-  color: var(--text-1);
-}
-
-.lp-key[aria-current='true'] {
-  background: var(--surface-3);
-  color: var(--text-1);
-}
-
-.lp-key[aria-current='true'] > b {
   color: var(--accent);
+}
+
+.lp-key:hover,
+.lp-key[aria-current='true'] {
+  background: var(--text-1);
+  color: var(--bg);
+}
+
+.lp-key:hover > b,
+.lp-key[aria-current='true'] > b {
+  color: var(--bg);
+}
+
+/* The site's small label is tracked-out capitals; on this page it is sentence case, like every
+   other word here. The footer and the nav are inside `.lp`, so the chrome belongs to the page. */
+.lp .specimen-label {
+  font-family: var(--font-sans);
+  font-size: 0.9286rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
 }
 
 /* --------------------------------------------------------------- stage --- */
 
-/* The stage: one track five screens tall, with the record held still in the middle of the window
-   while the scroll walks it through its own life. */
 .lp-track {
   position: relative;
 }
@@ -239,37 +241,25 @@
   flex-direction: column;
   justify-content: center;
   padding-block: 1.5rem 3.5rem;
-}
-
-/* The record sits in space rather than flat on the page: the stage carries the perspective and
-   the plane leans toward the pointer. Two custom properties, set in JS; with no fine pointer, or
-   with reduced motion, nothing is bound and the plane keeps its resting angle. */
-.lp-stage3 {
   perspective: 1700px;
   perspective-origin: 50% 40%;
 }
 
+/* The record leans toward the pointer. Two custom properties, set in JS; with no fine pointer,
+   or with reduced motion, nothing is bound and the plane keeps its resting angle. */
 .lp-plane {
   transform: rotateX(calc(var(--lp-rx, 0deg) + 1.5deg)) rotateY(calc(var(--lp-ry, 0deg) - 3deg));
   transform-style: preserve-3d;
   transition: transform 450ms var(--ease-out);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lp-plane {
-    transition: none;
-  }
-}
+/* -------------------------------------------------------------- record --- */
 
-/* --------------------------------------------------------------- record --- */
-
-/* The record itself: the pane the bug lives in, built out of the app's own parts rather than a
-   picture of them. Flat, hairlined, no card shadow — it is a window, not a tile. */
+/* The record: the pane the bug lives in, built out of the app's own parts rather than a picture
+   of them. A black hairline and nothing else — it is a window, not a tile. */
 .lp-record {
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-md);
-  background: var(--surface-1);
-  box-shadow: var(--elev-3);
+  border: 1px solid var(--text-1);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -278,8 +268,7 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid var(--border-1);
-  background: var(--surface-2);
+  border-bottom: 1px solid var(--text-1);
 }
 
 /* The severity ticks the app draws beside a bug number. */
@@ -294,22 +283,20 @@
   display: block;
   width: 2px;
   height: 100%;
-  border-radius: 1px;
   background: var(--markup);
 }
 
-/* The state chip, which is the one thing on the page that changes colour. */
+/* The state chip. Red while the bug is open, black once it is closed: the red means one thing. */
 .lp-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.4286rem;
   height: 1.5714rem;
   padding-inline: 0.5rem;
-  border: 1px solid var(--border-2);
-  border-radius: 999px;
+  border: 1px solid var(--accent);
   font-family: var(--font-mono);
   font-size: 0.7857rem;
-  color: var(--text-2);
+  color: var(--accent);
   white-space: nowrap;
 }
 
@@ -322,15 +309,16 @@
 }
 
 .lp-chip[data-done='true'] {
-  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
-  color: var(--accent);
+  border-color: var(--text-1);
+  background: var(--text-1);
+  color: var(--bg);
 }
 
 .lp-chip[data-done='true'] > i {
-  background: var(--accent);
+  background: var(--bg);
 }
 
-/* ------------------------------------------------------------- evidence --- */
+/* ------------------------------------------------------------ evidence --- */
 
 /* The screenshot inside the record is drawn, not photographed: a checkout page with a consent
    slab sitting over its Pay button, which is the bug the whole page is about. */
@@ -338,19 +326,16 @@
   position: relative;
   aspect-ratio: 390 / 650;
   border: 1px solid var(--border-2);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(to bottom, #f4f6f3 0%, #e7ebe6 100%), var(--bg);
+  background: #f4f4f4;
   overflow: hidden;
 }
 
 .lp-shot-ink {
-  background: #1b2b2a;
-  border-radius: 2px;
+  background: #000000;
 }
 
 .lp-shot-line {
-  background: #c3ccc6;
-  border-radius: 2px;
+  background: rgb(0 0 0 / 0.2);
 }
 
 /* The markup drawn over the evidence, in the shot's own pixel space. While the scroll is inside
@@ -419,9 +404,9 @@
 /* The caret left blinking after the headline: the page opens mid-keystroke. */
 .lp-caret {
   display: inline-block;
-  width: 0.55ch;
-  height: 0.78em;
-  margin-left: 0.12ch;
+  width: 0.5ch;
+  height: 0.72em;
+  margin-left: 0.1ch;
   background: var(--markup);
   animation: lp-blink 1.1s steps(1) infinite;
 }
@@ -446,21 +431,8 @@
   from {
     opacity: 0;
     translate: 0 -0.5rem;
-    background: color-mix(in oklab, var(--markup) 22%, transparent);
+    background: var(--highlight);
   }
-}
-
-/* The step panels beside the record: only the live one is shown, and it comes in from under. */
-.lp-panel {
-  transition:
-    opacity 320ms var(--ease-out),
-    translate 320ms var(--ease-out);
-}
-
-.lp-panel[data-live='false'] {
-  opacity: 0;
-  translate: 0 0.5rem;
-  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -473,7 +445,7 @@
     stroke-dashoffset: 0;
   }
   .lp-ink,
-  .lp-panel {
+  .lp-plane {
     transition: none;
   }
 }

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { facts } from '../components/marketing/facts'
@@ -52,24 +52,13 @@ describe('Landing', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       'File it in the four seconds you still care.',
     )
-    const sections = [
-      'A screenshot in a channel is not a bug report.',
-      // The stage's heading is whichever state of bug 24 the scroll is on; it opens on the first.
-      'Paste, type, press Enter.',
-      'A list, a record, and nothing else to learn.',
-      'Checked, not claimed.',
-      'The rest of the drawer.',
-      'Every action has a key.',
-      'Enforced in Postgres.',
-      'Self-host in 5 minutes.',
-      'File the next one here.',
-    ]
+    // The page is three screens: the hero, the stage, and the way in. The stage's heading is
+    // whichever state of bug 24 the scroll is on, and it opens on the first.
+    const sections = ['Paste, type, press Enter.', 'File the next one here.']
     const h2s = screen
       .getAllByRole('heading', { level: 2 })
       .map((h) => h.textContent)
       .filter((text) => sections.includes(text ?? ''))
-    // The page read top to bottom: why the bug was filed, its life on the stage, then the
-    // sections that close it out.
     expect(h2s).toEqual(sections)
     // The status line carries the bug's five states, each on the key that jumps to it.
     for (const state of ['filed', 'marked up', 'on three screens', 'claude code', 'resolved']) {
@@ -98,10 +87,9 @@ describe('Landing', () => {
       expect(link).not.toHaveTextContent(/\d/)
     }
     for (const link of screen.getAllByRole('link', { name: 'Self-host it' })) {
-      expect(link).toHaveAttribute('href', '#self-host')
+      expect(link).toHaveAttribute('href', '/docs/self-host')
     }
     expect(document.getElementById('features')).toBeInTheDocument()
-    expect(document.getElementById('self-host')).toBeInTheDocument()
 
     const footer = screen.getByRole('navigation', { name: 'Footer navigation' })
     for (const column of ['Product', 'Resources', 'Project', 'Legal']) {
@@ -127,10 +115,6 @@ describe('Landing', () => {
       'href',
       'https://github.com/example/squash',
     )
-    expect(screen.getByRole('link', { name: /Read the self-host guide/ })).toHaveAttribute(
-      'href',
-      '/docs/self-host',
-    )
   })
 
   it('sends signed-in visitors straight to the app', () => {
@@ -141,72 +125,33 @@ describe('Landing', () => {
     for (const link of open) expect(link).toHaveAttribute('href', '/app')
   })
 
-  it('shows the one product screenshot sized, with alt text, and lazily', () => {
+  it('carries no product screenshots, because the product itself is on the page', () => {
     renderLanding()
-    const images = screen.getAllByRole('img')
-    // Everything else on the page is the product itself rather than a picture of it, and the
-    // drawings it is built from are hidden from assistive tech.
-    expect(images).toHaveLength(1)
-    const [workspace] = images
-    expect(workspace.getAttribute('alt')?.length).toBeGreaterThan(20)
-    expect(workspace).toHaveAttribute('src', '/product/workspace-dark.webp')
-    expect(workspace).toHaveAttribute('loading', 'lazy')
-    expect([
-      Number(workspace.getAttribute('width')),
-      Number(workspace.getAttribute('height')),
-    ]).toEqual([1600, 1000])
-  })
-
-  it('keeps its own world whichever theme is set', () => {
-    localStorage.setItem('squash:theme', 'light')
-    renderLanding()
-    // The home page is a capture of the workspace running, so it does not have a light mode.
-    expect(screen.getByRole('img')).toHaveAttribute('src', '/product/workspace-dark.webp')
+    // The record on the stage is built from the app's own parts, and the evidence inside it is
+    // drawn; the drawings are hidden from assistive tech, so nothing here is an image.
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
   })
 
   it('states only facts counted from the repository at build time', () => {
     renderLanding()
     expect(facts.tests).toBeGreaterThan(0)
     expect(facts.rlsChecks).toBeGreaterThan(0)
-    const record = screen
-      .getByRole('heading', { name: 'Checked, not claimed.' })
+    const close = screen
+      .getByRole('heading', { name: 'File the next one here.' })
       .closest('section')!
-    const terms = within(record)
-      .getAllByRole('term')
-      .map((t) => t.textContent)
-    expect(terms).toEqual([
-      'Unit tests',
-      'Row Level Security checks',
-      'Tagged releases',
-      'Entry script budget, gzip',
-      'License',
-    ])
-    const values = within(record)
+    const values = within(close)
       .getAllByRole('definition')
       .map((d) => d.textContent)
-    for (const value of [
+    expect(values).toEqual([
       String(facts.tests),
       String(facts.rlsChecks),
-      String(facts.releases),
-      `${facts.budgetEntryKb} kB`,
       facts.license,
-    ]) {
-      expect(values).toContain(value)
-    }
-    expect(within(record).getByRole('link', { name: /Read the changelog/ })).toHaveAttribute(
+      facts.latestRelease.version,
+    ])
+    expect(within(close).getByRole('link', { name: 'Everything it does' })).toHaveAttribute(
       'href',
-      '/changelog',
+      '/features',
     )
-  })
-
-  it('lists the app’s own keyboard shortcuts', () => {
-    renderLanding()
-    const list = screen.getByRole('list', { name: 'Keyboard shortcuts' })
-    expect(within(list).getAllByRole('listitem')).toHaveLength(facts.shortcuts.length)
-    expect(within(list).getByText('Command palette')).toBeInTheDocument()
-    // Parenthetical notes from the in-app sheet are trimmed for the strip.
-    expect(within(list).getByText('Set severity while capturing')).toBeInTheDocument()
-    expect(within(list).getAllByText('Ctrl').length).toBeGreaterThan(0)
   })
 
   it('files a bug in the capture bar demo without touching the network', () => {
@@ -231,21 +176,6 @@ describe('Landing', () => {
     expect(rows[0]).toHaveClass('mk-arrive')
   })
 
-  it('copies self-host commands and says when the clipboard is unavailable', async () => {
-    const writeText = vi
-      .fn()
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('denied'))
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    renderLanding()
-    const copy = screen.getByRole('button', { name: 'Copy: Create the database' })
-    await act(async () => fireEvent.click(copy))
-    expect(writeText).toHaveBeenCalledWith('npx supabase link && npx supabase db push')
-    expect(copy).toHaveTextContent('Copied')
-    await act(async () => fireEvent.click(copy))
-    expect(copy).toHaveTextContent('Select to copy')
-  })
-
   it('opens and closes the phone menu from the keyboard', () => {
     renderLanding()
     const toggle = screen.getByRole('button', { name: 'Open menu' })
@@ -261,10 +191,10 @@ describe('Landing', () => {
   it('keeps the navigation sticky and never hides content when motion cannot run', () => {
     renderLanding()
     expect(screen.getByRole('banner')).toHaveClass('sticky', 'top-0')
-    // jsdom has no IntersectionObserver: every reveal must already be shown.
-    const reveals = document.querySelectorAll('[data-reveal]')
-    expect(reveals.length).toBeGreaterThan(5)
-    for (const node of reveals) expect(node).toHaveAttribute('data-reveal', 'shown')
+    // jsdom has no IntersectionObserver, so nothing on this page may depend on one to be shown.
+    for (const node of document.querySelectorAll('[data-reveal]')) {
+      expect(node).toHaveAttribute('data-reveal', 'shown')
+    }
   })
 
   it('keeps copy free of exclamation marks and hype words', () => {

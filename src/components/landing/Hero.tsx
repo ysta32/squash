@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { cn } from '../../lib/utils'
 import { MK_CONTAINER, OpenWorkspaceLink } from '../marketing/MarketingLayout'
 import { buttonClass } from '../ui'
@@ -36,25 +37,21 @@ export function Hero() {
       <div className="mt-14 grid gap-10 lg:mt-16 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-5">
           <p className="lp-read">
-            Paste a screenshot, say what broke, press Enter. It is on your teammate’s screen about a
-            second later with the page, the device and the window size already written down — and
-            Claude Code can take it from there.
+            Paste a screenshot, say what broke, press Enter. It is on your teammate’s screen a
+            second later, and Claude Code can take it from there.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <OpenWorkspaceLink size="lg" />
-            <a href="#self-host" className={buttonClass('secondary', 'lg')}>
+            <Link to="/docs/self-host" className={buttonClass('secondary', 'lg')}>
               Self-host it
-            </a>
+            </Link>
           </div>
-          <p className="lp-mono mt-6 max-w-[34ch]">
-            MIT licensed, free on the hosted instance, no paid tier, no trackers. Runs on your own
-            Supabase project in five minutes.
-          </p>
+          <p className="lp-small mt-6">Free, MIT licensed, no paid tier.</p>
         </div>
 
         <div className="lg:col-span-7">
-          <p className="lp-mono mb-3">
-            this one is live — type what broke and press enter, it files into the list under it
+          <p className="lp-small mb-3">
+            This one is live. Type what broke, press Enter, and watch it file.
           </p>
           <CaptureDemo />
         </div>

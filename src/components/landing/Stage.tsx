@@ -41,7 +41,7 @@ function StatusBar({
       </div>
       <p className="ml-auto flex shrink-0 items-center gap-2.5 tabular-nums">
         <span className="text-ink-2">bug 24</span>
-        <span className={cn(step === 4 ? 'text-accent' : 'text-markup')}>{current.state}</span>
+        <span className={step === 4 ? 'text-ink' : 'text-accent'}>{current.state}</span>
         <time dateTime={`2026-10-06T${current.time}`}>{current.time}</time>
       </p>
     </div>
@@ -82,7 +82,7 @@ export function Stage() {
         aria-labelledby="stage-heading"
         ref={track}
         className="lp-track border-t border-line"
-        style={{ height: `${STEPS.length * 100}svh` }}
+        style={{ height: `${STEPS.length * 75}svh` }}
       >
         <div ref={stage} className="lp-sticky lp-stage3">
           <div className={cn(MK_CONTAINER, 'grid w-full gap-8 lg:grid-cols-12 lg:gap-12')}>
@@ -91,7 +91,7 @@ export function Stage() {
               <h2 id="stage-heading" className="lp-display mt-4 text-[clamp(1.85rem,2.7vw,2.7rem)]">
                 {STEPS[step].title}
               </h2>
-              <p className="lp-read mt-5 max-w-[42ch] text-[1rem]">{STEPS[step].body}</p>
+              <p className="lp-read mt-5 max-w-[42ch] text-[1.0714rem]">{STEPS[step].body}</p>
               <div aria-hidden="true" className="mt-8 h-px bg-line">
                 <span
                   className="block h-px bg-markup"
@@ -106,9 +106,9 @@ export function Stage() {
                       onClick={() => go(i)}
                       aria-current={i === step ? 'step' : undefined}
                       className={cn(
-                        't focus-ring rounded-xs font-mono text-sm tabular-nums',
+                        'lp-data t focus-ring',
                         i === step
-                          ? 'text-markup'
+                          ? 'text-accent'
                           : i < step
                             ? 'text-ink-2 hover:text-ink'
                             : 'text-ink-3 hover:text-ink',

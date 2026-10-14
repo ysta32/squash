@@ -84,8 +84,8 @@ function Witness({ who, device, at, shown }: (typeof WITNESSES)[number] & { show
         <i />
       </span>
       <span className="text-sm">{who}</span>
-      <span className="lp-mono">{device}</span>
-      <span className="lp-mono ml-auto">{shown ? at : '—'}</span>
+      <span className="lp-small">{device}</span>
+      <span className="lp-data ml-auto text-ink-3">{shown ? at : '—'}</span>
     </li>
   )
 }
@@ -102,8 +102,8 @@ function Panel({ step, local }: { step: number; local: number }) {
           ['Images', '1 screenshot, 284 KB'],
         ].map(([term, value]) => (
           <div key={term} className="col-span-2 grid grid-cols-subgrid border-t border-line py-2.5">
-            <dt className="lp-mono">{term}</dt>
-            <dd className="font-mono text-[0.8571rem] leading-[1.2857rem] text-ink">{value}</dd>
+            <dt className="lp-small">{term}</dt>
+            <dd className="lp-data text-ink">{value}</dd>
           </div>
         ))}
       </dl>
@@ -123,7 +123,7 @@ function Panel({ step, local }: { step: number; local: number }) {
               className={cn(
                 'inline-flex items-center gap-2 rounded-sm border px-2.5 py-1.5 font-mono text-xs',
                 i === 1 || (i === 0 && local > 0.55)
-                  ? 'border-markup/60 bg-markup/10 text-markup'
+                  ? 'border-accent bg-accent/10 text-accent'
                   : 'border-line-2 text-ink-3',
               )}
             >
@@ -136,7 +136,7 @@ function Panel({ step, local }: { step: number; local: number }) {
           Drawn on the screenshot before it was filed: a box around the consent banner, and an arrow
           to the Pay now button underneath it.
         </p>
-        <p className="lp-mono mt-3">⌘Z undoes · Esc asks before throwing work away</p>
+        <p className="lp-small mt-3">⌘Z undoes. Esc asks before throwing work away.</p>
       </div>
     )
   }
@@ -153,8 +153,8 @@ function Panel({ step, local }: { step: number; local: number }) {
     const done = Math.floor(local * (PLAN.length + 1))
     return (
       <div>
-        <p className="lp-mono">
-          editing <span className="text-ink">src/checkout/ConsentBanner.tsx</span>
+        <p className="lp-small">
+          editing <span className="lp-data text-ink">src/checkout/ConsentBanner.tsx</span>
         </p>
         <ol className="mt-3 border-t border-line">
           {PLAN.map((item, i) => (
@@ -162,8 +162,8 @@ function Panel({ step, local }: { step: number; local: number }) {
               <span
                 aria-hidden="true"
                 className={cn(
-                  'mt-1 block size-2.5 shrink-0 rounded-xs border transition-colors duration-300',
-                  i < done ? 'border-accent bg-accent' : 'border-line-2',
+                  'mt-1 block size-2.5 shrink-0 border transition-colors duration-300',
+                  i < done ? 'border-ink bg-ink' : 'border-line-2',
                 )}
               />
               <span className={cn('text-sm leading-6', i < done ? 'text-ink' : 'text-ink-3')}>
@@ -172,7 +172,7 @@ function Panel({ step, local }: { step: number; local: number }) {
             </li>
           ))}
         </ol>
-        <p className="lp-mono mt-3">
+        <p className="lp-small mt-3">
           {Math.min(done, PLAN.length)} of {PLAN.length} steps
         </p>
       </div>
@@ -192,8 +192,8 @@ function Panel({ step, local }: { step: number; local: number }) {
           ['Activity', '9 entries, written by triggers'],
         ].map(([term, value]) => (
           <div key={term} className="col-span-2 grid grid-cols-subgrid border-t border-line py-2.5">
-            <dt className="lp-mono">{term}</dt>
-            <dd className="font-mono text-[0.8571rem] leading-[1.2857rem] text-ink">{value}</dd>
+            <dt className="lp-small">{term}</dt>
+            <dd className="lp-data text-ink">{value}</dd>
           </div>
         ))}
       </dl>
@@ -220,7 +220,7 @@ export function Record({ step, local }: { step: number; local: number }) {
           <i />
           <i />
         </span>
-        <span className="font-mono text-sm text-ink-2 tabular-nums">24</span>
+        <span className="lp-data text-ink-2">24</span>
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           Checkout button hidden behind cookie banner
         </span>
