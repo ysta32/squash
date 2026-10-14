@@ -34,7 +34,7 @@ export function ShotImage({
 
 /**
  * Specimen drawer frame: the screenshot laid on paper, with a 1px inner highlight and the layered
- * elev-3 shadow (DESIGN.md section 8).
+ * elev-3 shadow (DESIGN.md section 8). Used by the marketing pages that keep the paper palette.
  */
 export function DrawerFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -51,8 +51,8 @@ export function DrawerFrame({ children, className }: { children: ReactNode; clas
 }
 
 /**
- * A marker stroke over a screenshot, drawn in the screenshot's pixel space. The stroke draws itself
- * (stroke-dashoffset) when an ancestor `[data-reveal]` is shown.
+ * A marker stroke over a screenshot, drawn in the screenshot's pixel space. The stroke draws
+ * itself when an ancestor `[data-reveal]` is shown.
  */
 export function MarkerStroke({ shot, marker }: { shot: Shot; marker: Marker }) {
   return (

@@ -1,7 +1,36 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 
-/** Mono uppercase eyebrow, then a display heading and an optional paragraph (56ch measure). */
+/** A band's heading: a section marker, display type, then the paragraph on a short measure. */
+export function EntryHead({
+  id,
+  mark,
+  title,
+  children,
+  className,
+}: {
+  id: string
+  /** The section's name, hung above the heading after a marker slash. */
+  mark?: string
+  title: ReactNode
+  children?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      {mark && <p className="lp-mark mb-4">{mark}</p>}
+      <h2 id={id} className="lp-display lp-h2">
+        {title}
+      </h2>
+      {children && <div className="lp-read mt-5">{children}</div>}
+    </div>
+  )
+}
+
+/**
+ * Mono eyebrow, display heading and an optional paragraph: the heading block the other marketing
+ * pages use. The home page uses `EntryHead` instead, which carries no eyebrow.
+ */
 export function SectionHead({
   id,
   eyebrow,
@@ -31,7 +60,7 @@ export function SectionHead({
   )
 }
 
-/** Hairline-separated page band with the marketing section rhythm (96px desktop, 64px phone). */
+/** A section after the record closes: the same rhythm, without a time on the rail. */
 export function Band({
   children,
   className,
@@ -47,7 +76,7 @@ export function Band({
     <section
       id={id}
       aria-labelledby={labelledBy}
-      className={cn('scroll-mt-16 border-t border-line py-16 lg:py-28', className)}
+      className={cn('scroll-mt-20 border-t border-line py-20 lg:py-28', className)}
     >
       {children}
     </section>

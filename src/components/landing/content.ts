@@ -24,12 +24,6 @@ export const HERO_SHOT: Shot = {
   alt: 'The Squash workspace: a live bug list on the left, and bug #24 open on the right with Claude Code working on the fix, its description and two screenshots',
 }
 
-/** The demo workspace's bug #24, as its specimen label reads in the app. */
-export const HERO_LABEL: string[][] = [
-  ['No. 024', 'Bug', 'Critical'],
-  ['Coll. J. Ellis', '/checkout', 'iOS Safari 390×844'],
-]
-
 /** A hand-drawn marker stroke over a screenshot, in the screenshot's own pixel coordinates. */
 export interface Marker {
   d: string
@@ -128,10 +122,10 @@ export const MISSING_FIELDS = ['Page', 'Device', 'Steps', 'Owner', 'Status'] as 
 /** The same bug once it is filed in Squash (demo workspace, bug #24). */
 export const FILED_FIELDS: { term: (typeof MISSING_FIELDS)[number]; value: string }[] = [
   { term: 'Page', value: '/checkout' },
-  { term: 'Device', value: 'iOS Safari · 390×844' },
+  { term: 'Device', value: 'iOS Safari, 390×844' },
   { term: 'Steps', value: 'Marked up: box on the banner, arrow to Pay now' },
   { term: 'Owner', value: 'M. Chen' },
-  { term: 'Status', value: 'Claude Code working · 2 of 4 steps' },
+  { term: 'Status', value: 'Claude Code working, 2 of 4 steps' },
 ]
 
 export const LEDGER: { term: string; body: string }[] = [

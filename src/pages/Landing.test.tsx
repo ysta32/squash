@@ -50,31 +50,33 @@ describe('Landing', () => {
     renderLanding()
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'Bug reports your cofounder actually reads.',
+      'File it in the four seconds you still care.',
     )
     const sections = [
-      'A screenshot in a chat channel is not a bug report.',
-      'Capture, mark up, fix.',
+      'A screenshot in a channel is not a bug report.',
+      // The stage's heading is whichever state of bug 24 the scroll is on; it opens on the first.
+      'Paste, type, press Enter.',
+      'A list, a record, and nothing else to learn.',
       'Checked, not claimed.',
       'The rest of the drawer.',
       'Every action has a key.',
       'Enforced in Postgres.',
       'Self-host in 5 minutes.',
-      'File the next bug in Squash.',
+      'File the next one here.',
     ]
     const h2s = screen
       .getAllByRole('heading', { level: 2 })
       .map((h) => h.textContent)
       .filter((text) => sections.includes(text ?? ''))
-    // Hook, problem, product, proof, depth, action: in narrative order.
+    // The page read top to bottom: why the bug was filed, its life on the stage, then the
+    // sections that close it out.
     expect(h2s).toEqual(sections)
-    for (const chapter of [
-      'Paste, type, press Enter.',
-      'Point at the problem, not around it.',
-      'Send it to Claude Code. Watch the fix.',
-    ]) {
-      expect(screen.getByRole('heading', { level: 3, name: chapter })).toBeInTheDocument()
+    // The status line carries the bug's five states, each on the key that jumps to it.
+    for (const state of ['filed', 'marked up', 'on three screens', 'claude code', 'resolved']) {
+      expect(screen.getAllByRole('button', { name: new RegExp(state) }).length).toBeGreaterThan(0)
     }
+    // The record opens on the moment it was filed, in the demo workspace's own clock.
+    expect(screen.getAllByText('14:02').length).toBeGreaterThan(0)
 
     const open = screen.getAllByRole('link', { name: 'Open a workspace' })
     expect(open.length).toBeGreaterThanOrEqual(3)
@@ -139,41 +141,27 @@ describe('Landing', () => {
     for (const link of open) expect(link).toHaveAttribute('href', '/app')
   })
 
-  it('shows sized product screenshots with alt text, lazy below the fold', () => {
+  it('shows the one product screenshot sized, with alt text, and lazily', () => {
     renderLanding()
     const images = screen.getAllByRole('img')
-    // Hero plus one screenshot per chapter; decorative drawings are hidden from assistive tech.
-    expect(images).toHaveLength(4)
-    const intrinsic: Record<string, [number, number]> = {
-      workspace: [1600, 1000],
-      capture: [1400, 544],
-      annotate: [1400, 1105],
-      claude: [1400, 710],
-    }
-    for (const img of images) {
-      expect(img.getAttribute('alt')?.length).toBeGreaterThan(20)
-      expect(img).toHaveAttribute('src', expect.stringMatching(/^\/product\/[a-z]+-light\.webp$/))
-      const name = /^\/product\/([a-z]+)/.exec(img.getAttribute('src') ?? '')?.[1] ?? ''
-      expect([Number(img.getAttribute('width')), Number(img.getAttribute('height'))]).toEqual(
-        intrinsic[name],
-      )
-    }
-    const [hero, ...rest] = images
-    expect(hero).toHaveAttribute('src', '/product/workspace-light.webp')
-    expect(hero).toHaveAttribute('loading', 'eager')
-    for (const img of rest) expect(img).toHaveAttribute('loading', 'lazy')
+    // Everything else on the page is the product itself rather than a picture of it, and the
+    // drawings it is built from are hidden from assistive tech.
+    expect(images).toHaveLength(1)
+    const [workspace] = images
+    expect(workspace.getAttribute('alt')?.length).toBeGreaterThan(20)
+    expect(workspace).toHaveAttribute('src', '/product/workspace-dark.webp')
+    expect(workspace).toHaveAttribute('loading', 'lazy')
+    expect([
+      Number(workspace.getAttribute('width')),
+      Number(workspace.getAttribute('height')),
+    ]).toEqual([1600, 1000])
   })
 
-  it('matches screenshots to the dark theme', () => {
-    localStorage.setItem('squash:theme', 'dark')
+  it('keeps its own world whichever theme is set', () => {
+    localStorage.setItem('squash:theme', 'light')
     renderLanding()
-    const sources = screen.getAllByRole('img').map((img) => img.getAttribute('src'))
-    expect(sources).toEqual([
-      '/product/workspace-dark.webp',
-      '/product/capture-dark.webp',
-      '/product/annotate-dark.webp',
-      '/product/claude-dark.webp',
-    ])
+    // The home page is a capture of the workspace running, so it does not have a light mode.
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/product/workspace-dark.webp')
   })
 
   it('states only facts counted from the repository at build time', () => {
@@ -277,10 +265,6 @@ describe('Landing', () => {
     const reveals = document.querySelectorAll('[data-reveal]')
     expect(reveals.length).toBeGreaterThan(5)
     for (const node of reveals) expect(node).toHaveAttribute('data-reveal', 'shown')
-    // The typed specimen label is read whole, not character by character.
-    expect(
-      screen.getByText('No. 024 · Bug · Critical', { selector: '.sr-only' }),
-    ).toBeInTheDocument()
   })
 
   it('keeps copy free of exclamation marks and hype words', () => {

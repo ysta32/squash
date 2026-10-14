@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Copy } from 'lucide-react'
+import { Check, Copy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { facts } from '../marketing/facts'
@@ -9,7 +9,10 @@ import { Reveal } from '../marketing/Reveal'
 import { githubUrl } from '../marketing/links'
 import { Kbd } from '../ui'
 import { LEDGER, SECURITY, SELF_HOST_STEPS, type SelfHostStep } from './content'
-import { Band, SectionHead } from './Section'
+import { Band, EntryHead } from './Section'
+
+const linkClass =
+  't focus-ring inline-flex min-h-11 items-center rounded-md text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent'
 
 /** Two-column definition list with hairline rules between rows (DESIGN.md section 5). */
 function DefinitionLedger({ rows }: { rows: { term: string; body: string }[] }) {
@@ -21,43 +24,36 @@ function DefinitionLedger({ rows }: { rows: { term: string; body: string }[] }) 
           className="grid gap-1 border-t border-line py-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:gap-8"
         >
           <dt className="text-base font-medium">{row.term}</dt>
-          <dd className="text-base text-pretty text-ink-2">{row.body}</dd>
+          <dd className="text-base leading-6 text-pretty text-ink-2">{row.body}</dd>
         </div>
       ))}
     </dl>
   )
 }
 
-/** A section with its heading in a sticky left column and the content on the right. */
+/** A section with its heading held in a sticky left column while its content scrolls past. */
 function SplitBand({
   id,
   headingId,
-  eyebrow,
   title,
   intro,
   children,
 }: {
   id?: string
   headingId: string
-  eyebrow: string
   title: string
   intro: React.ReactNode
   children: React.ReactNode
 }) {
   return (
     <Band id={id} labelledBy={headingId}>
-      <div className={cn(MK_CONTAINER, 'grid gap-10 lg:grid-cols-12 lg:gap-8')}>
+      <div className={cn(MK_CONTAINER, 'grid gap-10 lg:grid-cols-12 lg:gap-12')}>
         <Reveal className="lg:col-span-4">
-          <SectionHead
-            id={headingId}
-            eyebrow={eyebrow}
-            title={title}
-            className="lg:sticky lg:top-28"
-          >
+          <EntryHead id={headingId} title={title} className="lg:sticky lg:top-24">
             {intro}
-          </SectionHead>
+          </EntryHead>
         </Reveal>
-        <Reveal delay={80} className="lg:col-span-8 lg:col-start-5">
+        <Reveal delay={80} className="lg:col-span-8">
           {children}
         </Reveal>
       </div>
@@ -86,7 +82,7 @@ function CopyBlock({ step }: { step: SelfHostStep }) {
   return (
     // The button sits beside the code, not over it. Long lines wrap (never clip at 375px) with a
     // hanging indent, so a continuation never reads as a new command or a new variable.
-    <div className="mt-4 flex items-start rounded-lg border border-line bg-surface-1">
+    <div className="mt-4 flex items-start rounded-md border border-line bg-surface-1">
       <pre className="min-w-0 flex-1 py-3.5 pr-2 pl-4 text-sm leading-6 whitespace-pre-wrap text-ink wrap-anywhere">
         <code>
           {step.command.split('\n').map((line) => (
@@ -105,7 +101,7 @@ function CopyBlock({ step }: { step: SelfHostStep }) {
         type="button"
         onClick={copy}
         aria-label={`Copy: ${step.title}`}
-        className="t focus-ring m-1.5 inline-flex shrink-0 h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-ink-2 hover:bg-surface-3 hover:text-ink max-sm:h-11"
+        className="t focus-ring m-1.5 inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-ink-2 hover:bg-surface-3 hover:text-ink max-sm:h-11"
       >
         {state === 'copied' ? (
           <Check size={14} aria-hidden="true" className="text-success" />
@@ -122,13 +118,10 @@ function CopyBlock({ step }: { step: SelfHostStep }) {
 
 export function Depth() {
   const repo = githubUrl()
-  const linkClass =
-    't focus-ring inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-medium text-accent hover:text-accent-strong'
   return (
     <>
       <SplitBand
         headingId="ledger-heading"
-        eyebrow="Everything else"
         title="The rest of the drawer."
         intro={<p>No settings to configure first. All of it works on the hosted instance today.</p>}
       >
@@ -138,11 +131,12 @@ export function Depth() {
       <Band labelledBy="keys-heading">
         <div className={MK_CONTAINER}>
           <Reveal>
-            <SectionHead id="keys-heading" eyebrow="Keyboard" title="Every action has a key.">
+            <EntryHead id="keys-heading" title="Every action has a key.">
               <p>
-                The same list the app shows when you press <Kbd>?</Kbd>.
+                The same list the app shows when you press <Kbd>?</Kbd>. Learn four of them and you
+                never touch the mouse again.
               </p>
-            </SectionHead>
+            </EntryHead>
           </Reveal>
           <Reveal delay={80}>
             {/* Three columns at most: the 18 keys in the app fill every row at 2 and at 3 columns.
@@ -173,7 +167,6 @@ export function Depth() {
 
       <SplitBand
         headingId="security-heading"
-        eyebrow="Security model"
         title="Enforced in Postgres."
         intro={
           <p>
@@ -183,14 +176,12 @@ export function Depth() {
         }
       >
         <DefinitionLedger rows={SECURITY} />
-        <div className="mt-4 flex flex-wrap gap-x-8">
+        <div className="mt-6 flex flex-wrap gap-x-8 gap-y-1">
           <a href={`${repo}/blob/main/supabase/tests/rls.sql`} className={linkClass}>
             Read the policy tests
-            <ArrowRight size={16} aria-hidden="true" />
           </a>
           <a href={`${repo}/blob/main/SECURITY.md`} className={linkClass}>
             Report a vulnerability
-            <ArrowRight size={16} aria-hidden="true" />
           </a>
         </div>
       </SplitBand>
@@ -198,7 +189,6 @@ export function Depth() {
       <SplitBand
         id="self-host"
         headingId="self-host-heading"
-        eyebrow="Self-host"
         title="Self-host in 5 minutes."
         intro={
           <p>
@@ -211,22 +201,21 @@ export function Depth() {
           {SELF_HOST_STEPS.map((step, i) => (
             <li
               key={step.title}
-              className="grid gap-2 border-t border-line py-6 sm:grid-cols-[3rem_minmax(0,1fr)]"
+              className="grid gap-2 border-t border-line py-6 sm:grid-cols-[2.5rem_minmax(0,1fr)]"
             >
-              <span className="specimen-label pt-1 text-accent">
-                {String(i + 1).padStart(2, '0')}
+              <span aria-hidden="true" className="font-mono text-sm text-accent sm:pt-1">
+                {i + 1}
               </span>
               <div className="min-w-0">
                 <h3 className="text-base font-medium">{step.title}</h3>
-                <p className="mt-1 text-base text-ink-2">{step.body}</p>
+                <p className="mt-1 text-base leading-6 text-ink-2">{step.body}</p>
                 <CopyBlock step={step} />
               </div>
             </li>
           ))}
         </ol>
-        <Link to="/docs/self-host" className={cn(linkClass, 'mt-4')}>
+        <Link to="/docs/self-host" className={cn(linkClass, 'mt-6')}>
           Read the self-host guide
-          <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </SplitBand>
     </>

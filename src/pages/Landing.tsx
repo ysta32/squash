@@ -1,10 +1,14 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Chapters } from '../components/landing/Chapters'
 import { Depth } from '../components/landing/Depth'
 import { Hero } from '../components/landing/Hero'
 import { Problem } from '../components/landing/Problem'
 import { Proof } from '../components/landing/Proof'
+import { Stage } from '../components/landing/Stage'
+import { HERO_SHOT } from '../components/landing/content'
+import { ShotImage } from '../components/landing/Frames'
+import { Band, EntryHead } from '../components/landing/Section'
+import '../components/landing/lp.css'
 import {
   MK_CONTAINER,
   MarketingLayout,
@@ -13,7 +17,6 @@ import {
 import { Reveal } from '../components/marketing/Reveal'
 import { buttonClass } from '../components/ui'
 import { cn } from '../lib/utils'
-import { useTheme } from '../lib/theme'
 
 /** Router links like `/#self-host` change only the hash; bring that section into view. */
 function useHashScroll() {
@@ -25,19 +28,61 @@ function useHashScroll() {
   }, [hash])
 }
 
+/** The drafting guides the whole page is set against, running the height of the window. */
+function Guides() {
+  return (
+    <div aria-hidden="true" className="lp-guides">
+      <div>
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  )
+}
+
+/** The workspace bug #24 was living in the whole time, at full width. */
+function Workspace() {
+  return (
+    <Band labelledBy="workspace-heading">
+      <div className={MK_CONTAINER}>
+        <Reveal>
+          <EntryHead
+            id="workspace-heading"
+            mark="the room it happened in"
+            title="A list, a record, and nothing else to learn."
+          >
+            <p>
+              Bugs on the left, the open one on the right, one input above both. Every view is a
+              URL, every action has a key, and the whole thing works on a phone.
+            </p>
+          </EntryHead>
+        </Reveal>
+        <Reveal delay={80}>
+          <figure className="mt-12">
+            <div className="overflow-hidden rounded-md border border-line-2 shadow-elev-3">
+              <ShotImage shot={HERO_SHOT} theme="dark" />
+            </div>
+            <figcaption className="lp-mono mt-4">
+              the demo workspace, bug 24 open with claude code working through the fix
+            </figcaption>
+          </figure>
+        </Reveal>
+      </div>
+    </Band>
+  )
+}
+
 function Action() {
   return (
-    <section aria-labelledby="action-heading" className="cabinet-light border-t border-line">
-      <div className={cn(MK_CONTAINER, 'py-20 lg:py-32')}>
+    <Band labelledBy="action-heading">
+      <div className={cn(MK_CONTAINER)}>
         <Reveal>
-          <p className="specimen-label text-ink-3">Start</p>
-          <h2
-            id="action-heading"
-            className="mt-3 max-w-[16ch] text-[2.75rem]/[2.9rem] font-semibold tracking-[-0.035em] text-balance sm:text-display-m lg:text-display-l 2xl:text-display-xl"
-          >
-            File the next bug in Squash.
+          <h2 id="action-heading" className="lp-display lp-h1 max-w-[12ch]">
+            File the next one here.
           </h2>
-          <p className="mt-6 max-w-[56ch] text-read text-pretty text-ink-2">
+          <p className="lp-read mt-8">
             Free on the hosted instance, with no paid tier. MIT licensed if you would rather run
             your own.
           </p>
@@ -49,21 +94,29 @@ function Action() {
           </div>
         </Reveal>
       </div>
-    </section>
+    </Band>
   )
 }
 
+/**
+ * The home page is the product with the lights on: the page's own world is the workspace's, the
+ * status line at the bottom of the window is the app's, and the middle of the page is bug #24
+ * living its whole life under the scroll.
+ */
 export default function Landing() {
-  const { resolved: theme } = useTheme()
   useHashScroll()
   return (
-    <MarketingLayout>
-      <Hero theme={theme} />
-      <Problem />
-      <Chapters theme={theme} />
-      <Proof />
-      <Depth />
-      <Action />
+    <MarketingLayout surface="lp">
+      <Guides />
+      <div className="lp-above">
+        <Hero />
+        <Problem />
+        <Stage />
+        <Workspace />
+        <Proof />
+        <Depth />
+        <Action />
+      </div>
     </MarketingLayout>
   )
 }

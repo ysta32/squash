@@ -213,10 +213,14 @@ function Footer() {
   )
 }
 
-/** Shell for every public page: skip link, sticky glass nav, one `#main`, sitemap footer. */
-export function MarketingLayout({ children }: { children: ReactNode }) {
+/**
+ * Shell for every public page: skip link, sticky glass nav, one `#main`, sitemap footer.
+ * `surface` swaps the neutrals for a page that brings its own palette (the home page's `lp`),
+ * header and footer included, so the chrome belongs to the page it frames.
+ */
+export function MarketingLayout({ children, surface }: { children: ReactNode; surface?: string }) {
   return (
-    <div className="public-ink flex min-h-screen flex-col overflow-x-clip text-ink">
+    <div className={cn('public-ink flex min-h-screen flex-col overflow-x-clip text-ink', surface)}>
       <SkipLink />
       <Header />
       <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">

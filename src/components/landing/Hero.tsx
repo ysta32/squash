@@ -1,58 +1,62 @@
-import type { CSSProperties } from 'react'
-import { facts } from '../marketing/facts'
-import type { ResolvedTheme } from '../../lib/theme'
 import { cn } from '../../lib/utils'
 import { MK_CONTAINER, OpenWorkspaceLink } from '../marketing/MarketingLayout'
-import { TypedSpecimenLabel } from '../marketing/TypedSpecimenLabel'
-import { buttonClass, SpecimenLabel } from '../ui'
-import { HERO_LABEL, HERO_SHOT } from './content'
-import { DrawerFrame, ShotImage } from './Frames'
+import { buttonClass } from '../ui'
+import { CaptureDemo } from './CaptureDemo'
 
-export function Hero({ theme }: { theme: ResolvedTheme }) {
+/**
+ * The page opens mid-keystroke: the headline is set in the face of the box a bug is typed into,
+ * at poster size, with the caret still blinking after it and the marker rule drawn under it as
+ * the page settles. The capture bar below is the real one — type in it and the bug files.
+ */
+export function Hero() {
   return (
-    <section
-      aria-labelledby="hero-heading"
-      className="cabinet-light relative isolate overflow-hidden"
-    >
-      <div
-        aria-hidden="true"
-        className="mk-ruled pointer-events-none absolute inset-0 -z-10 opacity-40"
-      />
-      <div className={cn(MK_CONTAINER, 'pt-14 pb-16 sm:pt-20 lg:pb-24 xl:pt-24 xl:pb-28')}>
-        {/* Copy on top, the full product frame below it: the headline and the pitch sit side by side
-            from 1280px, so the screenshot can take the whole grid width and no control is cut. */}
-        <div className="grid gap-y-6 xl:grid-cols-12 xl:items-end xl:gap-x-8">
-          <h1
-            id="hero-heading"
-            className="text-[2.75rem]/[2.9rem] font-semibold tracking-[-0.035em] text-balance sm:text-display-m lg:text-display-l xl:col-span-7"
+    <section aria-labelledby="hero-heading" className={cn(MK_CONTAINER, 'pt-12 pb-20 lg:pt-20')}>
+      <p className="lp-mark">a bug tracker for teams of 2 to 10</p>
+
+      <h1 id="hero-heading" className="lp-display lp-h1 mt-6">
+        {'File it in the '}
+        <br />
+        {'four seconds '}
+        <br />
+        <span className="relative inline-block">
+          you still care.
+          <span aria-hidden="true" className="lp-caret" />
+          {/* The marker rule under the last line, drawn the way it would be drawn by hand. */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 400 20"
+            preserveAspectRatio="none"
+            className="lp-rule absolute inset-x-0 top-[0.92em]"
           >
-            Bug reports your cofounder actually reads.
-          </h1>
-          <div className="xl:col-span-5 xl:pb-2">
-            <p className="max-w-[44ch] text-read text-pretty text-ink-2 sm:text-lg sm:leading-8 2xl:text-[1.2857rem] 2xl:leading-[2.1429rem]">
-              A bug tracker for teams of 2–10. Paste a screenshot, say what broke, press Enter: it
-              is on your teammate’s screen about a second later, and Claude Code can fix it from
-              there.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <OpenWorkspaceLink size="lg" />
-              <a href="#self-host" className={buttonClass('secondary', 'lg')}>
-                Self-host it
-              </a>
-            </div>
-            <SpecimenLabel
-              segments={[facts.license, 'Self-host on Supabase', 'No trackers']}
-              className="mt-6 text-ink-3"
-            />
+            <path pathLength={1} d="M5 13C110 6 250 7 395 10" />
+          </svg>
+        </span>
+      </h1>
+
+      <div className="mt-14 grid gap-10 lg:mt-16 lg:grid-cols-12 lg:gap-12">
+        <div className="lg:col-span-5">
+          <p className="lp-read">
+            Paste a screenshot, say what broke, press Enter. It is on your teammate’s screen about a
+            second later with the page, the device and the window size already written down — and
+            Claude Code can take it from there.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <OpenWorkspaceLink size="lg" />
+            <a href="#self-host" className={buttonClass('secondary', 'lg')}>
+              Self-host it
+            </a>
           </div>
+          <p className="lp-mono mt-6 max-w-[34ch]">
+            MIT licensed, free on the hosted instance, no paid tier, no trackers. Runs on your own
+            Supabase project in five minutes.
+          </p>
         </div>
-        {/* The whole workspace, contained in the grid at every width: list, detail and controls. */}
-        <div className="mk-rise mt-14 lg:mt-20" style={{ '--mk-delay': '520ms' } as CSSProperties}>
-          {/* The specimen label of the bug open in the frame, pinned above it like a drawer tag. */}
-          <TypedSpecimenLabel delay={200} lines={HERO_LABEL} className="mb-4" />
-          <DrawerFrame>
-            <ShotImage shot={HERO_SHOT} theme={theme} lazy={false} />
-          </DrawerFrame>
+
+        <div className="lg:col-span-7">
+          <p className="lp-mono mb-3">
+            this one is live — type what broke and press enter, it files into the list under it
+          </p>
+          <CaptureDemo />
         </div>
       </div>
     </section>
