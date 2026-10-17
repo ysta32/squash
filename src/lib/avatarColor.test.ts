@@ -50,7 +50,7 @@ function hue(hex: string): number {
 }
 
 describe('darkroom avatar inks', () => {
-  const DARK_PAGE = '#141412'
+  const DARK_PAGE = '#0b0b0b'
   it.each(AVATAR_PALETTE.map((entry) => [entry.name, entry.value, entry.dark]))(
     '%s lifts for dark mode and keeps white initials at 4.5:1',
     (_name, light, dark) => {

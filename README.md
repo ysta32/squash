@@ -171,9 +171,9 @@ A responsive two-pane layout on desktop and a list-to-detail stack on phones. In
 
 ## Make it yours
 
-Light and dark themes that follow your system, and five color schemes: Viridian, Cyanotype, Rust, Madder and Ink.
+Light and dark themes that follow your system, and five color schemes: Marker, Cyanotype, Rust, Madder and Ink.
 
-<img src="docs/screenshots/schemes.png" width="100%" alt="The Squash workspace in five color schemes, alternating dark and light: viridian, cyanotype, rust, madder and ink" />
+<img src="docs/screenshots/schemes.png" width="100%" alt="The Squash workspace in five color schemes, alternating dark and light: marker, cyanotype, rust, madder and ink" />
 
 <br />
 

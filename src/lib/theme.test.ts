@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { DEFAULT_SCHEME, applyStoredTheme, toColorScheme, useTheme } from './theme'
+import { DEFAULT_SCHEME, THEME_BG, applyStoredTheme, toColorScheme, useTheme } from './theme'
 
 function mockMatchMedia(matches: boolean) {
   vi.stubGlobal(
@@ -56,7 +56,7 @@ describe('applyStoredTheme', () => {
     localStorage.setItem('squash:theme', 'dark')
     applyStoredTheme()
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    expect(meta?.content).toBe('#141412')
+    expect(meta?.content).toBe(THEME_BG.dark)
   })
 
   it('applies a stored color scheme', () => {
@@ -66,7 +66,7 @@ describe('applyStoredTheme', () => {
     applyStoredTheme()
     expect(document.documentElement.dataset.scheme).toBe('ocean')
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    expect(meta?.content).toBe('#141412')
+    expect(meta?.content).toBe(THEME_BG.dark)
   })
 
   it.each(['violet', 'forest'])('maps the retired %s scheme to the default', (legacy) => {

@@ -1,159 +1,14 @@
-/* The home page's own world.
+/* The home page's own structure.
  *
- * Every other page on the site is paper and viridian. The home page is black on white with one
- * red: the red of the marker you draw on a screenshot with, which is the only thing Squash asks
- * you to do. Nothing else on the page carries colour, so the red always means the same thing.
- * It keeps that world in both themes on purpose. Everything is scoped to `.lp`, so the
- * token-based utilities inside simply follow.
+ * The palette the home page introduced — black, white and one red — is the whole site's palette
+ * now and lives in src/index.css; the display face and the page's small voice are shared with
+ * every public page from marketing.css. What is left here is what only this page has: the
+ * drafting guides, the status bar, and the record the bug lives in under the scroll.
  */
-@import '@fontsource-variable/archivo/wght.css';
 
 .lp {
-  --bg: #ffffff;
-  --surface-1: #ffffff;
-  --surface-2: #ffffff;
-  --surface-3: #f1f1f1;
-  --skeleton: #ebebeb;
-  --text-1: #000000;
-  --text-2: rgb(0 0 0 / 0.72);
-  --text-3: rgb(0 0 0 / 0.58);
-  --border-1: rgb(0 0 0 / 0.12);
-  --border-2: rgb(0 0 0 / 0.26);
-  --border-input: rgb(0 0 0 / 0.45);
-  /* The one colour, in two values of the same red: the marker red is drawn, never read, so it
-     stays bright; anything set in red as type steps down to a value that holds AA on white. */
-  --accent: #c92a14;
-  --accent-strong: #a72110;
-  --accent-fg: #ffffff;
-  --accent-tint: #fff0ed;
-  --focus: #c92a14;
-  --markup: #ff3b20;
-  --highlight: #ffe9e5;
-  --status-open: #000000;
-  --status-resolved: #000000;
-  --sev-critical: #ff3b20;
-  --sev-high: #000000;
-  --sev-medium: rgb(0 0 0 / 0.5);
-  --sev-low: rgb(0 0 0 / 0.3);
-  --success: #000000;
-  --scrim: rgb(0 0 0 / 0.35);
-  --scrim-strong: rgb(0 0 0 / 0.6);
-  --grain: none;
-  --elev-1: none;
-  --elev-2: 0 1px 0 rgb(0 0 0 / 0.08);
-  --elev-3: 0 2px 0 rgb(0 0 0 / 0.08);
-
   position: relative;
-  color: var(--text-1);
-  background-color: var(--bg);
-  /* Registration crosses on a 72px lattice: the page is set on a sheet, not floating. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cpath d='M36 31.5v9M31.5 36h9' stroke='rgba(0,0,0,0.1)' stroke-width='1'/%3E%3C/svg%3E");
-  background-position: 36px 0;
   padding-bottom: 2.5rem;
-}
-
-/* ------------------------------------------------------------- guides --- */
-
-/* Four hairlines on the page's own columns, running the whole window. They are the only
-   structure the page needs — nothing is boxed in a card. */
-.lp-guides {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  display: none;
-}
-
-@media (min-width: 64rem) {
-  .lp-guides {
-    display: block;
-  }
-}
-
-.lp-guides > div {
-  margin-inline: auto;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  width: 100%;
-  max-width: 84rem;
-  height: 100%;
-  padding-inline: 3rem;
-}
-
-.lp-guides > div > span {
-  border-left: 1px solid var(--border-1);
-}
-
-.lp-guides > div > span:last-child {
-  border-right: 1px solid var(--border-1);
-}
-
-/* Everything the page renders sits over the guides. */
-.lp-above {
-  position: relative;
-  z-index: 1;
-}
-
-/* ---------------------------------------------------------------- type --- */
-
-/* Display is Archivo: a grotesque drawn for headlines, set heavy and tight so the words make
-   the shape of the page. Running text stays IBM Plex Sans, the face the rest of the site uses. */
-.lp-display {
-  font-family: 'Archivo Variable', var(--font-sans);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 0.95;
-  text-wrap: balance;
-}
-
-.lp-h1 {
-  font-size: clamp(2.9rem, 9vw, 8rem);
-  letter-spacing: -0.045em;
-}
-
-.lp-h2 {
-  font-size: clamp(2rem, 4.6vw, 3.6rem);
-  letter-spacing: -0.04em;
-}
-
-.lp-h3 {
-  font-size: clamp(1.3rem, 2vw, 1.7rem);
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-
-.lp-read {
-  font-size: 1.1429rem;
-  line-height: 1.6;
-  max-width: 54ch;
-  text-wrap: pretty;
-  color: var(--text-2);
-}
-
-/* The page's small voice: plain sans, sentence case, never tracked-out capitals. */
-.lp-small {
-  font-size: 0.9286rem;
-  line-height: 1.4286rem;
-  color: var(--text-3);
-}
-
-/* Numbers that have to line up — times, sizes, file names — keep the mono face. */
-.lp-data {
-  font-family: var(--font-mono);
-  font-size: 0.8571rem;
-  line-height: 1.2857rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/* A section marker: a red slash and the section's name. */
-.lp-mark {
-  font-size: 0.9286rem;
-  color: var(--text-3);
-}
-
-.lp-mark::before {
-  content: '/ ';
-  color: var(--accent);
 }
 
 /* ---------------------------------------------------------- status bar --- */
@@ -215,16 +70,6 @@
 .lp-key:hover > b,
 .lp-key[aria-current='true'] > b {
   color: var(--bg);
-}
-
-/* The site's small label is tracked-out capitals; on this page it is sentence case, like every
-   other word here. The footer and the nav are inside `.lp`, so the chrome belongs to the page. */
-.lp .specimen-label {
-  font-family: var(--font-sans);
-  font-size: 0.9286rem;
-  letter-spacing: 0;
-  text-transform: none;
-  font-weight: 500;
 }
 
 /* --------------------------------------------------------------- stage --- */
@@ -451,8 +296,7 @@
 }
 
 @media print {
-  .lp-status,
-  .lp-guides {
+  .lp-status {
     display: none;
   }
   .lp-sticky {

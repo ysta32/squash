@@ -34,10 +34,6 @@ export default function NotFound() {
   return (
     <MarketingLayout>
       <section aria-labelledby="not-found-heading" className="cabinet-light relative isolate">
-        <div
-          aria-hidden="true"
-          className="mk-ruled pointer-events-none absolute inset-0 -z-10 opacity-40"
-        />
         <div className={cn(MK_CONTAINER, 'py-20 sm:py-28 lg:py-40')}>
           <SpecimenLabel
             boxed

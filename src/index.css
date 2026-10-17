@@ -24,59 +24,64 @@
   line-gap-override: 0%;
 }
 
-/* Design tokens: see DESIGN.md section 7 ("Specimen"). Light = paper, dark = darkroom. */
+/* Design tokens: see DESIGN.md section 7 ("Specimen"). The whole site is set in black, white
+   and one red — the red of the marker you draw on a screenshot with, which is the only thing
+   Squash asks you to do. Nothing else carries colour, so the red always means the same thing:
+   something is open, hot, or about to be destroyed. Light is a sheet under a lamp; dark is the
+   same sheet as a negative. */
 :root {
-  /* neutrals: paper */
-  --bg: #f5f3ee;
-  --surface-1: #fbfaf7;
+  /* neutrals: the sheet */
+  --bg: #faf9f7;
+  --surface-1: #fdfdfc;
   --surface-2: #ffffff;
-  --surface-3: #ece9e2;
-  /* loading placeholders: one step past --surface-3 so they read on the paper */
-  --skeleton: #e0dcd2;
-  --text-1: #1c1b18;
-  --text-2: #57534b;
-  --text-3: #6e695f;
-  --border-1: #e2ded5;
-  --border-2: #cfcac0;
-  --border-input: #8c8679;
-  /* accent: viridian */
-  --accent: #0d6b57;
-  --accent-strong: #0a5948;
+  --surface-3: #efeeea;
+  /* loading placeholders: one step past --surface-3 so they read on the sheet */
+  --skeleton: #e5e4df;
+  --text-1: #000000;
+  --text-2: #3d3b38;
+  --text-3: #5f5d58;
+  --border-1: #e4e2dd;
+  --border-2: #cbc8c2;
+  --border-input: #8a8780;
+  /* the one colour, in two values of the same red: the marker red is drawn, never read, so it
+     stays bright; red set as type steps down to a value that holds AA on the sheet */
+  --accent: #c92a14;
+  --accent-strong: #a72110;
   --accent-fg: #ffffff;
-  --accent-tint: #e3f0eb;
+  --accent-tint: #fdeeea;
   --focus: var(--accent);
-  /* severity */
-  --sev-low: #6c6860;
-  --sev-medium: #826400;
-  --sev-high: #ba3e0c;
-  --sev-critical: #c1121f;
-  --sev-critical-tint: #fbf0ef;
-  /* status + feedback */
-  --status-open: #57534b;
+  /* severity: a value ramp up to the red, with the tick count carrying the exact rank */
+  --sev-low: #9b9891;
+  --sev-medium: #6e6b65;
+  --sev-high: #000000;
+  --sev-critical: #c92a14;
+  --sev-critical-tint: #fdeeea;
+  /* status + feedback: red is open or destructive, black is settled */
+  --status-open: #3d3b38;
   --status-progress: var(--accent);
-  --status-resolved: #2e772a;
-  --success: #2e772a;
-  --warning: #985a00;
-  --danger: #b42318;
+  --status-resolved: #000000;
+  --success: #000000;
+  --warning: #3d3b38;
+  --danger: #c92a14;
   /* text and icons on a --danger fill (the confirm dialog's destructive button) */
   --on-danger: #ffffff;
   /* motif */
-  --highlight: #f9e27d;
-  --markup: #e0321c;
-  /* warm umber wash: a grey scrim reads as dirty over the paper ground */
-  --scrim: rgb(66 52 32 / 0.2);
+  --highlight: #ffdcd4;
+  --markup: #ff3b20;
+  --scrim: rgb(0 0 0 / 0.28);
   /* bottom sheets on phones: the page behind must clearly step back */
-  --scrim-strong: rgb(42 33 20 / 0.48);
-  /* paper grain: ink-colored fractal noise, about 3.5% average opacity */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.11 0 0 0 0 0.106 0 0 0 0 0.094 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+  --scrim-strong: rgb(0 0 0 / 0.55);
+  /* No page texture. A repeating ground — noise, a lattice, rules — buzzes under the eye at
+     full-window scale, so the depth comes from one soft light instead. */
+  --grain: none;
+  /* one lamp, off the top left corner of the window, never tiled */
+  --page-wash: radial-gradient(1400px 900px at 8% -20%, #ffffff 0%, rgb(255 255 255 / 0) 62%);
   /* elevation */
-  --elev-1: 0 1px 0 rgb(28 27 24 / 0.04), 0 1px 2px rgb(28 27 24 / 0.06);
+  --elev-1: 0 1px 0 rgb(0 0 0 / 0.04), 0 1px 2px rgb(0 0 0 / 0.06);
   --elev-2:
-    0 0 0 1px rgb(28 27 24 / 0.06), 0 2px 4px rgb(28 27 24 / 0.04),
-    0 8px 20px -4px rgb(28 27 24 / 0.12);
+    0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.04), 0 8px 20px -4px rgb(0 0 0 / 0.12);
   --elev-3:
-    0 0 0 1px rgb(28 27 24 / 0.06), 0 4px 8px rgb(28 27 24 / 0.04),
-    0 24px 48px -12px rgb(28 27 24 / 0.24);
+    0 0 0 1px rgb(0 0 0 / 0.06), 0 4px 8px rgb(0 0 0 / 0.04), 0 24px 48px -12px rgb(0 0 0 / 0.24);
   /* motion */
   --dur-micro: 90ms;
   --dur-standard: 160ms;
@@ -92,37 +97,37 @@
 }
 
 .dark {
-  --bg: #141412;
-  --surface-1: #1a1917;
-  --surface-2: #22211e;
-  --surface-3: #2d2b27;
-  --skeleton: #36342f;
-  --text-1: #edeae3;
-  --text-2: #b5b0a5;
-  --text-3: #9a9589;
-  --border-1: #2f2d29;
-  --border-2: #3f3c36;
-  --border-input: #716c62;
-  --accent: #4cc4a3;
-  --accent-strong: #6fd3b8;
-  --accent-fg: #0b1f1a;
-  --accent-tint: #12302a;
-  --sev-low: #9a9589;
-  --sev-medium: #e3b341;
-  --sev-high: #fb8c4a;
-  --sev-critical: #ff6b6b;
-  --sev-critical-tint: #3a1716;
-  --status-open: #b5b0a5;
-  --status-resolved: #6cc46a;
-  --success: #6cc46a;
-  --warning: #e9a23b;
-  --danger: #ff7a70;
-  --on-danger: #141412;
-  --highlight: #4a4116;
+  --bg: #0b0b0b;
+  --surface-1: #121211;
+  --surface-2: #181817;
+  --surface-3: #222221;
+  --skeleton: #2b2b2a;
+  --text-1: #f4f3f1;
+  --text-2: #b3b1ac;
+  --text-3: #8d8b86;
+  --border-1: #242423;
+  --border-2: #363634;
+  --border-input: #6b6965;
+  --accent: #ff5236;
+  --accent-strong: #ff7a62;
+  --accent-fg: #180502;
+  --accent-tint: #2b0f09;
+  --sev-low: #76746f;
+  --sev-medium: #9d9b96;
+  --sev-high: #f4f3f1;
+  --sev-critical: #ff5236;
+  --sev-critical-tint: #2b0f09;
+  --status-open: #b3b1ac;
+  --status-resolved: #f4f3f1;
+  --success: #f4f3f1;
+  --warning: #b3b1ac;
+  --danger: #ff5236;
+  --on-danger: #180502;
+  --highlight: #4a140c;
   --scrim: rgb(0 0 0 / 0.6);
   --scrim-strong: rgb(0 0 0 / 0.72);
-  /* slate grain: pale noise, about 2% average opacity */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.92 0 0 0 0 0.89 1 0 0 0 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  --grain: none;
+  --page-wash: radial-gradient(1400px 900px at 8% -20%, #1a1a19 0%, rgb(26 26 25 / 0) 62%);
   --elev-1: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 1px 2px rgb(0 0 0 / 0.4);
   --elev-2:
     inset 0 1px 0 rgb(255 255 255 / 0.05), 0 0 0 1px rgb(0 0 0 / 0.5),
@@ -134,8 +139,8 @@
 }
 
 /* Schemes override the accent only. Keep IDs in sync with COLOR_SCHEMES in lib/theme.ts.
-   The default (Viridian) has no attribute; lib/theme.ts maps the retired 'violet' and
-   'forest' IDs to it on read. */
+   The default (Marker) has no attribute; lib/theme.ts maps the retired 'violet', 'forest' and
+   'viridian' IDs to it on read. */
 [data-scheme='ocean'] {
   --accent: #1f5fa8;
   --accent-strong: #184c87;
@@ -167,14 +172,14 @@
   --accent-fg: #2a0d18;
 }
 [data-scheme='graphite'] {
-  --accent: #1c1b18;
+  --accent: #000000;
   --accent-strong: #000000;
   --accent-fg: #ffffff;
 }
 .dark[data-scheme='graphite'] {
-  --accent: #edeae3;
+  --accent: #f4f3f1;
   --accent-strong: #ffffff;
-  --accent-fg: #141412;
+  --accent-fg: #0b0b0b;
 }
 [data-scheme] {
   --accent-tint: color-mix(in oklab, var(--accent) 12%, var(--bg));
@@ -304,7 +309,10 @@
 
   body {
     background-color: var(--bg);
-    background-image: var(--grain);
+    /* One light, fixed to the window: it never tiles and never moves under a scroll. */
+    background-image: var(--page-wash);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     color: var(--text-1);
   }
 
@@ -401,39 +409,49 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The small label, in one place. Its voice is set per context by the custom properties below:
+   tracked-out mono capitals in the app, where labels are scanned down dense rows, and plain
+   sentence-case sans on the public pages, where they are read. */
+@utility label-type {
+  font-family: var(--label-family, var(--font-mono));
+  font-size: var(--label-size, var(--text-label));
+  line-height: var(--label-leading, var(--text-label--line-height));
+  font-weight: var(--label-weight, 400);
+  letter-spacing: var(--label-tracking, 0.06em);
+  text-transform: var(--label-case, uppercase);
+  font-variant-numeric: tabular-nums;
+}
+
 @utility specimen-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-label);
-  line-height: var(--text-label--line-height);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--label-family, var(--font-mono));
+  font-size: var(--label-size, var(--text-label));
+  line-height: var(--label-leading, var(--text-label--line-height));
+  font-weight: var(--label-weight, 400);
+  letter-spacing: var(--label-tracking, 0.06em);
+  text-transform: var(--label-case, uppercase);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
 
-/* Depth (DESIGN.md section 8). Paper grain on the page background. */
+/* Depth (DESIGN.md section 8): the page ground, lit once from the top left. */
 @utility paper-grain {
   background-color: var(--bg);
-  background-image: var(--grain);
+  background-image: var(--page-wash);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
-/* Desk-lamp falloff from the top left: marketing heroes and the auth panel only. */
+/* The same falloff at band scale: marketing heroes, closing bands and the auth panel. No base
+   colour, so the page's own ground — and the drafting guides on it — stay visible underneath. */
 @utility cabinet-light {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(120% 90% at 0% 0%, var(--surface-1) 0%, transparent 65%), var(--grain);
+  background-image: radial-gradient(120% 90% at 0% 0%, var(--surface-1) 0%, transparent 65%);
 }
 
-/* Public pages (marketing, legal, sign-in) set their mono micro-labels on paper grain and the
-   lamp gradient. The grain darkens the paper by up to ~7%, which takes the app's --text-3 from
-   4.9:1 to 4.3:1, so these pages use a deeper tertiary ink: 5.3:1 on --bg under 7% grain,
-   4.9:1 on --surface-3 under 7% grain. The darkroom's --text-3 already clears 5:1 with grain.
-   Their tracked mono labels (stat captions, footer legend) are set at 12px, not the app's 11px. */
+/* Public pages (marketing, legal, sign-in) set their tracked mono micro-labels at 12px rather
+   than the app's 11px: they are read at arm's length, not scanned in a dense list. The ground
+   under them is flat now, so --text-3 holds its measured ratio and needs no deeper value. */
 @utility public-ink {
   --text-label: 0.8571rem;
-  :root:not(.dark) & {
-    --text-3: #605b52;
-  }
 }
 
 /* Translucent surface for overlays only: command palette, sticky marketing nav. */

@@ -33,10 +33,6 @@ export function PageHero({
       className={cn('cabinet-light relative isolate overflow-hidden', className)}
     >
       <div
-        aria-hidden="true"
-        className="mk-ruled pointer-events-none absolute inset-0 -z-10 opacity-40"
-      />
-      <div
         className={cn(
           MK_CONTAINER,
           'grid gap-y-12 pt-14 pb-16 sm:pt-20 lg:grid-cols-12 lg:gap-x-8 lg:pt-28 lg:pb-24',

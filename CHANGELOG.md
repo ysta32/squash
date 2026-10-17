@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- The whole site and the app are now set in the home page's world: black, white and one red, in both light and dark. Red means one thing everywhere — something is open, hot, or about to be changed — and nothing else carries colour.
+- New page background. The registration-cross lattice on the home page and the paper grain everywhere else are gone; both were repeating textures that shimmer across a full window and are tiring to look at. The ground is a soft off-white sheet (near-black in dark) lit once from the top-left corner of the window, and never tiled.
+- Every public page is set on the same four drafting guides the home page introduced, with Archivo for headings and small labels in plain sentence case instead of tracked-out capitals. The ruled-paper band behind marketing heroes is gone.
+- The accent ink picker's default is Marker; an older Viridian preference lands on it. The other inks are unchanged.
+- Favicons, app icons, social cards and the press kit were regenerated from the new colours, and the product screenshots on the public pages were recaptured.
+
 ## v2.0.1 — 2026-10-08
 
 Polish from the third design review of 2.0.

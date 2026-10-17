@@ -3,24 +3,24 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 export type Theme = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
-/** Schemes only swap the accent; neutrals are always paper (light) or darkroom (dark). */
-export const COLOR_SCHEMES = ['viridian', 'ocean', 'sunset', 'rose', 'graphite'] as const
+/** Schemes only swap the accent; neutrals are always the sheet (light) or the negative (dark). */
+export const COLOR_SCHEMES = ['marker', 'ocean', 'sunset', 'rose', 'graphite'] as const
 export type ColorScheme = (typeof COLOR_SCHEMES)[number]
-export const DEFAULT_SCHEME: ColorScheme = 'viridian'
+export const DEFAULT_SCHEME: ColorScheme = 'marker'
 
 /** Page background per mode; mirrors --bg in index.css (used for the theme-color meta). */
-export const THEME_BG: Record<ResolvedTheme, string> = { light: '#f5f3ee', dark: '#141412' }
+export const THEME_BG: Record<ResolvedTheme, string> = { light: '#faf9f7', dark: '#0b0b0b' }
 
 /** Labels and preview swatches for the scheme picker; values mirror index.css. */
 export const SCHEME_INFO: Record<
   ColorScheme,
   { label: string; accent: Record<ResolvedTheme, string>; bg: Record<ResolvedTheme, string> }
 > = {
-  viridian: { label: 'Viridian', accent: { light: '#0d6b57', dark: '#4cc4a3' }, bg: THEME_BG },
+  marker: { label: 'Marker', accent: { light: '#c92a14', dark: '#ff5236' }, bg: THEME_BG },
   ocean: { label: 'Cyanotype', accent: { light: '#1f5fa8', dark: '#7db0f0' }, bg: THEME_BG },
   sunset: { label: 'Rust', accent: { light: '#b4470f', dark: '#f2925a' }, bg: THEME_BG },
   rose: { label: 'Madder', accent: { light: '#b4235a', dark: '#f07aa3' }, bg: THEME_BG },
-  graphite: { label: 'Ink', accent: { light: '#1c1b18', dark: '#edeae3' }, bg: THEME_BG },
+  graphite: { label: 'Ink', accent: { light: '#000000', dark: '#f4f3f1' }, bg: THEME_BG },
 }
 
 export const THEME_KEY = 'squash:theme'
@@ -36,8 +36,9 @@ function readStored(): Theme {
   }
 }
 
-/** Maps a stored value to a current scheme. Retired IDs ('violet', 'forest') and unknown values
- * fall back to the default so an old preference never leaves the app without an accent. */
+/** Maps a stored value to a current scheme. Retired IDs ('violet', 'forest', 'viridian') and
+ * unknown values fall back to the default so an old preference never leaves the app without an
+ * accent. */
 export function toColorScheme(value: string | null): ColorScheme {
   return (COLOR_SCHEMES as readonly string[]).includes(value ?? '')
     ? (value as ColorScheme)

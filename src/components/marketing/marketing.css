@@ -1,3 +1,125 @@
+@import '@fontsource-variable/archivo/wght.css';
+
+/* ------------------------------------------------------------ the voice --- */
+
+/* Every public page is set the way the home page is: Archivo for anything that carries the
+   shape of the page, IBM Plex Sans for anything you actually read, and a small voice in plain
+   sentence case. Tracked-out capitals were the old site's habit; they are gone. */
+
+.public-ink {
+  --font-display: 'Archivo Variable', var(--font-sans);
+  /* Every small label on a public page: plain sans, sentence case, never tracked-out capitals. */
+  --label-family: var(--font-sans);
+  --label-size: 0.9286rem;
+  --label-leading: 1.4286rem;
+  --label-weight: 500;
+  --label-tracking: 0;
+  --label-case: none;
+}
+
+.public-ink :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+/* ------------------------------------------------------------- guides --- */
+
+/* Four hairlines on the site's own columns, running the whole window, on every public page.
+   They are the only structure the pages need — nothing is boxed in a card. */
+.mk-guides {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .mk-guides {
+    display: block;
+  }
+}
+
+.mk-guides > div {
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: 100%;
+  max-width: 84rem;
+  height: 100%;
+  padding-inline: 3rem;
+}
+
+.mk-guides > div > span {
+  border-left: 1px solid var(--border-1);
+}
+
+.mk-guides > div > span:last-child {
+  border-right: 1px solid var(--border-1);
+}
+
+/* ------------------------------------------------------------ type scale --- */
+
+/* Display is Archivo: a grotesque drawn for headlines, set heavy and tight so the words make
+   the shape of the page. Running text stays IBM Plex Sans. */
+.lp-display {
+  font-family: var(--font-display, 'Archivo Variable', sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+.lp-h1 {
+  font-size: clamp(2.9rem, 9vw, 8rem);
+  letter-spacing: -0.045em;
+}
+
+.lp-h2 {
+  font-size: clamp(2rem, 4.6vw, 3.6rem);
+  letter-spacing: -0.04em;
+}
+
+.lp-h3 {
+  font-size: clamp(1.3rem, 2vw, 1.7rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lp-read {
+  font-size: 1.1429rem;
+  line-height: 1.6;
+  max-width: 54ch;
+  text-wrap: pretty;
+  color: var(--text-2);
+}
+
+/* The page's small voice: plain sans, sentence case, never tracked-out capitals. */
+.lp-small {
+  font-size: 0.9286rem;
+  line-height: 1.4286rem;
+  color: var(--text-3);
+}
+
+/* Numbers that have to line up — times, sizes, file names — keep the mono face. */
+.lp-data {
+  font-family: var(--font-mono);
+  font-size: 0.8571rem;
+  line-height: 1.2857rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A section marker: a red slash and the section's name. */
+.lp-mark {
+  font-size: 0.9286rem;
+  color: var(--text-3);
+}
+
+.lp-mark::before {
+  content: '/ ';
+  color: var(--accent);
+}
+
 /* Marketing motion (DESIGN.md section 8): transform and opacity only, three moments.
    1. The hero specimen label types in, then the product screenshot rises.
    2. Sections below the fold reveal on scroll (useInView: idle -> hidden -> shown), staggered by
@@ -78,6 +200,9 @@
 }
 
 @media print {
+  .mk-guides {
+    display: none;
+  }
   [data-reveal] {
     opacity: 1 !important;
     transform: none !important;
@@ -85,18 +210,6 @@
   .mk-stroke {
     stroke-dashoffset: 0 !important;
   }
-}
-
-/* Ruled lab-notebook paper, fading out at the edges. */
-.mk-ruled {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 23px,
-    var(--border-1) 23px,
-    var(--border-1) 24px
-  );
-  mask-image: radial-gradient(70% 90% at 0% 0%, black 15%, transparent 70%);
 }
 
 /* Horizontal scrollers fade at the right edge instead of clipping mid-word. */
@@ -242,12 +355,22 @@
   overflow-wrap: anywhere;
 }
 .mk-prose pre {
+  --pre-edge: color-mix(in oklab, var(--text-1) 16%, transparent);
   max-width: 100%;
   overflow-x: auto;
   padding: 0.8571rem 1.1429rem;
   border: 1px solid var(--border-1);
   border-radius: var(--radius-lg);
-  background: var(--surface-1);
+  /* Scroll cue: the `local` covers move with the content and hide the `scroll` shadows at each end,
+     so an edge shadow shows only on a side that still has more command to scroll to (375px). */
+  background:
+    linear-gradient(90deg, var(--surface-1) 40%, transparent) left / 2.5rem 100% no-repeat local,
+    linear-gradient(270deg, var(--surface-1) 40%, transparent) right / 2.5rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--pre-edge), transparent) left / 0.75rem 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--pre-edge), transparent) right / 0.75rem 100%
+      no-repeat scroll,
+    var(--surface-1);
   font-size: var(--text-sm);
   line-height: 1.5rem;
   color: var(--text-1);
@@ -291,11 +414,8 @@
 .mk-prose th {
   padding: 0.5714rem 1.1429rem 0.5714rem 0;
   text-align: left;
-  font-family: var(--font-mono);
-  font-size: var(--text-label);
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: 500;
   color: var(--text-3);
 }
 .mk-prose td {

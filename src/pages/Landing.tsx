@@ -22,20 +22,6 @@ function useHashScroll() {
   }, [hash])
 }
 
-/** The drafting guides the whole page is set against, running the height of the window. */
-function Guides() {
-  return (
-    <div aria-hidden="true" className="lp-guides">
-      <div>
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
-    </div>
-  )
-}
-
 /** Four numbers counted from the repository when this page is built, not typed in by hand. */
 function Counted() {
   const rows = [
@@ -101,12 +87,9 @@ export default function Landing() {
   useHashScroll()
   return (
     <MarketingLayout surface="lp">
-      <Guides />
-      <div className="lp-above">
-        <Hero />
-        <Stage />
-        <Close />
-      </div>
+      <Hero />
+      <Stage />
+      <Close />
     </MarketingLayout>
   )
 }

@@ -138,7 +138,7 @@ export default function Press() {
                 >
                   <div
                     className="flex aspect-[3/1] items-center justify-center"
-                    style={{ backgroundColor: logo.theme === 'light' ? '#F5F3EE' : '#141412' }}
+                    style={{ backgroundColor: logo.theme === 'light' ? '#FAF9F7' : '#0B0B0B' }}
                   >
                     <img
                       src={`/brand/squash-logo-${logo.theme}-transparent.png`}
@@ -175,12 +175,12 @@ export default function Press() {
             <SectionHead
               id="colours-heading"
               eyebrow="02 · Colour"
-              title="Paper, ink and one green."
+              title="Black, white and one red."
             >
               <p>
-                Viridian is the only brand colour. Marker red is reserved for annotations drawn on
-                screenshots. Hex values are the design tokens in{' '}
-                <code className="font-mono text-[0.9em]">src/index.css</code>.
+                Marker red is the only brand colour, and it means one thing: something is open, or
+                about to be changed. Everything else is the sheet and the ink on it. Hex values are
+                the design tokens in <code className="font-mono text-[0.9em]">src/index.css</code>.
               </p>
             </SectionHead>
           </Reveal>

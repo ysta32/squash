@@ -62,15 +62,17 @@ const fontFile = (pkg, file) => {
   return `data:font/woff2;base64,${readFileSync(path).toString('base64')}`
 }
 
-/** @font-face rules for the self-hosted Plex files. */
+/** @font-face rules for the self-hosted Plex and Archivo files. */
 export function fontFaces() {
   const sans = fontFile(
     '@fontsource-variable/ibm-plex-sans',
     'ibm-plex-sans-latin-wght-normal.woff2',
   )
+  const display = fontFile('@fontsource-variable/archivo', 'archivo-latin-wght-normal.woff2')
   const mono = (w) => fontFile('@fontsource/ibm-plex-mono', `ibm-plex-mono-latin-${w}-normal.woff2`)
   return `
 @font-face { font-family: 'Plex Sans'; src: url(${sans}) format('woff2'); font-weight: 100 700; }
+@font-face { font-family: 'Archivo'; src: url(${display}) format('woff2'); font-weight: 100 900; }
 @font-face { font-family: 'Plex Mono'; src: url(${mono(400)}) format('woff2'); font-weight: 400; }
 @font-face { font-family: 'Plex Mono'; src: url(${mono(500)}) format('woff2'); font-weight: 500; }`
 }

@@ -217,7 +217,7 @@ export default function BeforeAfter({ before, after, frameStyle, label }: Before
               // A small grip low on the rule, clear of the middle of the shot where the subject
               // usually is. The whole frame takes drags; on touch an invisible ring makes the
               // grip itself a 44px target.
-              className="t focus-ring pointer-events-auto absolute bottom-3 left-0 inline-flex size-[24px] -translate-x-1/2 cursor-ew-resize items-center justify-center rounded-full bg-white text-[#1c1b18] shadow-[0_0_0_0.5px_rgb(0_0_0/0.16),0_1px_4px_rgb(0_0_0/0.3)] pointer-coarse:after:absolute pointer-coarse:after:-inset-[10px]"
+              className="t focus-ring pointer-events-auto absolute bottom-3 left-0 inline-flex size-[24px] -translate-x-1/2 cursor-ew-resize items-center justify-center rounded-full bg-white text-[#000000] shadow-[0_0_0_0.5px_rgb(0_0_0/0.16),0_1px_4px_rgb(0_0_0/0.3)] pointer-coarse:after:absolute pointer-coarse:after:-inset-[10px]"
             >
               <ChevronsLeftRight
                 size={14}

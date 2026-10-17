@@ -166,7 +166,7 @@ function Footer() {
   const footLink =
     't focus-ring inline-flex min-h-8 items-center rounded-sm text-sm text-ink-2 hover:text-ink max-sm:min-h-11 pointer-coarse:min-h-11'
   return (
-    <footer className="border-t border-line">
+    <footer className="relative z-[1] border-t border-line">
       <div className={cn(MK_CONTAINER, 'grid gap-12 py-16 lg:grid-cols-12 lg:gap-8 lg:py-24')}>
         <div className="lg:col-span-4">
           <Link
@@ -213,17 +213,32 @@ function Footer() {
   )
 }
 
+/** The drafting guides every public page is set against, running the height of the window. */
+function Guides() {
+  return (
+    <div aria-hidden="true" className="mk-guides">
+      <div>
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  )
+}
+
 /**
- * Shell for every public page: skip link, sticky glass nav, one `#main`, sitemap footer.
- * `surface` swaps the neutrals for a page that brings its own palette (the home page's `lp`),
- * header and footer included, so the chrome belongs to the page it frames.
+ * Shell for every public page: skip link, the drafting guides, sticky glass nav, one `#main`,
+ * sitemap footer. `surface` adds a class for a page that brings structure of its own (the home
+ * page's `lp`), header and footer included, so the chrome belongs to the page it frames.
  */
 export function MarketingLayout({ children, surface }: { children: ReactNode; surface?: string }) {
   return (
     <div className={cn('public-ink flex min-h-screen flex-col overflow-x-clip text-ink', surface)}>
       <SkipLink />
+      <Guides />
       <Header />
-      <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
+      <main id="main" tabIndex={-1} className="relative z-[1] flex-1 focus:outline-none">
         {children}
       </main>
       <Footer />

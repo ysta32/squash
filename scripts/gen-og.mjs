@@ -67,13 +67,13 @@ html, body { width: ${WIDTH}px; height: ${HEIGHT}px; overflow: hidden; }
 body {
   position: relative; color: var(--text-1); font-family: 'Plex Sans';
   background-color: var(--bg);
-  background-image: radial-gradient(120% 90% at 0% 0%, var(--surface-1) 0%, transparent 65%), var(--grain);
+  background-image: radial-gradient(120% 90% at 0% 0%, var(--surface-1) 0%, transparent 65%);
   -webkit-font-smoothing: antialiased;
 }
 .label, .card-label, .card-detail, .facts, .chapters span {
-  font-family: 'Plex Mono'; text-transform: uppercase; letter-spacing: 0.06em;
-  font-variant-numeric: tabular-nums;
+  font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums;
 }
+.card-label, .card-detail, .chapters span { font-family: 'Plex Mono'; font-weight: 400; }
 .label i, .card-label i, .card-detail i, .facts i { font-style: normal; color: var(--text-3); padding: 0 0.6ch; }
 .label {
   position: absolute; left: 72px; top: 72px; display: inline-flex; align-items: center;
@@ -82,16 +82,17 @@ body {
 }
 .title {
   position: absolute; left: 72px; top: 176px; width: ${visual ? 560 : 1000}px;
-  font-weight: 600; font-size: 64px; line-height: 68px; letter-spacing: -0.03em; text-wrap: balance;
+  font-family: 'Archivo'; font-weight: 700; font-size: 68px; line-height: 68px;
+  letter-spacing: -0.04em; text-wrap: balance;
 }
-.desc { margin-top: 24px; font-weight: 400; font-size: 26px; line-height: 36px; letter-spacing: 0; color: var(--text-2); max-width: 820px; text-wrap: pretty; }
+.desc { font-family: 'Plex Sans'; margin-top: 24px; font-weight: 400; font-size: 26px; line-height: 36px; letter-spacing: 0; color: var(--text-2); max-width: 820px; text-wrap: pretty; }
 .foot {
   position: absolute; left: 72px; right: 72px; bottom: 64px; height: 56px;
   display: flex; align-items: flex-end; justify-content: space-between;
   border-top: 1.5px solid var(--border-1); padding-top: 20px;
 }
 .facts { font-size: 17px; line-height: 24px; color: var(--text-3); }
-.logo { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 38px; line-height: 1; letter-spacing: -0.02em; }
+.logo { display: flex; align-items: center; gap: 12px; font-family: 'Archivo'; font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.02em; }
 .logo svg { width: 40px; height: 40px; }
 .card {
   position: absolute; left: 676px; top: 156px; width: 452px; padding: 28px 28px 24px;
@@ -103,7 +104,7 @@ body {
 .card-label { display: flex; align-items: center; font-size: 15px; line-height: 20px; color: var(--text-2); }
 .ticks { display: inline-flex; gap: 3px; margin-right: 12px; }
 .ticks b { display: block; width: 3px; height: 13px; border-radius: 1px; }
-.card-title { margin-top: 16px; font-weight: 600; font-size: 30px; line-height: 38px; letter-spacing: -0.015em; }
+.card-title { font-family: 'Archivo'; margin-top: 16px; font-weight: 700; font-size: 30px; line-height: 38px; letter-spacing: -0.015em; }
 .card-rule { height: 1.5px; background: var(--border-1); margin: 22px -28px 14px; }
 .card-detail { font-size: 14px; line-height: 20px; color: var(--text-3); }
 .chapters { position: absolute; left: 720px; top: 176px; width: 408px; list-style: none; border-top: 1.5px solid var(--border-2); }
@@ -136,7 +137,6 @@ const browser = await launchBrowser()
 try {
   const page = await browser.newPage({ deviceScaleFactor: 1 })
   const light = { ...tokens.light, grain: tokens.grain }
-  // The darkroom grain is the paper grain, much fainter on near-black.
   const dark = { ...tokens.light, ...tokens.dark, grain: tokens.grain }
   for (const og of OG_PAGES) {
     const png = await rasterize(page, card(og, light), WIDTH, HEIGHT)

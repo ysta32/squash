@@ -354,7 +354,7 @@ const STATES = {
     path: `${WS}/settings?tab=profile`,
     run: async (page) => {
       const swatch = (name) => page.getByRole('button', { name: `Avatar color ${name}` })
-      await swatch('Viridian').click({ timeout: SHORT })
+      await swatch('Marker').click({ timeout: SHORT })
       await page.getByRole('status').getByText('Saved').waitFor({ timeout: SHORT })
       await swatch('Madder').click({ timeout: SHORT })
       await page

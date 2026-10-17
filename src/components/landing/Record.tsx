@@ -38,7 +38,7 @@ function Evidence({ phase }: { phase: 'before' | 'drawing' | 'done' | 'wiped' })
         </div>
       </div>
       {/* The consent banner, laid over the bottom of the page. */}
-      <div className="absolute inset-x-[3%] bottom-[3%] rounded-[3px] bg-[#132522] p-[3.5%] shadow-lg">
+      <div className="absolute inset-x-[3%] bottom-[3%] rounded-[3px] bg-[#141414] p-[3.5%] shadow-lg">
         <span className="block h-[4px] w-[70%] rounded-xs bg-white/55" />
         <span className="mt-[4%] block h-[4px] w-[52%] rounded-xs bg-white/30" />
         <div className="mt-[7%] flex gap-[4%]">

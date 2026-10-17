@@ -50,9 +50,9 @@ export function buttonClass(
 export const inputClass =
   't focus-ring h-9 w-full rounded-md border border-line-input bg-surface-2 px-3 text-base text-ink placeholder:text-ink-3 hover:border-ink-3 focus-visible:border-focus aria-invalid:border-danger disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-surface-3 disabled:text-ink-3 pointer-coarse:h-[3.1429rem] pointer-coarse:text-[1.1429rem]'
 
-/** Mono uppercase eyebrow / specimen-label type (DESIGN.md `label` token). */
-export const labelClass =
-  'font-mono text-label font-normal tracking-[0.06em] uppercase tabular-nums'
+/** Eyebrow / specimen-label type (DESIGN.md `label` token). Mono capitals in the app; the
+ * public pages reset the `--label-*` properties to their own sentence-case voice. */
+export const labelClass = 'label-type'
 
 /** Inline link inside running text: a persistent underline so it is not told apart by color alone. */
 export const proseLinkClass =
