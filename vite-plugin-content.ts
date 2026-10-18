@@ -20,8 +20,8 @@ import type {
   DocMeta,
   PressShot,
   ReleaseEntry,
-} from './src/components/marketing/content-types'
-import { resolveSiteUrl } from './vite-plugin-seo'
+} from './src/components/marketing/content-types.ts'
+import { resolveSiteUrl } from './vite-plugin-seo.ts'
 
 export const CONTENT_MODULE_ID = 'virtual:squash-content'
 const RESOLVED_ID = `\0${CONTENT_MODULE_ID}`

@@ -9,9 +9,10 @@ import { isOverlayOpen, isTypingTarget } from '../hooks/useKeyboard'
 import { MAX_ORIGINAL_BYTES } from '../hooks/useImageCompression'
 import { fitUnder } from '../lib/annotate'
 import type { Annotations } from '../lib/annotations'
-import { SEVERITIES } from '../lib/types'
+import { KIND_LABEL, SEVERITIES } from '../lib/types'
 import type { BugKind, Severity } from '../lib/types'
 import { cn, isMac, randomId } from '../lib/utils'
+import { readDraft, writeDraft } from '../lib/drafts'
 import { useCoarsePointer, useMediaQuery } from '../hooks/useCoarsePointer'
 import { useBrowserOnline } from '../hooks/useBrowserOnline'
 import { AttachmentChip } from './AttachmentChip'
@@ -54,10 +55,17 @@ function withoutUrl(text: string, at: number, length: number): { text: string; c
 interface CaptureBarProps {
   workspaceId: string
   onSubmit: (input: NewBugInput) => Promise<void>
-  /** What Enter files: a bug or a feature request. */
+  /** What Enter files: a bug, a feature request or a test. */
   kind?: BugKind
   onToast?: (m: string) => void
   focusRef?: RefObject<HTMLTextAreaElement | null>
+}
+
+/** What survives a reload: the text and the URL chip (screenshots are not kept). */
+interface CaptureDraft {
+  text: string
+  url?: string
+  raw?: string
 }
 
 interface Chip {
@@ -76,15 +84,17 @@ export function CaptureBar({
   onToast,
   focusRef,
 }: CaptureBarProps) {
-  const noun = kind === 'feature' ? 'feature request' : 'bug'
-  const [value, setValueState] = useState('')
+  const noun = KIND_LABEL[kind].noun
+  const draftKey = `capture:${workspaceId}`
+  const [restored] = useState(() => readDraft<CaptureDraft>(draftKey))
+  const [value, setValueState] = useState(restored?.text ?? '')
   const [interim, setInterim] = useState('')
   const removedUrlsRef = useRef<string[]>([])
   // The page URL lifted out of the text into a chip (so it is not shown twice).
-  const [contextUrl, setContextUrlState] = useState<string | undefined>(undefined)
-  const contextUrlRef = useRef<string | undefined>(undefined)
+  const [contextUrl, setContextUrlState] = useState<string | undefined>(restored?.url)
+  const contextUrlRef = useRef<string | undefined>(restored?.url)
   // The URL exactly as typed, put back into the text if the chip is removed.
-  const contextRawRef = useRef<string | undefined>(undefined)
+  const contextRawRef = useRef<string | undefined>(restored?.raw)
   const setContextUrl = (u: string | undefined) => {
     contextUrlRef.current = u
     setContextUrlState(u)
@@ -92,7 +102,7 @@ export function CaptureBar({
   // Caret to restore after the text is rewritten (React would otherwise park it at the end).
   const pendingCaret = useRef<number | null>(null)
 
-  const valueRef = useRef('')
+  const valueRef = useRef(restored?.text ?? '')
   const transcriptRef = useRef<string | null>(null)
   const submittingRef = useRef(false)
   const finalWaiter = useRef<(() => void) | null>(null)
@@ -160,6 +170,27 @@ export function CaptureBar({
       if (document.activeElement === el) el.setSelectionRange(caret, caret)
     }
   }, [value, interim])
+
+  // The draft is saved per workspace as it is typed, so a reload brings it back. Moving to another
+  // workspace loads that workspace's draft instead of carrying this one over.
+  const draftKeyRef = useRef(draftKey)
+  useEffect(() => {
+    if (draftKeyRef.current !== draftKey) {
+      draftKeyRef.current = draftKey
+      const next = readDraft<CaptureDraft>(draftKey)
+      removedUrlsRef.current = []
+      contextRawRef.current = next?.raw
+      setContextUrl(next?.url)
+      setValue(next?.text ?? '')
+      return
+    }
+    writeDraft<CaptureDraft>(
+      draftKey,
+      value === '' && !contextUrl
+        ? null
+        : { text: value, url: contextUrl, raw: contextRawRef.current },
+    )
+  }, [draftKey, value, contextUrl])
 
   useEffect(() => {
     chipsRef.current = chips
@@ -521,8 +552,8 @@ export function CaptureBar({
                 interim
                   ? ''
                   : oneRow
-                    ? `Describe the ${kind === 'feature' ? 'feature' : 'bug'}`
-                    : `Paste a screenshot or describe the ${kind === 'feature' ? 'feature' : 'bug'}`
+                    ? `Describe the ${KIND_LABEL[kind].one.toLowerCase()}`
+                    : `Paste a screenshot or describe the ${KIND_LABEL[kind].one.toLowerCase()}`
               }
               aria-label={`Describe the ${noun}`}
               onChange={(e) => changeText(e.target.value, e.target.selectionStart)}

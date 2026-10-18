@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Check, Copy } from 'lucide-react'
 import { AuthLayout, AuthPanel } from '../components/AuthLayout'
 import { inviteUrl, setLastWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
-import { Button, ENTER_KEY, Field, Input, Kbd, Keys, LogoMark, MOD_KEY } from '../components/ui'
+import { Button, ENTER_KEY, Field, Input, Kbd, Keys, AppIcon, MOD_KEY } from '../components/ui'
 import { useCoarsePointer } from '../hooks/useCoarsePointer'
 import { INVITE_CODE, INVITE_LENGTH, parseInviteInput } from '../lib/inviteCode'
 import type { Workspace } from '../lib/types'
@@ -82,7 +82,7 @@ function PreviewCard({
       )}
     >
       <div className={cn('flex h-12 items-center gap-2 border-b border-line text-sm', pad)}>
-        <LogoMark size={18} />
+        <AppIcon size={18} />
         <span className="text-line-2">/</span>
         <span className={cn('truncate font-medium', shown ? 'text-ink' : 'text-ink-3')}>
           {shown || 'Your workspace'}
@@ -292,12 +292,19 @@ function FirstBugStep({ workspace }: { workspace: Workspace }) {
             </span>
           )}
         </li>
+        <li className="flex items-baseline gap-4 border-b border-line py-3">
+          <span className="font-mono text-xs text-ink-3 nums">D</span>
+          <span>
+            Features, tests and to-dos have tabs of their own, and any item can go to Claude Code
+          </span>
+        </li>
       </ol>
       <Button
         variant="primary"
         size="lg"
         className="w-full"
-        onClick={() => navigate(`/app/${workspace.id}`)}
+        // The workspace offers a short tour of the rest on its first open.
+        onClick={() => navigate(`/app/${workspace.id}`, { state: { tour: true } })}
       >
         Open {workspace.name}
       </Button>

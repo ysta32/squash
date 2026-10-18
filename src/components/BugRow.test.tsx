@@ -1,5 +1,5 @@
 import { Profiler } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import type * as AvatarModule from './Avatar'
@@ -158,5 +158,66 @@ describe('BugRow', () => {
     expect(empty).toHaveClass('size-[20px]', 'rounded-full', 'border-dashed')
     expect(empty.previousElementSibling).toBe(screen.getByRole('option').querySelector('time'))
     expect(empty.nextElementSibling).toBeNull()
+  })
+
+  it('checks an open bug off from the circle at the start of the row, without selecting it', () => {
+    const onSelect = vi.fn()
+    const onToggleStatus = vi.fn()
+    const b = bug()
+    render(
+      <BugRow
+        bug={b}
+        selected={false}
+        onSelect={onSelect}
+        members={members}
+        viewers={[]}
+        highlighted={false}
+        onToggleStatus={onToggleStatus}
+      />,
+    )
+    const check = screen.getByRole('button', { name: 'Mark #1 resolved' })
+    expect(check).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('option')).not.toContainElement(check)
+    fireEvent.click(check)
+    expect(onToggleStatus).toHaveBeenCalledWith(b)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('shows a resolved bug as checked and reopens it from the same circle', () => {
+    const onToggleStatus = vi.fn()
+    const b = bug({ status: 'resolved', resolved_by: 'grace' })
+    render(
+      <BugRow
+        bug={b}
+        selected={false}
+        onSelect={vi.fn()}
+        members={members}
+        viewers={[]}
+        highlighted={false}
+        onToggleStatus={onToggleStatus}
+      />,
+    )
+    const check = screen.getByRole('button', { name: 'Reopen #1' })
+    expect(check).toHaveAttribute('aria-pressed', 'true')
+    expect(check).toHaveAttribute('title', 'Resolved by Grace. Click to reopen')
+    // The circle carries the resolved state, so the meta column does not repeat it.
+    expect(screen.queryByLabelText('Resolved')).not.toBeInTheDocument()
+    fireEvent.click(check)
+    expect(onToggleStatus).toHaveBeenCalledWith(b)
+  })
+
+  it('has no check-off circle for a bug that is still being filed', () => {
+    render(
+      <BugRow
+        bug={bug({ optimistic: true })}
+        selected={false}
+        onSelect={vi.fn()}
+        members={members}
+        viewers={[]}
+        highlighted={false}
+        onToggleStatus={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /resolved/ })).not.toBeInTheDocument()
   })
 })

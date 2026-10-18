@@ -1,13 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useBug } from '../hooks/useBug'
 import type { BugEvent, Comment, Profile, WorkspaceMember } from '../lib/types'
+import { readDraft, writeDraft } from '../lib/drafts'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { ActivityEntry, TIMELINE_GLYPH, TIMELINE_ITEM, TimelineRail } from './ActivityTimeline'
 import { Avatar } from './Avatar'
 import { MentionInput } from './MentionInput'
 import { Button, Kbd } from './ui'
+
+function storedComment(bugId: string | null): string {
+  return bugId === null ? '' : (readDraft<string>(`comment:${bugId}`) ?? '')
+}
 
 type Entry =
   { kind: 'event'; at: string; event: BugEvent } | { kind: 'comment'; at: string; comment: Comment }
@@ -46,7 +51,17 @@ export function CommentThread({
   headerNote = null,
 }: CommentThreadProps) {
   const { comments, events, addComment, editComment, deleteComment, loading } = useBug(bugId)
-  const [draft, setDraft] = useState('')
+  // The unsent comment is kept per bug, so a reload (or opening another bug and coming back)
+  // does not lose it.
+  const [draftBugId, setDraftBugId] = useState(bugId)
+  const [draft, setDraft] = useState(() => storedComment(bugId))
+  if (draftBugId !== bugId) {
+    setDraftBugId(bugId)
+    setDraft(storedComment(bugId))
+  }
+  useEffect(() => {
+    if (bugId !== null) writeDraft(`comment:${bugId}`, draft === '' ? null : draft)
+  }, [bugId, draft])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const byId = new Map(members.map((m) => [m.user_id, m.profile]))

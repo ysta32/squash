@@ -1,5 +1,13 @@
 import { useRef, useState } from 'react'
-import { Check, Copy, FolderCog, RotateCcw, Sparkle, X } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  FolderCog,
+  MessageCircleQuestionMark,
+  RotateCcw,
+  Sparkle,
+  X,
+} from 'lucide-react'
 import type { BugWithMeta, WorkspaceMember } from '../lib/types'
 import { AssigneePicker } from './AssigneePicker'
 import { useToast } from './Toast'
@@ -14,6 +22,8 @@ export interface BulkBarProps {
   onClear: () => void
   onSend?: (bugs: BugWithMeta[]) => void
   onCopy?: (bugs: BugWithMeta[]) => void
+  /** Asks Claude a question about the selected items. */
+  onAsk?: (bugs: BugWithMeta[]) => void
   onClaudeSetup?: () => void
 }
 
@@ -32,6 +42,7 @@ export function BulkBar({
   onClear,
   onSend,
   onCopy,
+  onAsk,
   onClaudeSetup,
 }: BulkBarProps) {
   const { toast } = useToast()
@@ -144,6 +155,16 @@ export function BulkBar({
         <button type="button" className={buttonClass} onClick={() => onSend(saved)}>
           <Sparkle strokeWidth={1.75} aria-hidden="true" className="text-accent" /> Send{' '}
           <span className="font-mono tabular-nums">{saved.length}</span> to Claude Code
+        </button>
+      )}
+      {onAsk && saved.length > 0 && (
+        <button
+          type="button"
+          className={buttonClass}
+          title="Ask Claude a question about these items, answered here"
+          onClick={() => onAsk(saved)}
+        >
+          <MessageCircleQuestionMark strokeWidth={1.5} aria-hidden="true" /> Ask
         </button>
       )}
       {onCopy && saved.length > 0 && (

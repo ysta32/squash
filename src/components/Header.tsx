@@ -6,7 +6,7 @@ import type { PresenceUser } from '../hooks/usePresence'
 import { useDismiss } from '../hooks/useDismiss'
 import { NEXT_THEME, useTheme } from '../lib/theme'
 import { cn } from '../lib/utils'
-import { Button, Logo, LogoMark } from './ui'
+import { Button, AppIcon, Logo } from './ui'
 import { PresenceAvatars } from './PresenceAvatars'
 import { ProfileMenu } from './ProfileMenu'
 import { StatsPopover } from './StatsPopover'
@@ -21,6 +21,7 @@ export interface HeaderProps {
   selfId: string
   onInvite: () => void
   onShowShortcuts?: () => void
+  onShowTour?: () => void
   role: MemberRole | null
 }
 
@@ -48,7 +49,7 @@ export function ThemeToggle() {
 
 /**
  * App shell header (DESIGN.md section 5): 48px on the paper background with a hairline rule.
- * Left: the pin mark (plus the wordmark from `sm` up) and the workspace switcher. Right:
+ * Left: the app icon (plus the wordmark from `sm` up) and the workspace switcher. Right:
  * presence, Invite, stats, theme and the profile menu.
  */
 export function Header({
@@ -59,6 +60,7 @@ export function Header({
   selfId,
   onInvite,
   onShowShortcuts,
+  onShowTour,
   role,
 }: HeaderProps) {
   const [statsOpen, setStatsOpen] = useState(false)
@@ -77,10 +79,10 @@ export function Header({
           aria-label="Squash: your workspaces"
           className="t focus-ring -ml-1 flex h-[2.2857rem] shrink-0 items-center rounded-md px-1 text-base pointer-coarse:h-[3.1429rem] pointer-coarse:min-w-[3.1429rem] pointer-coarse:justify-center"
         >
-          {/* Wordmark from 360px up; only the narrowest phones fall back to the bare pin. Wrapped
+          {/* Wordmark from 360px up; only the narrowest phones fall back to the bare icon. Wrapped
               because Logo sets its own display and cn() does not merge conflicting classes. */}
           <span className="inline-flex min-[360px]:hidden">
-            <LogoMark size={20} />
+            <AppIcon size={20} />
           </span>
           <span className="hidden min-[360px]:inline-flex">
             <Logo size={18} />
@@ -126,7 +128,11 @@ export function Header({
         <span className="max-sm:hidden">
           <ThemeToggle />
         </span>
-        <ProfileMenu workspaceId={workspace.id} onShowShortcuts={onShowShortcuts} />
+        <ProfileMenu
+          workspaceId={workspace.id}
+          onShowShortcuts={onShowShortcuts}
+          onShowTour={onShowTour}
+        />
       </div>
     </header>
   )

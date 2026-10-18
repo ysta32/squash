@@ -107,12 +107,25 @@ describe('Label, Badge, Section, Logo', () => {
     expect(section.closest('section')).toHaveTextContent('Danger zone')
   })
 
-  it('draws the pin mark beside the lowercase wordmark', () => {
+  it('draws the app icon beside the lowercase wordmark', () => {
     const { container } = render(<Logo />)
     expect(container).toHaveTextContent('squash')
     const svg = container.querySelector('svg')
     expect(svg).toHaveAttribute('aria-hidden', 'true')
-    expect(svg?.querySelector('circle')).toHaveAttribute('fill', 'var(--accent)')
+    const cut = svg?.querySelector('mask')?.id
+    expect(cut).toMatch(/^app-icon-[\w-]*-cut$/)
+    expect(svg?.querySelector(`[mask="url(#${cut})"]`)).not.toBeNull()
+  })
+
+  it('gives every app icon its own mask ids', () => {
+    const { container } = render(
+      <>
+        <Logo />
+        <Logo />
+      </>,
+    )
+    const ids = [...container.querySelectorAll('mask')].map((g) => g.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })
 

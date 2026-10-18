@@ -10,6 +10,7 @@ import type {
   PendingUpload,
   Severity,
 } from '../lib/types'
+import { KIND_LABEL } from '../lib/types'
 import { deriveTitle, randomId } from '../lib/utils'
 import { compressImage } from './useImageCompression'
 import { uploadAttachment } from '../lib/upload'
@@ -24,7 +25,7 @@ export { useSignedUrl } from './useSignedUrl'
 export type BugSort = 'newest' | 'oldest' | 'severity' | 'activity'
 
 export interface BugFilters {
-  /** Bugs or feature requests: the list only ever shows one kind. */
+  /** Bugs, feature requests or tests: the list only ever shows one kind. */
   kind: BugKind
   tab: 'open' | 'resolved' | 'all'
   filedBy: string | null
@@ -871,7 +872,7 @@ export function useBugs(
       const title =
         deriveTitle(input.description) ||
         deriveTitle(input.transcript ?? '') ||
-        (input.kind === 'feature' ? 'Untitled feature' : 'Untitled bug')
+        `Untitled ${KIND_LABEL[input.kind].one.toLowerCase()}`
       const context = input.context ? sanitizeContext(input.context) : null
       const description = input.description.trim()
       const transcript = input.transcript?.trim() ? input.transcript.trim() : null

@@ -4,12 +4,17 @@ import { Button, proseLinkClass } from '../ui'
 import { ClaudeSetupDialog } from '../ClaudeSetupDialog'
 import {
   BRIDGE_VERSION,
-  HARDENED_VERSION,
+  LEGACY_RESULTS_VERSION,
+  USAGE_VERSION,
+  getAutoSend,
   getBridgeFolder,
   pingBridge,
+  setAutoSend,
   type BridgeStatus,
 } from '../../lib/claudeExport'
 import { cn } from '../../lib/utils'
+import { useClaudeUsage } from '../../hooks/useClaudeUsage'
+import { ClaudeUsagePanel } from './ClaudeUsagePanel'
 import { LedgerGroup, LedgerRow, SettingsPanel, TOUCH } from './Ledger'
 
 type Check =
@@ -31,6 +36,11 @@ export function ClaudeSettings({
 }) {
   const [check, setCheck] = useState<Check>({ state: 'checking' })
   const [setupOpen, setSetupOpen] = useState(false)
+  const [autoSend, setAutoSendState] = useState(() => getAutoSend(workspaceId))
+  const toggleAutoSend = () => {
+    setAutoSend(workspaceId, !autoSend)
+    setAutoSendState(!autoSend)
+  }
 
   // Pure probe: no state writes, so the mount effect only sets state from its callback.
   const probe = useCallback(async (): Promise<Check> => {
@@ -90,7 +100,9 @@ export function ClaudeSettings({
   const checking = check.state === 'checking'
   const status = check.state === 'done' ? check.status : null
   const connected = status !== null && status.version >= BRIDGE_VERSION
-  const outdated = status !== null && (!connected || status.version < HARDENED_VERSION)
+  const outdated = status !== null && (!connected || status.version < LEGACY_RESULTS_VERSION)
+  const tracksUsage = status !== null && status.version >= USAGE_VERSION
+  const usage = useClaudeUsage(workspaceId, tracksUsage)
 
   const helperText = checking
     ? 'Checking this computer…'
@@ -158,6 +170,21 @@ export function ClaudeSettings({
           )}
         </LedgerRow>
         <LedgerRow
+          label="Auto-fix new items"
+          labelId="claude-auto-send-label"
+          description="Send each bug or feature request you file here straight to Claude Code. It implements it, commits, pushes and closes its terminal when done. Applies to this browser only."
+        >
+          <Button
+            variant={autoSend ? 'primary' : 'secondary'}
+            className={TOUCH}
+            aria-pressed={autoSend}
+            aria-labelledby="claude-auto-send-label"
+            onClick={toggleAutoSend}
+          >
+            {autoSend ? 'On' : 'Off'}
+          </Button>
+        </LedgerRow>
+        <LedgerRow
           label="Guide"
           description={
             <>
@@ -169,6 +196,9 @@ export function ClaudeSettings({
           }
         />
       </LedgerGroup>
+      {connected && (
+        <ClaudeUsagePanel workspaceId={workspaceId} usage={usage} outdated={!tracksUsage} />
+      )}
       <ClaudeSetupDialog
         open={setupOpen}
         onClose={() => {

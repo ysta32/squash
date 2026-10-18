@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { SEVERITIES, type Severity } from '../lib/types'
+import { SEVERITIES, isBugKind, type Severity } from '../lib/types'
 import type { BugFilters, BugSort } from './useBugs'
 
 export const DEFAULT_FILTERS: BugFilters = {
@@ -25,9 +25,10 @@ function orNull(v: string | null): string | null {
 export function parseFilters(params: URLSearchParams): BugFilters {
   const status = params.get('status')
   const sev = params.get('sev')
+  const kind = params.get('kind')
   const sort = params.get('sort')
   return {
-    kind: params.get('kind') === 'feature' ? 'feature' : DEFAULT_FILTERS.kind,
+    kind: isBugKind(kind) ? kind : DEFAULT_FILTERS.kind,
     tab: status === 'resolved' || status === 'all' ? status : DEFAULT_FILTERS.tab,
     filedBy: orNull(params.get('by')),
     resolvedBy: orNull(params.get('resolver')),

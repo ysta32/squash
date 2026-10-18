@@ -348,6 +348,7 @@ describe('CaptureBar', () => {
     fireEvent.change(box, { target: { value: 'Hidden on iPhone https://shop.example.com/c' } })
     expect(box.value).toBe('Hidden on iPhone')
     cleanup()
+    localStorage.clear()
     const second = setup()
     fireEvent.change(second.box, {
       target: { value: 'Hidden on iPhone\nhttps://shop.example.com/c' },
@@ -697,5 +698,40 @@ describe('CaptureBar', () => {
       vi.restoreAllMocks()
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('CaptureBar draft', () => {
+  afterEach(cleanup)
+
+  it('brings back unsent text and the URL chip after a reload', () => {
+    const first = setup()
+    fireEvent.change(first.box, { target: { value: 'Typed before reload https://example.com/a' } })
+    cleanup()
+    const { box } = setup()
+    expect(box.value).toBe('Typed before reload')
+    expect(
+      screen.getByRole('button', { name: 'Remove URL https://example.com/a' }),
+    ).toBeInTheDocument()
+  })
+
+  it('forgets the draft once it is filed', async () => {
+    const first = setup()
+    fireEvent.change(first.box, { target: { value: 'Filed already' } })
+    fireEvent.click(screen.getByRole('button', { name: 'File bug' }))
+    await waitFor(() => expect(first.onSubmit).toHaveBeenCalled())
+    cleanup()
+    expect(setup().box.value).toBe('')
+  })
+
+  it('keeps a draft per workspace', () => {
+    const { box } = setup()
+    fireEvent.change(box, { target: { value: 'For w1' } })
+    cleanup()
+    render(<CaptureBar workspaceId="w2" onSubmit={vi.fn()} />)
+    expect(
+      (screen.getByPlaceholderText('Paste a screenshot or describe the bug') as HTMLTextAreaElement)
+        .value,
+    ).toBe('')
   })
 })

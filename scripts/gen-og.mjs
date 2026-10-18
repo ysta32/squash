@@ -41,7 +41,7 @@ const ticks = (n, color) =>
 // product visual. Built from tokens so it never drifts from the UI's palette.
 const specimenCard = (t) => `
   <div class="card">
-    <div class="pin">${markSvg({ needle: t['text-1'], head: t.accent, size: 56 })}</div>
+    <div class="pin">${markSvg({ paint: t.accent, size: 56 })}</div>
     <div class="card-label">${ticks(4, t['sev-critical'])}${segments('No. 024 · Bug · Critical')}</div>
     <div class="card-title">Checkout button hidden behind cookie banner on iPhone</div>
     <div class="card-rule"></div>
@@ -92,7 +92,7 @@ body {
   border-top: 1.5px solid var(--border-1); padding-top: 20px;
 }
 .facts { font-size: 17px; line-height: 24px; color: var(--text-3); }
-.logo { display: flex; align-items: center; gap: 12px; font-family: 'Archivo'; font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.02em; }
+.logo { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 38px; line-height: 1; letter-spacing: -0.02em; }
 .logo svg { width: 40px; height: 40px; }
 .card {
   position: absolute; left: 676px; top: 156px; width: 452px; padding: 28px 28px 24px;
@@ -116,7 +116,7 @@ body {
   ${visual}
   <div class="foot">
     <span class="facts">${segments('MIT · Self-host on Supabase · No tracking')}</span>
-    <span class="logo">${markSvg({ needle: t['text-1'], head: t.accent })}squash</span>
+    <span class="logo">${markSvg({ paint: t.accent })}squash</span>
   </div>
 </body></html>`
 }
@@ -127,7 +127,7 @@ const logoLockup = (t, transparent) => `<!doctype html><html><head><style>${face
 body { display: flex; align-items: center; justify-content: center; ${transparent ? '' : `background: ${t.bg};`} }
 .logo { display: flex; align-items: center; gap: 30px; color: ${t['text-1']}; font-family: 'Plex Sans'; font-weight: 600; font-size: 120px; line-height: 1; letter-spacing: -0.02em; -webkit-font-smoothing: antialiased; }
 .logo svg { width: 128px; height: 128px; }
-</style></head><body><span class="logo">${markSvg({ needle: t['text-1'], head: t.accent })}squash</span></body></html>`
+</style></head><body><span class="logo">${markSvg({ paint: t.accent })}squash</span></body></html>`
 
 const pub = (...parts) => path.join(root, 'public', ...parts)
 await mkdir(pub('og'), { recursive: true })
@@ -161,10 +161,7 @@ try {
       pub('brand', `squash-logo-${name}-transparent.png`),
       await rasterize(hiDpi, logoLockup(t, true), 960, 320, { transparent: true }),
     )
-    await writeFile(
-      pub('brand', `squash-mark-${name}.svg`),
-      `${markSvg({ needle: t['text-1'], head: t.accent })}\n`,
-    )
+    await writeFile(pub('brand', `squash-mark-${name}.svg`), `${markSvg({ paint: t.accent })}\n`)
   }
 } finally {
   await browser.close()

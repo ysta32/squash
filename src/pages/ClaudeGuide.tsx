@@ -7,6 +7,7 @@ import {
   AUTO_RESOLVE_VERSION,
   HARDENED_VERSION,
   PROOF_VERSION,
+  LEGACY_RESULTS_VERSION,
   installCommand,
   pingBridge,
   type BridgeStatus,
@@ -148,10 +149,15 @@ function HelperCheck() {
                         'bg-warning',
                         `Helper v${status.version} is running. Run the command below to update it so each fix Claude finishes records its commit, branch, pull request and diff on the bug.`,
                       ]
-                    : [
-                        'bg-success',
-                        `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
-                      ]
+                    : status.version < LEGACY_RESULTS_VERSION
+                      ? [
+                          'bg-warning',
+                          `Helper v${status.version} is running. Run the command below to update it so items Claude finished under an older helper are resolved with its summary too.`,
+                        ]
+                      : [
+                          'bg-success',
+                          `Helper v${status.version} is installed and up to date. Claude reports its progress and resolves bugs in Squash when it finishes.`,
+                        ]
 
   return (
     <div className="mt-6 rounded-xl border border-border p-4">
@@ -337,6 +343,35 @@ export default function ClaudeGuide() {
             In the list, bugs Claude is working on show a pulsing Claude icon, amber when it is
             waiting for you. Progress stays on your computer, so only you see it, and only on the
             computer running the helper.
+          </p>
+        </section>
+
+        <section className="mt-10 space-y-3">
+          <h2 id="shipping" className="scroll-mt-24 text-xl font-semibold tracking-[-0.015em]">
+            Shipping the work
+          </h2>
+          <ul className="space-y-1 text-sm leading-6 text-muted [&>li]:relative [&>li]:pl-5 [&>li]:before:absolute [&>li]:before:left-0 [&>li]:before:font-mono [&>li]:before:text-ink-3 [&>li]:before:content-['–']">
+            <li>
+              Once a fix is verified, Claude commits only its own changes and pushes the current
+              branch. It never force-pushes; if the push is rejected, it rebases and tries again.
+            </li>
+            <li>
+              <span className="text-fg">Ship to main</span>, on any item or in its … menu, has
+              Claude land the item’s work on the default branch, merge what landed meanwhile, push
+              it and check that the deploy is live.
+            </li>
+            <li>
+              The <span className="text-fg">Running</span> tab lists every run in the workspace at
+              once, with Claude’s summary when each one finishes.
+            </li>
+            <li>
+              <span className="text-fg">Auto-fix</span> (Settings → Claude Code) sends each item you
+              file straight to Claude. It is off by default and set per browser.
+            </li>
+          </ul>
+          <p className="text-sm leading-6 text-muted">
+            A project that deploys from git goes live from these pushes, so protect the branches
+            that matter and review what Claude ships.
           </p>
         </section>
 

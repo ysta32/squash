@@ -18,10 +18,34 @@
 // polls GET /workspaces/<id>/runs to show it on the bug.
 //
 // Env: SQUASH_BRIDGE_PORT (4317), SQUASH_ORIGINS (comma-separated allowed app origins),
+// After screenshots: Claude may save a screenshot of its fix in the batch folder and name it in
+// result.json; Squash fetches it through GET .../results/<batch>/files/<file> and attaches it to the
+// bug as the "after" shot.
+//
+// Questions: POST /workspaces/<id>/questions runs Claude Code read-only and headless (no terminal
+// window) on a question about the project, with any items and files it is about; Squash polls
+// GET /workspaces/<id>/questions and shows Claude's answer in the app.
+//
+// Run terminals open in the background: the browser (or whatever was in front) keeps focus. Each
+// runner closes its own window when it ends (see closeOwnWindow), even if the bridge restarted.
+//
+// New projects: POST /projects creates an empty folder (a fresh git repo on main) for a new Squash
+// workspace and maps the workspace to it; Squash then sends the project's first feature as a run
+// that builds it, creates the GitHub repo and pushes.
+//
+// Queue: at most SQUASH_MAX_RUNS (3) runs work at once. Items sent while every slot is taken wait
+// in a queue (kept in ~/.squash/runs.json, so it survives a restart) and start, oldest first, as
+// runs finish; Squash shows them as queued.
+//
+// Usage: each run's runner records what Claude used (tokens, API-price cost, turns) in
+// ~/.squash/usage.jsonl, with the workspace and item numbers it ran for, and the latest plan limits
+// Claude Code reports (5-hour and weekly windows) in ~/.squash/limits.json. Squash reads both through
+// GET /workspaces/<id>/usage.
+//
 // SQUASH_CLAUDE_ARGS (extra `claude` flags; the permission mode defaults to "auto", override it
 // with e.g. "--permission-mode acceptEdits"), SQUASH_DOWNLOAD_HOSTS (comma-separated extra hosts
 // screenshots may be downloaded from), SQUASH_SUPABASE_HOST (this app's Supabase project host).
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import {
   closeSync,
@@ -34,14 +58,14 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs'
-import { appendFile, chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
-const VERSION = 7
+const VERSION = 14
 const SCRIPT = fileURLToPath(import.meta.url)
 const PORT = Number(process.env.SQUASH_BRIDGE_PORT ?? 4317)
 const HOOK = process.argv[2] === '--hook'
@@ -50,9 +74,16 @@ const DEFAULT_FOLDER = process.argv[2] && !HOOK && !RUNNER ? resolve(process.arg
 const CONFIG_DIR = join(homedir(), '.squash')
 const CONFIG_FILE = join(CONFIG_DIR, 'bridge.json')
 const RUNS_FILE = join(CONFIG_DIR, 'runs.json')
+const QUESTIONS_FILE = join(CONFIG_DIR, 'questions.json')
+const USAGE_FILE = join(CONFIG_DIR, 'usage.jsonl')
+const LIMITS_FILE = join(CONFIG_DIR, 'limits.json')
+// Runs the usage route returns per workspace, newest first (totals still count every run).
+const USAGE_RUNS = 500
+const MAX_QUESTIONS = 30
 const MAX_RUNS = 50
 const RUNS_PER_WORKSPACE = 10
 const MAX_TEXT = 2000
+const MAX_ANSWER = 20_000
 const ORIGINS = new Set(
   (
     process.env.SQUASH_ORIGINS ??
@@ -63,18 +94,106 @@ const ORIGINS = new Set(
     .filter(Boolean),
 )
 const EXTRA_ARGS = (process.env.SQUASH_CLAUDE_ARGS ?? '').split(/\s+/).filter(Boolean)
-const CLAUDE_ARGS = EXTRA_ARGS.some((a) => a.startsWith('--permission-mode'))
-  ? EXTRA_ARGS
-  : ['--permission-mode', 'auto', ...EXTRA_ARGS]
+// Runs ship their work (commit, bring in what landed on the remote, resolve conflicts, push), so
+// those git commands never wait on a permission prompt nobody is there to answer. Force-pushes
+// stay blocked.
+const SHIP_TOOLS = [
+  '--allowedTools=' +
+    [
+      'add',
+      'commit',
+      'push',
+      'fetch',
+      'pull',
+      'rebase',
+      'merge',
+      'switch',
+      'checkout',
+      'status',
+      'log',
+      'diff',
+      'init',
+      'remote',
+    ]
+      .map((cmd) => `Bash(git ${cmd}:*)`)
+      .concat('Bash(gh repo create:*)', 'Bash(gh repo view:*)')
+      .join(','),
+  '--disallowedTools=Bash(git push --force:*),Bash(git push -f:*),Bash(git push --force-with-lease:*)',
+]
+const CLAUDE_ARGS = [
+  ...(EXTRA_ARGS.some((a) => a.startsWith('--permission-mode'))
+    ? EXTRA_ARGS
+    : ['--permission-mode', 'auto', ...EXTRA_ARGS]),
+  ...SHIP_TOOLS,
+]
+/**
+ * Flags for a question run: read-only. Claude may read the code and the git and deploy history but
+ * never edit, commit or push, and SQUASH_CLAUDE_ARGS cannot widen that (its permission mode and
+ * tool lists are dropped; other flags, such as --model, still apply).
+ */
+export function askArgs(extra = EXTRA_ARGS) {
+  const kept = []
+  for (let i = 0; i < extra.length; i++) {
+    const arg = extra[i]
+    const flag = arg.split('=')[0]
+    if (
+      [
+        '--permission-mode',
+        '--allowedTools',
+        '--allowed-tools',
+        '--dangerously-skip-permissions',
+      ].includes(flag)
+    ) {
+      // A flag given as `--flag value` takes its value with it.
+      if (!arg.includes('=') && flag !== '--dangerously-skip-permissions') i++
+      continue
+    }
+    kept.push(arg)
+  }
+  const readOnlyBash = [
+    'git log',
+    'git show',
+    'git status',
+    'git diff',
+    'git branch',
+    'git fetch',
+    'git rev-parse',
+    'git ls-files',
+    'git blame',
+    'gh run list',
+    'gh run view',
+    'gh pr list',
+    'gh pr view',
+    'gh issue list',
+    'gh issue view',
+    'vercel ls',
+    'vercel inspect',
+  ].map((cmd) => `Bash(${cmd}:*)`)
+  return [
+    '--permission-mode',
+    'default',
+    ...kept,
+    '--allowedTools=' + ['Read', 'Grep', 'Glob', ...readOnlyBash].join(','),
+    '--disallowedTools=Edit,MultiEdit,Write,NotebookEdit',
+  ]
+}
 const MAC = process.platform === 'darwin'
 const MAX_BODY = 1024 * 1024
+// A question may carry files the person attached (sent inline, base64): this many, this big.
+const MAX_ASK_BODY = 40 * 1024 * 1024
+const MAX_ASK_FILES = 10
+const MAX_ASK_FILE = 8 * 1024 * 1024
+const MAX_QUESTION = 20_000
 const MAX_IMAGE = 15 * 1024 * 1024
 const MAX_DOWNLOADS = 100
 const SAFE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
 const DOWNLOAD_HOSTS = parseHosts(process.env.SQUASH_DOWNLOAD_HOSTS)
 const MAX_REDIRECTS = 3
 // Launch limits: claude runs at once, and launches per window.
-const MAX_RUNNING = 3
+const MAX_RUNNING = Math.min(10, Math.max(1, Math.floor(Number(process.env.SQUASH_MAX_RUNS)) || 3))
+// Runs waiting for a slot, and how often the queue checks for one.
+const MAX_QUEUED = 30
+const QUEUE_POLL_MS = 3000
 const MAX_LAUNCHES = 20
 const LAUNCH_WINDOW_MS = 10 * 60_000
 // A launched run holds its slot while its runner process is alive. A runner that has not written its
@@ -104,7 +223,9 @@ const RESERVED_FILES = new Set([
   'bridge.json',
 ])
 const RUN_ID = /^[0-9a-f]{32}$/
-const CLOSE_AFTER_MS = 4000
+// A batch folder's name, as in the results routes.
+const BATCH_NAME = /^[A-Za-z0-9_.-]{1,80}$/
+const CLOSE_AFTER_S = 3 // a finished run's window stays this long, to show how it went
 // Proof of fix: git and gh run with fixed argv (never a shell) and these limits.
 const GIT_TIMEOUT_MS = 10_000
 const GH_TIMEOUT_MS = 10_000
@@ -113,6 +234,12 @@ const FULL_SHA = /^[0-9a-f]{40}$/
 const BRANCH_NAME = /^[^\s\p{Cc}-][^\s\p{Cc}]{0,254}$/u
 const PR_URL = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?\/[!-~]*$/
 const PR_URL_MAX = 500
+// After screenshots Claude saves in a batch folder: an image file, at most this big.
+const SCREENSHOT_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}\.(png|jpe?g|webp)$/i
+const MAX_SCREENSHOT = 5 * 1024 * 1024
+const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }
+// New project folders: a plain name, created inside an existing parent folder.
+const PROJECT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
 
 // ── Hook mode ────────────────────────────────────────────────────────────────────────────────
 // Claude Code runs `node claude-bridge.mjs --hook <run folder>` on each hook event with the event
@@ -271,7 +398,8 @@ function hookSettings(dir) {
 
 /** Folds a run's events into what it is doing now. */
 export function summarizeRun(meta, events) {
-  let state = 'starting'
+  // A queued run has no events until it starts; one that failed to start never will.
+  let state = meta.queued ? 'queued' : meta.failed ? 'ended' : 'starting'
   let activity = null
   let message = null
   let todos = null
@@ -357,7 +485,8 @@ async function readEvents(dir) {
 async function workspaceRuns(workspaceId) {
   const runs = (await loadRuns())
     .filter((r) => r.workspaceId === workspaceId)
-    .slice(0, RUNS_PER_WORKSPACE)
+    // Queued runs always show, however many there are.
+    .filter((r, i) => r.queued || i < RUNS_PER_WORKSPACE)
   return Promise.all(runs.map(async (r) => summarizeRun(r, await readEvents(r.dir))))
 }
 
@@ -476,6 +605,32 @@ export function createLaunchLimiter({
   }
 }
 
+/**
+ * Runs waiting for a free slot, oldest first. `add(job)` queues one (false when `maxQueued` are
+ * already waiting); `drain()` starts as many as `acquire()` has slots for, handing each to
+ * `start(job, slot)`.
+ */
+export function createRunQueue({ acquire, start, maxQueued = MAX_QUEUED }) {
+  const jobs = []
+  return {
+    add(job) {
+      if (jobs.length >= maxQueued) return false
+      jobs.push(job)
+      return true
+    },
+    drain() {
+      while (jobs.length) {
+        const slot = acquire()
+        if (!slot) return
+        start(jobs.shift(), slot)
+      }
+    },
+    get size() {
+      return jobs.length
+    },
+  }
+}
+
 /** Whether a screenshot file name would clash with a file the bridge or runner uses. */
 export function isReservedName(file) {
   const name = String(file).toLowerCase()
@@ -589,6 +744,26 @@ async function pickFolder(name) {
   return path.replace(/\/$/, '')
 }
 
+/** Native picker for the folder a new project is created in. */
+async function pickParent(name) {
+  if (!MAC) throw new HttpError(409, 'no_folder', `Type the folder to create "${name}" in`)
+  const path = await osascript(
+    [
+      'on run argv',
+      'tell application "Terminal"',
+      'activate',
+      'return POSIX path of (choose folder with prompt (item 1 of argv))',
+      'end tell',
+      'end run',
+    ],
+    [`Choose where to create the folder for “${name}”`],
+  )
+  return path.replace(/\/$/, '')
+}
+
+/** Expands a leading ~ and resolves a typed folder path. */
+const expandHome = (path) => resolve(path.trim().replace(/^~(?=$|\/)/, homedir()))
+
 async function folderFor(workspaceId, name) {
   const saved = (await loadConfig()).workspaces[workspaceId]?.folder
   if (saved && isDir(saved)) return saved
@@ -605,13 +780,13 @@ function send(res, status, body, origin) {
   res.end(JSON.stringify(body))
 }
 
-function readBody(req) {
+function readBody(req, limit = MAX_BODY) {
   return new Promise((ok, fail) => {
     let size = 0
     const chunks = []
     req.on('data', (chunk) => {
       size += chunk.length
-      if (size > MAX_BODY) {
+      if (size > limit) {
         fail(new HttpError(413, 'too_large', 'Request too large'))
         req.destroy()
       } else chunks.push(chunk)
@@ -718,9 +893,10 @@ async function runBatch(batchDir, runId) {
   if (RUN_ID.test(runId ?? '')) {
     await writePrivate(runnerPidFile(batchDir, runId), String(process.pid), { flag: 'wx' })
   }
-  const { args = [] } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
+  const { args = [], usage: usageMeta = null } = (await readJson(join(batchDir, RUN_FILE))) ?? {}
   const prompt = await readFile(join(batchDir, 'prompt.md'), 'utf8')
   const log = createWriteStream(join(batchDir, 'claude.log'), { flags: 'a', mode: FILE_MODE })
+  closeOwnWindow()
   console.log(`Squash → Claude Code in ${process.cwd()}`)
   console.log('Running unattended. This window closes on its own when Claude is done.\n')
   const startedAt = new Date().toISOString()
@@ -741,6 +917,9 @@ async function runBatch(batchDir, runId) {
   })
   child.stdin.on('error', () => {})
   child.stdin.end(prompt)
+  // Claude's final reply (the stream's closing `result` event): the answer to a question.
+  let answer = ''
+  let usage = null
   for await (const line of createInterface({ input: child.stdout })) {
     log.write(line + '\n')
     let event
@@ -748,6 +927,12 @@ async function runBatch(batchDir, runId) {
       event = JSON.parse(line)
     } catch {
       continue
+    }
+    if (event.type === 'result' && typeof event.result === 'string') answer = event.result.trim()
+    if (event.type === 'result') usage = runUsage(event)
+    if (event.type === 'rate_limit_event') {
+      const limits = parseLimits(event)
+      if (limits) await writePrivate(LIMITS_FILE, JSON.stringify(limits) + '\n').catch(() => {})
     }
     if (event.type !== 'assistant') continue
     for (const block of event.message?.content ?? []) {
@@ -767,13 +952,133 @@ async function runBatch(batchDir, runId) {
   })
   await writePrivate(
     join(batchDir, DONE_FILE),
-    JSON.stringify({ exitCode, result, git, finishedAt: t }),
+    JSON.stringify({
+      exitCode,
+      result,
+      git,
+      answer: clip(answer, MAX_ANSWER),
+      usage,
+      finishedAt: t,
+    }),
   )
+  if (usage && usageMeta?.workspaceId) {
+    const entry = {
+      id: basename(batchDir),
+      workspaceId: usageMeta.workspaceId,
+      kind: usageMeta.kind === 'question' ? 'question' : 'fix',
+      bugs: Array.isArray(usageMeta.bugs) ? usageMeta.bugs : [],
+      finishedAt: t,
+      ...usage,
+    }
+    await appendFile(USAGE_FILE, JSON.stringify(entry) + '\n', { mode: FILE_MODE }).catch(() => {})
+  }
   console.log(
     result
       ? '\n✓ Done. Squash will update the bugs. Closing this window…'
       : `\n✗ Claude finished without a result (exit ${exitCode}). Closing this window…`,
   )
+}
+
+// ── Usage ────────────────────────────────────────────────────────────────────────────────────
+
+const count = (n) => (Number.isFinite(n) && n > 0 ? Math.round(n) : 0)
+
+/** What a run used, from the closing `result` event of `claude -p --output-format stream-json`. */
+export function runUsage(result) {
+  const u = result?.usage ?? {}
+  const input = count(u.input_tokens)
+  const output = count(u.output_tokens)
+  const cacheRead = count(u.cache_read_input_tokens)
+  const cacheWrite = count(u.cache_creation_input_tokens)
+  const cost = Number(result?.total_cost_usd)
+  return {
+    tokens: input + output + cacheRead + cacheWrite,
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    costUsd: Number.isFinite(cost) && cost > 0 ? Math.round(cost * 10_000) / 10_000 : 0,
+    turns: count(result?.num_turns),
+    durationMs: count(result?.duration_ms),
+    models: Object.keys(result?.modelUsage ?? {})
+      .filter((m) => typeof m === 'string' && m.length <= 100)
+      .slice(0, 5),
+  }
+}
+
+const utilization = (window) => {
+  const used = Number(window?.utilization)
+  const resets = Number(window?.resetsAt)
+  if (!Number.isFinite(used)) return null
+  return {
+    // 0..1 in the event; a percentage here.
+    usedPercent: Math.min(100, Math.max(0, Math.round(used * 1000) / 10)),
+    resetsAt: Number.isFinite(resets) && resets > 0 ? new Date(resets * 1000).toISOString() : null,
+  }
+}
+
+/**
+ * Plan limits from a stream-json `rate_limit_event` (Claude subscriptions only): how much of the
+ * 5-hour and weekly windows is used and when each resets. Null when the event carries none.
+ */
+export function parseLimits(event, now = new Date()) {
+  const info = event?.rate_limit_info
+  if (!info || typeof info !== 'object') return null
+  const windows = info.unifiedWindows ?? {}
+  const fiveHour = utilization(windows.five_hour)
+  const sevenDay = utilization(windows.seven_day)
+  if (!fiveHour && !sevenDay) return null
+  return {
+    fiveHour,
+    sevenDay,
+    status: ['allowed', 'allowed_warning', 'rejected'].includes(info.status) ? info.status : null,
+    updatedAt: now.toISOString(),
+  }
+}
+
+/**
+ * A workspace's usage from the ledger's entries (oldest first, as appended): totals over every run,
+ * the newest `limit` runs, and the account's latest plan limits.
+ */
+export function summarizeUsage(entries, workspaceId, limits = null, limit = USAGE_RUNS) {
+  const total = { runs: 0, tokens: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0 }
+  const runs = []
+  for (const e of entries) {
+    if (e?.workspaceId !== workspaceId) continue
+    total.runs++
+    for (const key of ['tokens', 'input', 'output', 'cacheRead', 'cacheWrite', 'costUsd']) {
+      total[key] += Number.isFinite(e[key]) ? e[key] : 0
+    }
+    runs.push({
+      id: String(e.id ?? ''),
+      kind: e.kind === 'question' ? 'question' : 'fix',
+      bugs: Array.isArray(e.bugs) ? e.bugs.filter(Number.isInteger) : [],
+      finishedAt: typeof e.finishedAt === 'string' ? e.finishedAt : null,
+      tokens: count(e.tokens),
+      costUsd: Number.isFinite(e.costUsd) ? e.costUsd : 0,
+      turns: count(e.turns),
+      durationMs: count(e.durationMs),
+      models: Array.isArray(e.models) ? e.models.filter((m) => typeof m === 'string') : [],
+    })
+  }
+  total.costUsd = Math.round(total.costUsd * 10_000) / 10_000
+  return { limits, total, runs: runs.reverse().slice(0, limit) }
+}
+
+async function workspaceUsage(workspaceId) {
+  let entries = []
+  try {
+    entries = (await readFile(USAGE_FILE, 'utf8')).split('\n').flatMap((line) => {
+      try {
+        return line ? [JSON.parse(line)] : []
+      } catch {
+        return []
+      }
+    })
+  } catch {
+    // No runs recorded yet.
+  }
+  return summarizeUsage(entries, workspaceId, await readJson(LIMITS_FILE))
 }
 
 // ── Proof of fix ─────────────────────────────────────────────────────────────────────────────
@@ -907,61 +1212,104 @@ export async function collectGitReport(cwd, start, { run = execQuiet, startedAt 
   }
 }
 
-/** Closes a Terminal window once its shell has exited, so macOS does not ask to confirm. */
-async function closeWindow(windowId) {
-  for (let i = 0; i < 30; i++) {
-    const state = await osascript(
-      [
-        'on run argv',
-        'tell application "Terminal"',
-        'set matches to (every window whose id is ((item 1 of argv) as integer))',
-        'if matches is {} then return "gone"',
-        'set w to item 1 of matches',
-        'if busy of selected tab of w then return "busy"',
-        'close w',
-        'return "closed"',
-        'end tell',
-        'end run',
-      ],
-      [String(windowId)],
-    ).catch(() => 'gone')
-    if (state !== 'busy') return
-    await new Promise((ok) => setTimeout(ok, 1000))
+/**
+ * AppleScript that closes the Terminal window holding the tty in argv 1 once its shell has exited
+ * (so macOS does not ask to confirm), argv 2 seconds later. The window is found while the runner
+ * holds the tty (busy: a finished window keeps showing the tty after it has been reused), then
+ * followed by id.
+ */
+export const CLOSE_OWN_WINDOW_SCRIPT = [
+  'on run argv',
+  'set myTty to item 1 of argv',
+  'set myWindow to missing value',
+  'tell application "Terminal"',
+  'repeat with w in windows',
+  'repeat with t in tabs of w',
+  'if tty of t is myTty and busy of t then set myWindow to id of w',
+  'end repeat',
+  'end repeat',
+  'end tell',
+  'if myWindow is missing value then return',
+  // Runs can take hours; give up after a day.
+  'repeat 43200 times',
+  'tell application "Terminal"',
+  'set matches to (every window whose id is myWindow and visible is true)',
+  'if matches is {} then return',
+  'set finished to not (busy of selected tab of (item 1 of matches))',
+  'end tell',
+  'if finished then',
+  'delay ((item 2 of argv) as number)',
+  'tell application "Terminal"',
+  'set matches to (every window whose id is myWindow and visible is true)',
+  'if matches is not {} then close (item 1 of matches)',
+  'end tell',
+  'return',
+  'end if',
+  'delay 2',
+  'end repeat',
+  'end run',
+]
+
+/**
+ * Closes this run's Terminal window when the run ends, however it ends. A detached osascript
+ * watches the window, so it outlives the runner and does not depend on the bridge (which may
+ * restart mid-run); the window is matched by this process's tty, which, unlike the window id the
+ * bridge saw at launch, cannot mix up when several runs open at once.
+ */
+function closeOwnWindow() {
+  if (!MAC || !process.stdout.isTTY) return
+  let tty
+  try {
+    tty = execFileSync('tty', { stdio: ['inherit', 'pipe', 'ignore'], encoding: 'utf8' }).trim()
+  } catch {
+    return
   }
+  if (!/^\/dev\/ttys\d+$/.test(tty)) return
+  const args = [...CLOSE_OWN_WINDOW_SCRIPT.flatMap((l) => ['-e', l]), tty, String(CLOSE_AFTER_S)]
+  spawn('osascript', args, { detached: true, stdio: 'ignore' }).unref()
 }
 
-/** Closes the run's Terminal window shortly after the runner reports Claude has finished. */
-function closeWhenDone(windowId, batchDir) {
-  const timer = setInterval(() => {
-    if (!existsSync(join(batchDir, DONE_FILE))) return
-    clearInterval(timer)
-    setTimeout(() => void closeWindow(windowId), CLOSE_AFTER_MS)
-  }, 2000)
-}
+/**
+ * AppleScript that opens a run's Terminal window without taking focus: Terminal is never activated,
+ * and whatever app was in front (the browser with Squash) is brought back in case launching
+ * Terminal pulled it forward. Returns the new window's id.
+ */
+export const BACKGROUND_TERMINAL_SCRIPT = [
+  'on run argv',
+  'set previous to path to frontmost application as text',
+  'tell application "Terminal"',
+  'do script (item 1 of argv)',
+  // do script opens the new window first among Terminal's own windows.
+  'set newWindow to id of front window',
+  'end tell',
+  'if previous does not contain "Terminal" then',
+  'try',
+  'tell application previous to activate',
+  'end try',
+  'end if',
+  'return newWindow',
+  'end run',
+]
 
-/** Runs Claude Code on the batch: in a new Terminal window on macOS, headless elsewhere. */
-async function launch(folder, batchDir, runId) {
+/**
+ * Runs Claude Code on the batch: in a new background Terminal window on macOS, headless elsewhere
+ * and for questions (`headless`), whose answers show in Squash instead.
+ */
+async function launch(
+  folder,
+  batchDir,
+  runId,
+  { args = CLAUDE_ARGS, headless = false, usage = null } = {},
+) {
   await writePrivate(
     join(batchDir, 'settings.json'),
     JSON.stringify(hookSettings(batchDir), null, 2) + '\n',
   )
-  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args: CLAUDE_ARGS }))
-  if (MAC) {
+  // `usage` says whose run this is ({ workspaceId, kind, bugs }), for the usage ledger.
+  await writePrivate(join(batchDir, RUN_FILE), JSON.stringify({ args, usage }))
+  if (MAC && !headless) {
     const command = `cd ${sh(folder)} && ${sh(process.execPath)} ${sh(SCRIPT)} --run ${sh(batchDir)} ${runId}; exit`
-    const windowId = await osascript(
-      [
-        'on run argv',
-        'tell application "Terminal"',
-        'activate',
-        'do script (item 1 of argv)',
-        // do script opens the new window in front.
-        'return id of front window',
-        'end tell',
-        'end run',
-      ],
-      [command],
-    )
-    if (/^\d+$/.test(windowId)) closeWhenDone(Number(windowId), batchDir)
+    await osascript(BACKGROUND_TERMINAL_SCRIPT, [command])
     return
   }
   const log = openSync(join(batchDir, 'runner.log'), 'a', FILE_MODE)
@@ -979,11 +1327,53 @@ const limiter = createLaunchLimiter({
   isRunning: (run, msSinceLaunch) => runnerLive(run.pidFile, msSinceLaunch),
 })
 
+/** Runs sent while every slot was taken; each starts when one frees up. */
+const runQueue = createRunQueue({
+  acquire: () => limiter.acquire(),
+  start: (job, slot) => void startQueued(job, slot),
+})
+
+/** Launches a recorded run in the slot reserved for it. */
+async function startRun(run, name, slot) {
+  const runId = randomBytes(16).toString('hex')
+  slot.track({ pidFile: runnerPidFile(run.dir, runId) })
+  await launch(run.folder, run.dir, runId, { usage: run.usage })
+  console.log(`→ ${name}: Claude Code started in ${run.folder}`)
+}
+
+async function startQueued({ run, name }, slot) {
+  try {
+    const started = { ...run, queued: false, startedAt: new Date().toISOString() }
+    await recordRun(started)
+    await startRun(started, name, slot)
+  } catch (err) {
+    slot.release()
+    await recordRun({ ...run, queued: false, failed: true }).catch(() => {})
+    console.error(
+      `✗ ${name}: queued run failed to start:`,
+      err instanceof Error ? err.message : err,
+    )
+  }
+}
+
+/** Queues the runs a previous bridge left waiting, oldest first. */
+async function requeueRuns() {
+  const waiting = (await loadRuns()).filter((r) => r.queued).reverse()
+  for (const run of waiting) {
+    if (existsSync(join(run.dir, 'prompt.md')) && runQueue.add({ run, name: run.name ?? 'Squash' }))
+      continue
+    await recordRun({ ...run, queued: false, failed: true })
+  }
+  if (waiting.length) console.log(`  ${runQueue.size} queued run(s) waiting for a slot`)
+  runQueue.drain()
+}
+
 async function handleSend(payload) {
   const { workspaceId, name, batch, bugs, prompt, downloads } = validateSend(payload)
-  // Reserve before any await so concurrent requests cannot overshoot the limits.
-  const slot = limiter.acquire()
-  if (!slot) throw new HttpError(429, 'busy', 'busy')
+  // Reserve before any await so concurrent requests cannot overshoot the limits. Runs already
+  // waiting go first: a new one only starts straight away when none are.
+  const slot = runQueue.size === 0 ? limiter.acquire() : null
+  if (!slot && runQueue.size >= MAX_QUEUED) throw new HttpError(429, 'busy', 'busy')
   try {
     const folder = await folderFor(workspaceId, name)
     const root = join(folder, '.squash')
@@ -994,22 +1384,33 @@ async function handleSend(payload) {
     await writeFile(join(root, '.gitignore'), '*\n')
     await Promise.all(downloads.map((d) => download(d.url, join(batchDir, d.file))))
     await writePrivate(join(batchDir, 'prompt.md'), prompt)
-    await recordRun({
+    const run = {
       id: batch,
       workspaceId,
+      name,
       bugs,
       folder,
       dir: batchDir,
       startedAt: new Date().toISOString(),
-    })
-    const runId = randomBytes(16).toString('hex')
-    slot.track({ pidFile: runnerPidFile(batchDir, runId) })
-    await launch(folder, batchDir, runId)
-    console.log(`→ ${name}: Claude Code started in ${folder} (${downloads.length} screenshots)`)
+      usage: { workspaceId, kind: 'fix', bugs },
+    }
+    if (!slot) {
+      // Recorded before it joins the queue, so starting it always overwrites the queued record.
+      await recordRun({ ...run, queued: true })
+      if (!runQueue.add({ run, name })) {
+        await recordRun({ ...run, failed: true })
+        throw new HttpError(429, 'busy', 'busy')
+      }
+      const ahead = runQueue.size - 1
+      console.log(`… ${name}: queued until a run finishes (${ahead} ahead)`)
+      return { ok: true, folder, queued: true, ahead }
+    }
+    await recordRun(run)
+    await startRun(run, name, slot)
     return { ok: true, folder }
   } catch (err) {
     // Nothing is running if it failed before (or while) starting Claude.
-    slot.release()
+    slot?.release()
     throw err
   }
 }
@@ -1018,7 +1419,7 @@ async function handleSetFolder(workspaceId, payload) {
   const name = workspaceName(payload.workspaceName)
   let folder
   if (typeof payload.folder === 'string' && payload.folder.trim()) {
-    folder = resolve(payload.folder.trim().replace(/^~(?=$|\/)/, homedir()))
+    folder = expandHome(payload.folder)
     if (!isAbsolute(folder) || !isDir(folder)) throw bad(`Not a folder: ${folder}`)
   } else {
     folder = await pickFolder(name)
@@ -1028,17 +1429,62 @@ async function handleSetFolder(workspaceId, payload) {
   return { folder }
 }
 
-/** The recorded run with this batch name in the workspace, or null. */
+/**
+ * Batches launched by helpers before v4, which never recorded runs or wrote done.json: Claude
+ * still wrote result.json, but nothing picked it up, so those items were never resolved. Returns
+ * the unapplied ones in `bugsDir` (a project's .squash/bugs) whose prompt is for this workspace.
+ * A batch with run.json belongs to the runner (it may still be working) and is never adopted.
+ */
+export async function legacyBatches(bugsDir, workspaceId) {
+  let names
+  try {
+    names = await readdir(bugsDir)
+  } catch {
+    return []
+  }
+  const found = []
+  for (const name of names.sort()) {
+    if (!BATCH_NAME.test(name)) continue
+    const dir = join(bugsDir, name)
+    const has = (file) => existsSync(join(dir, file))
+    if (!has(RESULT_FILE) || has(RUN_FILE) || has(DONE_FILE) || has(CLAIM_FILE)) continue
+    let prompt
+    try {
+      prompt = await readFile(join(dir, 'prompt.md'), 'utf8')
+    } catch {
+      continue
+    }
+    if (prompt.includes(`/app/${workspaceId}/`))
+      found.push({ id: name, workspaceId, dir, legacy: true })
+  }
+  return found
+}
+
+/** Legacy batches in the workspace's project folder (see legacyBatches). */
+async function workspaceLegacyRuns(workspaceId) {
+  const folder = (await loadConfig()).workspaces[workspaceId]?.folder ?? DEFAULT_FOLDER
+  if (!folder || !isDir(folder)) return []
+  return legacyBatches(join(folder, '.squash', 'bugs'), workspaceId)
+}
+
+/** The recorded (or legacy) run with this batch name in the workspace, or null. */
 async function findRun(workspaceId, batch) {
-  return (await loadRuns()).find((r) => r.id === batch && r.workspaceId === workspaceId) ?? null
+  const recorded = (await loadRuns()).find((r) => r.id === batch && r.workspaceId === workspaceId)
+  if (recorded) return recorded
+  return (await workspaceLegacyRuns(workspaceId)).find((r) => r.id === batch) ?? null
 }
 
 /** Finished runs in the workspace that no Squash tab has applied yet. */
 async function workspaceResults(workspaceId) {
   const results = []
-  for (const run of (await loadRuns()).filter((r) => r.workspaceId === workspaceId)) {
+  const recorded = (await loadRuns()).filter((r) => r.workspaceId === workspaceId)
+  const ids = new Set(recorded.map((r) => r.id))
+  const legacy = (await workspaceLegacyRuns(workspaceId)).filter((r) => !ids.has(r.id))
+  for (const run of [...recorded, ...legacy]) {
     if (!run.dir || existsSync(join(run.dir, CLAIM_FILE))) continue
-    const done = await readJson(join(run.dir, DONE_FILE))
+    const done = run.legacy
+      ? { exitCode: null, result: await readJson(join(run.dir, RESULT_FILE)), git: null }
+      : await readJson(join(run.dir, DONE_FILE))
     if (done)
       results.push({
         batch: run.id,
@@ -1053,7 +1499,7 @@ async function workspaceResults(workspaceId) {
 /** Marks a run as applied. Only the first caller gets claimed: true, so it is applied once. */
 async function claimResult(workspaceId, batch) {
   const run = await findRun(workspaceId, batch)
-  if (!run?.dir || !existsSync(join(run.dir, DONE_FILE))) {
+  if (!run?.dir || !existsSync(join(run.dir, run.legacy ? RESULT_FILE : DONE_FILE))) {
     throw new HttpError(404, 'not_found', 'No such finished run')
   }
   try {
@@ -1063,6 +1509,230 @@ async function claimResult(workspaceId, batch) {
     if (err?.code === 'EEXIST') return { claimed: false }
     throw err
   }
+}
+
+/**
+ * An after screenshot Claude saved in a run's batch folder: a plain image file (never a symlink),
+ * named in SCREENSHOT_FILE form, not one of the bridge's own files, at most MAX_SCREENSHOT bytes.
+ */
+export async function readScreenshot(dir, file) {
+  if (typeof file !== 'string' || !SCREENSHOT_FILE.test(file) || isReservedName(file)) {
+    throw bad('Invalid screenshot name')
+  }
+  const path = join(dir, file)
+  let info
+  try {
+    info = await lstat(path)
+  } catch {
+    throw new HttpError(404, 'not_found', 'No such screenshot')
+  }
+  if (!info.isFile()) throw new HttpError(404, 'not_found', 'No such screenshot')
+  if (info.size > MAX_SCREENSHOT) throw new HttpError(413, 'too_large', 'Screenshot too large')
+  const data = await readFile(path)
+  const ext = file.split('.').pop().toLowerCase()
+  return { data, type: IMAGE_TYPES[ext] }
+}
+
+async function sendScreenshot(res, workspaceId, batch, file, origin) {
+  const run = await findRun(workspaceId, batch)
+  if (!run?.dir) throw new HttpError(404, 'not_found', 'No such run')
+  const { data, type } = await readScreenshot(run.dir, file)
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Content-Length': data.length,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Access-Control-Allow-Origin': origin,
+    Vary: 'Origin',
+  })
+  res.end(data)
+}
+
+/** Validates a new project request: the workspace, a plain folder name and an optional parent. */
+export function validateProject(payload) {
+  const { workspaceId, name, parent } = payload ?? {}
+  if (typeof workspaceId !== 'string' || !SAFE_NAME.test(workspaceId)) {
+    throw bad('Invalid workspace')
+  }
+  if (typeof name !== 'string' || !PROJECT_NAME.test(name) || name.includes('..')) {
+    throw bad('Use letters, numbers, dots, dashes and underscores for the folder name')
+  }
+  if (parent !== undefined && parent !== null && typeof parent !== 'string') {
+    throw bad('Invalid parent folder')
+  }
+  return {
+    workspaceId,
+    workspaceName: workspaceName(payload.workspaceName),
+    name,
+    parent: typeof parent === 'string' && parent.trim() ? parent : null,
+  }
+}
+
+/**
+ * Creates a new project's folder: `<parent>/<name>`, empty, a git repo on `main`, and maps the
+ * workspace to it so its runs open there. An existing folder is used only when it is empty.
+ */
+async function handleProject(payload) {
+  const { workspaceId, workspaceName: label, name, parent: typed } = validateProject(payload)
+  const parent = typed ? expandHome(typed) : await pickParent(name)
+  if (!isAbsolute(parent) || !isDir(parent)) throw bad(`Not a folder: ${parent}`)
+  const folder = join(parent, name)
+  if (basename(folder) !== name) throw bad('Invalid folder name')
+  if (existsSync(folder)) {
+    if (!isDir(folder) || (await readdir(folder)).length > 0) {
+      throw new HttpError(409, 'exists', `${folder} already exists and is not empty`)
+    }
+  } else {
+    await mkdir(folder)
+  }
+  if ((await execQuiet('git', ['init', '-b', 'main'], { cwd: folder })) === null) {
+    // Older git has no -b: init, then point HEAD at main.
+    await execQuiet('git', ['init'], { cwd: folder })
+    await execQuiet('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: folder })
+  }
+  await saveFolder(workspaceId, label, folder)
+  console.log(`✓ New project ${label} → ${folder}`)
+  return { folder }
+}
+
+// ── Questions ────────────────────────────────────────────────────────────────────────────────
+
+/** A file the person attached to a question, by the name Squash gives it in the question folder. */
+const ASK_FILE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}$/
+
+/** Validates a question: its id, the text, item screenshots to download and attached files. */
+export function validateAsk(payload) {
+  const { id, question, prompt } = payload ?? {}
+  const sent = validateSend({ ...payload, batch: id, downloads: payload?.downloads ?? [] })
+  if (typeof question !== 'string' || !question.trim()) throw bad('Missing question')
+  if (question.length > MAX_QUESTION) throw bad('Question too long')
+  if (typeof prompt !== 'string' || !prompt.trim()) throw bad('Missing prompt')
+  const files = payload.files ?? []
+  if (!Array.isArray(files) || files.length > MAX_ASK_FILES) throw bad('Too many files')
+  const names = new Set(sent.downloads.map((d) => d.file))
+  const decoded = files.map((f) => {
+    if (
+      typeof f?.name !== 'string' ||
+      !ASK_FILE.test(f.name) ||
+      f.name.includes('..') ||
+      isReservedName(f.name) ||
+      names.has(f.name)
+    ) {
+      throw bad('Invalid file name')
+    }
+    names.add(f.name)
+    if (typeof f.data !== 'string') throw bad('Invalid file')
+    const data = Buffer.from(f.data, 'base64')
+    if (data.length > MAX_ASK_FILE) throw bad(`${f.name} is too large`)
+    return { name: f.name, data }
+  })
+  return { ...sent, id: sent.batch, question: question.trim(), files: decoded }
+}
+
+async function loadQuestions() {
+  try {
+    const list = JSON.parse(await readFile(QUESTIONS_FILE, 'utf8'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+async function saveQuestions(list) {
+  await mkdirPrivate(CONFIG_DIR)
+  await writePrivate(QUESTIONS_FILE, JSON.stringify(list.slice(0, MAX_QUESTIONS), null, 2) + '\n')
+}
+
+/**
+ * A question as Squash shows it: `working` (with what Claude is doing), `answered` (with the
+ * answer) or `failed` (Claude exited without one, or its runner never started or died).
+ */
+export function summarizeQuestion(meta, events, done, live) {
+  const base = {
+    id: meta.id,
+    question: meta.question,
+    bugs: meta.bugs ?? [],
+    files: meta.files ?? [],
+    askedAt: meta.askedAt,
+  }
+  if (done) {
+    const answer = typeof done.answer === 'string' ? done.answer.trim() : ''
+    return answer
+      ? { ...base, state: 'answered', answer, finishedAt: done.finishedAt ?? null }
+      : {
+          ...base,
+          state: 'failed',
+          error: `Claude finished without an answer (exit ${done.exitCode ?? 'unknown'}).`,
+          finishedAt: done.finishedAt ?? null,
+        }
+  }
+  if (!live) return { ...base, state: 'failed', error: 'Claude stopped before answering.' }
+  const run = summarizeRun({ id: meta.id, startedAt: meta.askedAt }, events)
+  return { ...base, state: 'working', activity: run.activity ?? 'Starting' }
+}
+
+async function workspaceQuestions(workspaceId) {
+  const list = (await loadQuestions()).filter((q) => q.workspaceId === workspaceId)
+  return Promise.all(
+    list.map(async (q) => {
+      const done = await readJson(join(q.dir, DONE_FILE))
+      const since = Date.now() - Date.parse(q.askedAt)
+      const live = done ? true : runnerLive(runnerPidFile(q.dir, q.runId), since)
+      return summarizeQuestion(q, done ? [] : await readEvents(q.dir), done, live)
+    }),
+  )
+}
+
+/** Starts a read-only, headless Claude Code run that answers a question about the project. */
+async function handleAsk(workspaceIdFromPath, payload) {
+  const ask = validateAsk({ ...payload, workspaceId: workspaceIdFromPath })
+  const slot = limiter.acquire()
+  if (!slot) throw new HttpError(429, 'busy', 'busy')
+  try {
+    const folder = await folderFor(ask.workspaceId, ask.name)
+    const root = join(folder, '.squash')
+    const dir = join(root, 'questions', ask.id)
+    await mkdirPrivate(root)
+    await mkdirPrivate(join(root, 'questions'))
+    await mkdirPrivate(dir)
+    await writeFile(join(root, '.gitignore'), '*\n')
+    await Promise.all(ask.downloads.map((d) => download(d.url, join(dir, d.file))))
+    await Promise.all(ask.files.map((f) => writePrivate(join(dir, f.name), f.data)))
+    await writePrivate(join(dir, 'prompt.md'), ask.prompt)
+    const runId = randomBytes(16).toString('hex')
+    const record = {
+      id: ask.id,
+      workspaceId: ask.workspaceId,
+      question: clip(ask.question, MAX_QUESTION),
+      bugs: ask.bugs,
+      files: ask.files.map((f) => f.name),
+      folder,
+      dir,
+      runId,
+      askedAt: new Date().toISOString(),
+    }
+    await saveQuestions([record, ...(await loadQuestions()).filter((q) => q.id !== ask.id)])
+    slot.track({ pidFile: runnerPidFile(dir, runId) })
+    await launch(folder, dir, runId, {
+      args: askArgs(),
+      headless: true,
+      usage: { workspaceId: ask.workspaceId, kind: 'question', bugs: ask.bugs },
+    })
+    console.log(`? ${ask.name}: Claude Code is answering a question in ${folder}`)
+    return { ok: true, id: ask.id }
+  } catch (err) {
+    slot.release()
+    throw err
+  }
+}
+
+/** Removes a question (and its answer) from the workspace's list. */
+async function forgetQuestion(workspaceId, id) {
+  const list = await loadQuestions()
+  const kept = list.filter((q) => !(q.id === id && q.workspaceId === workspaceId))
+  if (kept.length === list.length) throw new HttpError(404, 'not_found', 'No such question')
+  await saveQuestions(kept)
+  return { ok: true }
 }
 
 function serve() {
@@ -1093,6 +1763,16 @@ function serve() {
       const resultsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results$/.exec(path)
       const claimRoute =
         /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/claim$/.exec(path)
+      const fileRoute =
+        /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/results\/([A-Za-z0-9_.-]{1,80})\/files\/([A-Za-z0-9_.-]{1,84})$/.exec(
+          path,
+        )
+      const usageRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/usage$/.exec(path)
+      const questionsRoute = /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/questions$/.exec(path)
+      const forgetRoute =
+        /^\/workspaces\/([A-Za-z0-9_-]{1,80})\/questions\/([A-Za-z0-9_.-]{1,80})\/forget$/.exec(
+          path,
+        )
       if (req.method === 'GET' && path === '/health') {
         return send(res, 200, { ok: true, version: VERSION, platform: process.platform }, origin)
       }
@@ -1105,6 +1785,25 @@ function serve() {
       }
       if (req.method === 'GET' && resultsRoute) {
         return send(res, 200, { runs: await workspaceResults(resultsRoute[1]) }, origin)
+      }
+      if (req.method === 'GET' && fileRoute) {
+        return await sendScreenshot(res, fileRoute[1], fileRoute[2], fileRoute[3], origin)
+      }
+      if (req.method === 'GET' && usageRoute) {
+        return send(res, 200, await workspaceUsage(usageRoute[1]), origin)
+      }
+      if (req.method === 'GET' && questionsRoute) {
+        return send(res, 200, { questions: await workspaceQuestions(questionsRoute[1]) }, origin)
+      }
+      if (req.method === 'POST' && questionsRoute) {
+        const body = await readBody(req, MAX_ASK_BODY)
+        return send(res, 200, await handleAsk(questionsRoute[1], body), origin)
+      }
+      if (req.method === 'POST' && forgetRoute) {
+        return send(res, 200, await forgetQuestion(forgetRoute[1], forgetRoute[2]), origin)
+      }
+      if (req.method === 'POST' && path === '/projects') {
+        return send(res, 200, await handleProject(await readBody(req)), origin)
       }
       if (req.method === 'POST' && claimRoute) {
         return send(res, 200, await claimResult(claimRoute[1], claimRoute[2]), origin)
@@ -1137,7 +1836,9 @@ function serve() {
     console.log(`  folders: ${DEFAULT_FOLDER ?? `per workspace, saved in ${CONFIG_FILE}`}`)
     console.log(`  origins: ${[...ORIGINS].join(', ')}`)
     console.log('Leave this running, then press "Send to Claude" in Squash.')
+    void requeueRuns()
   })
+  setInterval(() => runQueue.drain(), QUEUE_POLL_MS).unref()
 }
 
 function isMain() {
@@ -1163,7 +1864,7 @@ if (isMain()) {
   }
   // Tighten files left readable by older versions of the bridge.
   await mkdirPrivate(CONFIG_DIR)
-  for (const file of [CONFIG_FILE, RUNS_FILE]) {
+  for (const file of [CONFIG_FILE, RUNS_FILE, USAGE_FILE, LIMITS_FILE]) {
     if (existsSync(file)) await chmod(file, FILE_MODE)
   }
   serve()

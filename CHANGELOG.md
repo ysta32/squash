@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- A Running tab next to Bugs, Features and Tests shows every Claude Code run in the workspace at once, updating live: what Claude is doing, how far through its plan it is, and Claude's summary once a run finishes. Click an item in a run to open it.
+- Ship to main: a button on every bug, feature and test (also in its … menu) has Claude Code commit the item's work on the default branch, merge in whatever landed there meanwhile (resolving conflicts), push it and check that the deploy is live, doing the work first if it isn't done yet.
+- Claude Code runs ship their work: once a fix or feature is verified, Claude commits it and pushes it to the current branch (never force-pushing), so a project that deploys from git goes live without touching the terminal. If a push is rejected, Claude rebases, resolves any conflicts and pushes again, then checks the deploy. Reinstall the helper (v9) so those git commands run without a permission prompt.
+- Auto-fix new items (Settings → Claude Code): when on, each bug or feature request you file goes straight to Claude Code once its screenshots upload. Off by default, per browser.
+- A short tour of Squash (filing, the four kinds of item, working the list, Claude Code with the Running tab, Ship to main and Auto-fix, inviting your team). A new workspace offers it on its first open, and **Take the tour** in the command palette, the profile menu and the Get started checklist opens it again.
+- Ask Claude about the project: ask a question ("Has #12 been fixed and deployed yet?"), optionally about picked items and with files attached, from **Ask** on the selection bar, the list's … menu or the command palette. Claude Code answers read-only in the background, with no terminal, and the answer shows in Squash. Needs helper v11.
+- Claude usage (Settings → Claude Code): how much of your Claude plan is left (the 5-hour and weekly limits, with when each resets), what Claude Code used on this project in tokens and API-price cost, and which items used the most. Each item also shows what Claude used on it under its progress. Recorded by the helper for every run on this computer; needs helper v13.
+- Send as many items to Claude Code as you like: when Claude is already working on as many runs as it runs at once (3, or `SQUASH_MAX_RUNS`), new ones queue and start on their own as runs finish, shown as Queued on the item and under Running. Items sent together run as one session that hands independent ones to subagents in parallel. Needs helper v14.
+
 ### Changed
 
 - The whole site and the app are now set in the home page's world: black, white and one red, in both light and dark. Red means one thing everywhere — something is open, hot, or about to be changed — and nothing else carries colour.
@@ -9,6 +20,10 @@
 - Every public page is set on the same four drafting guides the home page introduced, with Archivo for headings and small labels in plain sentence case instead of tracked-out capitals. The ruled-paper band behind marketing heroes is gone.
 - The accent ink picker's default is Marker; an older Viridian preference lands on it. The other inks are unchanged.
 - Favicons, app icons, social cards and the press kit were regenerated from the new colours, and the product screenshots on the public pages were recaptured.
+- Claude Code run terminals open in the background (helper v11): Squash keeps focus instead of Terminal jumping to the front.
+- Onboarding's last step mentions features, tests, to-dos and Claude Code. Sign-in asks for an email (not a work email), says the account is free, and links the Terms and privacy notice.
+- Privacy and Terms cover tests and to-dos, Claude Code committing and pushing to your own remote, Ship to main, Auto-fix, your rights over your data and the minimum age (13).
+- The getting-started docs and the Claude Code guide describe the new tabs, the tour and shipping.
 
 ## v2.0.1 — 2026-10-08
 

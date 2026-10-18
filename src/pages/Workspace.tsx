@@ -12,12 +12,16 @@ import {
 } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
+  Activity,
+  Inbox,
   ArrowLeft,
   Bug as BugIcon,
   CircleCheck,
   CircleDot,
   Layers,
+  FlaskConical,
   Lightbulb,
+  ListTodo,
   Lock,
   MousePointerClick,
   Search,
@@ -28,7 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { BugDetail, BugDetailSkeleton } from '../components/BugDetail'
-import { BugList } from '../components/BugList'
+import { BugList, type ListTab } from '../components/BugList'
 import { CaptureBar } from '../components/CaptureBar'
 import { Header } from '../components/Header'
 import { InviteDialog } from '../components/InviteDialog'
@@ -41,28 +45,46 @@ import { useListWidth } from '../lib/listWidth'
 import { Skeleton } from '../components/Skeleton'
 import { Button, ButtonLink, Kbd } from '../components/ui'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
+import { TourDialog } from '../components/TourDialog'
+import { tourSeen } from '../lib/tour'
 import { useToast } from '../components/Toast'
 import { countBugs, filterBugs, hasActiveFilters, sortBugs, useBugs } from '../hooks/useBugs'
 import { useUrlFilters, writeFilters } from '../hooks/useUrlFilters'
 import { ClaudeSetupDialog } from '../components/ClaudeSetupDialog'
+import { AskClaudeDialog } from '../components/AskClaudeDialog'
+import { useClaudeQuestions } from '../hooks/useClaudeQuestions'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { useClaudeExport } from '../hooks/useClaudeExport'
 import { useClaudeResults } from '../hooks/useClaudeResults'
+import { useAppUpdate } from '../hooks/useAppUpdate'
+import { useUpdates } from '../hooks/useUpdates'
 import { isOverlayOpen, useOverlayOpen, useShortcut } from '../hooks/useKeyboard'
 import { usePresence } from '../hooks/usePresence'
 import { useNotifications } from '../hooks/useNotifications'
 import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import { setLastWorkspace, useWorkspace, useWorkspaces } from '../hooks/useWorkspaces'
 import { useAuth } from '../lib/auth'
-import { AUTO_RESOLVE_VERSION } from '../lib/claudeExport'
+import {
+  ASK_VERSION,
+  AUTO_RESOLVE_VERSION,
+  USAGE_VERSION,
+  askBridge,
+  getAutoSend,
+  isRunActive,
+} from '../lib/claudeExport'
+import { usageByBug } from '../lib/claudeUsage'
+import { useClaudeUsage } from '../hooks/useClaudeUsage'
 import { bugsToCsv, bugsToMarkdown, downloadText, exportFilename } from '../lib/export'
 import { supabase } from '../lib/supabase'
 import { isTouchOnly } from '../hooks/useCoarsePointer'
 import { NEXT_THEME, useTheme } from '../lib/theme'
-import type { Bug, BugKind } from '../lib/types'
+import { KIND_LABEL } from '../lib/types'
+import type { Bug, BugKind, BugWithMeta } from '../lib/types'
 import { cn, isMac } from '../lib/utils'
 
 const HIGHLIGHT_MS = 3000
+/** Longest an auto-fixed item waits for its screenshots before it goes to Claude without them. */
+const AUTO_SEND_UPLOAD_WAIT_MS = 30_000
 
 /** Who made the latest assignment change on a bug, from its activity log. */
 async function lastAssigner(bugId: string, userId: string): Promise<string | null> {
@@ -111,7 +133,7 @@ export default function Workspace() {
     number?: string
   }>()
   const navigate = useNavigate()
-  const { search } = useLocation()
+  const { search, state: navState } = useLocation()
   const { user } = useAuth()
   const selfId = user?.id ?? ''
   const { toast } = useToast()
@@ -120,6 +142,17 @@ export default function Workspace() {
   const { notify } = useNotifications()
   const [unreadCount, setUnreadCount] = useState(0)
   useUnreadTitle(unreadCount)
+  // A tab left open across releases keeps sending Claude the old prompts until it reloads.
+  useAppUpdate(
+    useCallback(
+      () =>
+        toast('A new version of Squash is out.', {
+          action: { label: 'Reload', onAction: () => window.location.reload() },
+          duration: 60_000,
+        }),
+      [toast],
+    ),
+  )
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') setUnreadCount(0)
@@ -142,7 +175,7 @@ export default function Workspace() {
     if (bug.filed_by !== selfId) {
       const name =
         ws.members.find((m) => m.user_id === bug.filed_by)?.profile.display_name ?? 'Someone'
-      const title = `${name} filed ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`
+      const title = `${name} filed ${bug.kind === 'bug' ? '' : `${KIND_LABEL[bug.kind].one.toLowerCase()} `}#${bug.number}`
       toast(title)
       notify({
         title,
@@ -183,6 +216,16 @@ export default function Workspace() {
     retryUploads,
     getBugByNumber,
   } = useBugs(workspaceId, { onRemoteInsert })
+  const updates = useUpdates(workspaceId, selfId, bugs)
+  const { markResolvedHere } = updates
+  // What you resolve yourself is never waiting for your review on the Updates tab.
+  const resolveHere = useCallback(
+    (id: string, note: string | null) => {
+      markResolvedHere([id])
+      return resolveBug(id, note)
+    },
+    [markResolvedHere, resolveBug],
+  )
 
   // Assignment changes this tab made (in flight, or just rolled back after a failure), so their
   // optimistic updates and rollbacks are never announced as a teammate's assignment.
@@ -224,7 +267,7 @@ export default function Workspace() {
 
   async function resolveWithUndo(id: string, note: string | null) {
     const before = bugs.find((bug) => bug.id === id)
-    await resolveBug(id, note)
+    await resolveHere(id, note)
     if (before && before.status === 'open')
       toastUndo(`Resolved #${before.number}`, () => reopenBug(id, before.resolution_note))
   }
@@ -235,6 +278,26 @@ export default function Workspace() {
     if (before && before.status === 'resolved')
       toastUndo(`Reopened #${before.number}`, () => resolveBug(id, before.resolution_note))
   }
+
+  // The check-off circle on a list row: resolve (no note) or reopen in one click, with Undo.
+  // Stable across renders so memoised rows do not redraw; it reads the latest handlers.
+  const toggleStatusRef = useRef<(bug: BugWithMeta) => Promise<void>>(async () => {})
+  useEffect(() => {
+    toggleStatusRef.current = (bug) =>
+      bug.status === 'resolved'
+        ? reopenWithUndo(bug.id, bug.resolution_note)
+        : resolveWithUndo(bug.id, null)
+  })
+  const toggleStatus = useCallback(
+    (bug: BugWithMeta) => {
+      void toggleStatusRef.current(bug).catch((err: unknown) => {
+        toast(err instanceof Error ? err.message : 'Could not update the status.', {
+          tone: 'error',
+        })
+      })
+    },
+    [toast],
+  )
 
   async function assignWithUndo(id: string, userId: string | null) {
     const before = bugs.find((bug) => bug.id === id)
@@ -316,11 +379,68 @@ export default function Workspace() {
   }, [])
   const clearPicked = useCallback(() => setPickedIds(new Set()), [])
   const claude = useClaudeExport(workspaceId, ws.workspace?.name ?? '', ws.members, toast)
+  // Reload usage as soon as another run finishes, rather than on the next poll.
+  const finishedRuns = claude.runList.filter((r) => !isRunActive(r)).length
+  const claudeUsage = useClaudeUsage(
+    workspaceId,
+    (claude.status?.version ?? 0) >= USAGE_VERSION,
+    finishedRuns,
+  )
+  const usageByItem = useMemo(
+    () => usageByBug((claudeUsage?.runs ?? []).filter((r) => r.kind === 'fix')),
+    [claudeUsage],
+  )
+  // Items Claude resolves land on the Updates tab; the toast links there to check them.
+  const openUpdatesRef = useRef<() => void>(() => {})
+  const claudeToast = useCallback(
+    (msg: string) =>
+      toast(
+        msg,
+        /^Claude Code resolved/.test(msg)
+          ? { action: { label: 'Review', onAction: () => openUpdatesRef.current() } }
+          : undefined,
+      ),
+    [toast],
+  )
   useClaudeResults(
     workspaceId,
     (claude.status?.version ?? 0) >= AUTO_RESOLVE_VERSION,
-    { getBugByNumber, resolveBug },
-    toast,
+    { getBugByNumber, resolveBug, updateBug },
+    claudeToast,
+  )
+  const [askOpen, setAskOpen] = useState(false)
+  const [askItems, setAskItems] = useState<BugWithMeta[]>([])
+  const askAbout = useCallback((items: BugWithMeta[]) => {
+    setAskItems(items)
+    setAskOpen(true)
+  }, [])
+  const closeAsk = useCallback(() => setAskOpen(false), [])
+  const questions = useClaudeQuestions(
+    workspaceId,
+    (claude.status?.version ?? 0) >= ASK_VERSION,
+    useCallback(
+      () =>
+        toast('Claude answered your question.', {
+          action: { label: 'View', onAction: () => askAbout([]) },
+        }),
+      [toast, askAbout],
+    ),
+  )
+  const refreshQuestions = questions.refresh
+  const ask = useCallback(
+    async (question: string, items: BugWithMeta[], files: File[]) => {
+      await askBridge({
+        workspaceId,
+        workspaceName: ws.workspace?.name ?? '',
+        members: ws.members,
+        origin: window.location.origin,
+        question,
+        bugs: items,
+        files: files.map((file) => ({ name: file.name, file })),
+      })
+      refreshQuestions()
+    },
+    [workspaceId, ws.workspace?.name, ws.members, refreshQuestions],
   )
   /** Selection of an optimistic bug (no number yet, so it cannot live in the URL). */
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -335,6 +455,10 @@ export default function Workspace() {
   const openShortcuts = useCallback(() => {
     if (!isTouchOnly()) setShortcutsOpen(true)
   }, [])
+  // Onboarding opens a new workspace with `{ tour: true }`; the tour offers itself once per browser.
+  const [tourOpen, setTourOpen] = useState(
+    () => (navState as { tour?: boolean } | null)?.tour === true && !tourSeen(),
+  )
   const [paletteOpen, setPaletteOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const [listWidth, setListWidth, resetListWidth] = useListWidth()
@@ -366,6 +490,12 @@ export default function Workspace() {
   )
 
   const presence = usePresence(workspaceId, selected?.id ?? null)
+
+  /** The Running tab: every Claude Code run at once, kept in the URL as `?view=running`. */
+  const view = new URLSearchParams(search).get('view')
+  const running = view === 'running'
+  /** The Updates tab: what was finished lately, to check off, kept in the URL as `?view=updates`. */
+  const updatesView = view === 'updates'
 
   // The list follows the open item's kind: a deep link to a feature request (or moving the open
   // item between Bugs and Features) switches the list to match.
@@ -427,6 +557,10 @@ export default function Workspace() {
     [bugs, hasNumberParam, navigate, listPath, bugPath],
   )
 
+  /** Items filed with auto-fix on, waiting for their number and uploads before going to Claude. */
+  const autoSendQueue = useRef(new Map<string, { files: number; at: number }>())
+  const [autoSendTick, setAutoSendTick] = useState(0)
+
   // A newly filed item opens right away: it is optimistic (no number yet), so it is held as the
   // pending selection and moves into the URL once the server assigns its number.
   const fileAndSelect = useCallback(
@@ -444,9 +578,39 @@ export default function Workspace() {
         if (newId !== null) setPendingId((p) => (p === newId ? null : p))
         throw err
       }
+      if (newId !== null && getAutoSend(workspaceId)) {
+        autoSendQueue.current.set(newId, { files: input.files.length, at: Date.now() })
+        setAutoSendTick((n) => n + 1)
+      }
     },
-    [fileBug, hasNumberParam, navigate, listPath],
+    [fileBug, hasNumberParam, navigate, listPath, workspaceId],
   )
+
+  // Auto-fix: an item this user just filed goes to Claude Code once it has its number and its
+  // screenshots have uploaded (or after a grace period, so a failed upload never blocks it).
+  const sendToClaude = claude.sendBugs
+  useEffect(() => {
+    const queue = autoSendQueue.current
+    if (queue.size === 0) return
+    const ready: BugWithMeta[] = []
+    for (const [id, entry] of queue) {
+      const bug = bugs.find((b) => b.id === id)
+      if (!bug) {
+        queue.delete(id)
+        continue
+      }
+      if (bug.optimistic || bug.number === 0) continue
+      const uploaded = bug.attachments.length >= entry.files
+      if (!uploaded && Date.now() - entry.at < AUTO_SEND_UPLOAD_WAIT_MS) continue
+      queue.delete(id)
+      ready.push(bug)
+    }
+    if (ready.length > 0) sendToClaude(ready)
+    // Re-check after the grace period even if no update arrives.
+    if (queue.size === 0) return
+    const timer = setTimeout(() => setAutoSendTick((n) => n + 1), AUTO_SEND_UPLOAD_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [bugs, autoSendTick, sendToClaude])
 
   const deselect = useCallback(() => {
     setPendingId(null)
@@ -475,9 +639,12 @@ export default function Workspace() {
       // No Undo: a delete is final (the row and its screenshots are gone; the deletion log in
       // Settings only records it). The icon matches the other confirmation toasts.
       if (bug)
-        toast(`Deleted ${bug.kind === 'feature' ? 'feature ' : ''}#${bug.number}`, {
-          icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
-        })
+        toast(
+          `Deleted ${bug.kind === 'bug' ? '' : `${KIND_LABEL[bug.kind].one.toLowerCase()} `}#${bug.number}`,
+          {
+            icon: <Trash2 size={16} absoluteStrokeWidth strokeWidth={1.5} className="text-ink-2" />,
+          },
+        )
       if (neighbour) {
         focusRowOf.current = neighbour.id
         select(neighbour.id, { replace: true })
@@ -505,7 +672,12 @@ export default function Workspace() {
   if (effectivePickedIds.size !== pickedIds.size) setPickedIds(effectivePickedIds)
   const counts = useMemo(() => countBugs(bugs, filters.kind), [bugs, filters.kind])
   const openByKind = useMemo(
-    () => ({ bug: countBugs(bugs, 'bug').open, feature: countBugs(bugs, 'feature').open }),
+    () => ({
+      bug: countBugs(bugs, 'bug').open,
+      feature: countBugs(bugs, 'feature').open,
+      test: countBugs(bugs, 'test').open,
+      todo: countBugs(bugs, 'todo').open,
+    }),
     [bugs],
   )
 
@@ -540,7 +712,12 @@ export default function Workspace() {
 
   useOverlayOpen(inviteOpen)
   const shortcutsEnabled =
-    !inviteOpen && !shortcutsOpen && !paletteOpen && !claude.setupOpen && ws.workspace !== null
+    !inviteOpen &&
+    !shortcutsOpen &&
+    !tourOpen &&
+    !paletteOpen &&
+    !claude.setupOpen &&
+    ws.workspace !== null
 
   const workspaceReady = ws.workspace !== null
   useEffect(() => {
@@ -668,7 +845,10 @@ export default function Workspace() {
   useShortcut(
     'Escape',
     () => {
-      if (showDetail && !isDesktop()) deselect()
+      // Esc drops the picks first (the bulk bar offers it), whatever has focus; closing a menu
+      // or dialog with Esc leaves them alone.
+      if (pickedIds.size > 0 && !isOverlayOpen()) clearPicked()
+      else if (showDetail && !isDesktop()) deselect()
     },
     opts,
   )
@@ -682,8 +862,52 @@ export default function Workspace() {
     opts,
   )
 
+  // Switching to Running keeps the open item. Leaving it works like a kind switch: a different
+  // kind starts fresh (no picks, nothing open).
+  const showList = (next: typeof filters) => {
+    const params = new URLSearchParams(search)
+    params.delete('view')
+    const leaveItem = next.kind !== filters.kind
+    if (leaveItem) {
+      clearPicked()
+      setPendingId(null)
+    }
+    const nextSearch = writeFilters(params, next).toString()
+    navigate(
+      leaveItem && hasNumberParam
+        ? { pathname: basePath, search: nextSearch }
+        : { search: nextSearch },
+    )
+  }
+  const switchTab = (tab: ListTab) => {
+    if (tab !== 'running' && tab !== 'updates') {
+      showList({ ...filters, kind: tab })
+      return
+    }
+    if (view === tab) return
+    const params = new URLSearchParams(search)
+    params.set('view', tab)
+    clearPicked()
+    navigate({ search: params.toString() })
+  }
+  /** Shows a view tab, leaving the open item first on phones (where it hides the list). */
+  const showView = (tab: 'running' | 'updates') => {
+    if (showDetail && !isDesktop()) {
+      const params = new URLSearchParams(search)
+      params.set('view', tab)
+      clearPicked()
+      setPendingId(null)
+      navigate({ pathname: basePath, search: params.toString() })
+      return
+    }
+    switchTab(tab)
+  }
+  useEffect(() => {
+    openUpdatesRef.current = () => showView('updates')
+  })
+
   const applyFilters = (next: typeof filters) => {
-    // Switching between Bugs and Features starts fresh: no picks, nothing open.
+    // Switching between Bugs, Features and Tests starts fresh: no picks, nothing open.
     if (next.kind !== filters.kind) {
       clearPicked()
       setPendingId(null)
@@ -701,7 +925,7 @@ export default function Workspace() {
   const commands: Command[] = [
     {
       id: 'new',
-      label: filters.kind === 'feature' ? 'New feature request' : 'New bug',
+      label: `New ${KIND_LABEL[filters.kind].noun}`,
       group: 'Actions',
       hint: 'N',
       icon: SquarePen,
@@ -770,6 +994,20 @@ export default function Workspace() {
           words: ['kind', 'ideas'],
         },
         {
+          id: 'nav-tests',
+          label: 'Show tests',
+          icon: FlaskConical,
+          next: { kind: 'test' as const },
+          words: ['kind', 'qa', 'checks'],
+        },
+        {
+          id: 'nav-todos',
+          label: 'Show to-dos',
+          icon: ListTodo,
+          next: { kind: 'todo' as const },
+          words: ['kind', 'tasks', 'todo', 'checklist'],
+        },
+        {
           id: 'nav-open',
           label: 'Show open',
           icon: CircleDot,
@@ -805,6 +1043,10 @@ export default function Workspace() {
       keywords: ['filter', 'tab', ...words],
       run: () => {
         const nextFilters = { ...filters, ...next }
+        if (running || updatesView) {
+          showList(nextFilters)
+          return
+        }
         if (showDetail && !isDesktop()) {
           // On phones the open bug hides the list; go back to it, carrying the new filters.
           if (nextFilters.kind !== filters.kind) clearPicked()
@@ -818,6 +1060,22 @@ export default function Workspace() {
         applyFilters(nextFilters)
       },
     })),
+    {
+      id: 'nav-running',
+      label: 'Show running Claude Code tasks',
+      group: 'Navigate',
+      icon: Activity,
+      keywords: ['claude', 'runs', 'tasks', 'progress', 'status', 'live'],
+      run: () => showView('running'),
+    },
+    {
+      id: 'nav-updates',
+      label: 'Show updates: what was finished lately',
+      group: 'Navigate',
+      icon: Inbox,
+      keywords: ['updates', 'review', 'finished', 'done', 'resolved', 'inbox', 'claude', 'news'],
+      run: () => showView('updates'),
+    },
     ...(['csv', 'md'] as const).map((format): Command => ({
       id: `export-${format}`,
       label: `Export visible bugs as ${format === 'csv' ? 'CSV' : 'Markdown'}`,
@@ -838,7 +1096,7 @@ export default function Workspace() {
         id: `bug-${b.id}`,
         label: `#${b.number} ${b.title}`,
         accession: `#${b.number}`,
-        group: b.kind === 'feature' ? 'Features' : 'Bugs',
+        group: KIND_LABEL[b.kind].many,
         keywords: [String(b.number)],
         run: () => select(b.id),
       })),
@@ -873,6 +1131,13 @@ export default function Workspace() {
       run: claude.openSetup,
     },
     {
+      id: 'claude-ask',
+      label: 'Ask Claude about the project',
+      group: 'Workspace',
+      keywords: ['claude', 'question', 'fixed', 'status', 'ask'],
+      run: () => askAbout([]),
+    },
+    {
       id: 'claude-guide',
       label: 'Claude Code guide',
       group: 'Help',
@@ -885,6 +1150,13 @@ export default function Workspace() {
       group: 'Preferences',
       keywords: ['dark', 'light', 'system', 'appearance'],
       run: () => setTheme(NEXT_THEME[theme]),
+    },
+    {
+      id: 'tour',
+      label: 'Take the tour',
+      group: 'Help',
+      keywords: ['tutorial', 'help', 'onboarding', 'guide', 'learn'],
+      run: () => setTourOpen(true),
     },
     {
       id: 'shortcuts',
@@ -963,8 +1235,10 @@ export default function Workspace() {
         onToast={toast}
         onRetryUploads={() => void retryUploads(selected.id)}
         onSend={(bug) => claude.sendBugs([bug])}
+        onShip={(bug) => claude.shipBugs([bug])}
         onCopy={(bug) => claude.copyBugs([bug])}
         claudeRun={!selected.optimistic ? claude.runs.get(selected.number) : undefined}
+        claudeUsage={!selected.optimistic ? usageByItem.get(selected.number) : undefined}
       />
     )
   } else if (!hasNumberParam && loading) {
@@ -982,6 +1256,7 @@ export default function Workspace() {
           steps={onboardingSteps(bugs, ws.members.length, claude.connected)}
           onInvite={() => setInviteOpen(true)}
           onClaudeSetup={claude.openSetup}
+          onTour={() => setTourOpen(true)}
         />
       </div>
     )
@@ -989,7 +1264,7 @@ export default function Workspace() {
     // Nothing to pick (a filter matched nothing, an empty tab, a load error): the list says why.
     detail = null
   } else if (!hasNumberParam) {
-    const one = filters.kind === 'feature' ? 'feature request' : 'bug'
+    const one = KIND_LABEL[filters.kind].noun
     detail = (
       <StatePanel
         className={DETAIL_COLUMN}
@@ -1056,6 +1331,7 @@ export default function Workspace() {
         selfId={selfId}
         onInvite={() => setInviteOpen(true)}
         onShowShortcuts={openShortcuts}
+        onShowTour={() => setTourOpen(true)}
         role={ws.role}
       />
       <ConnectionStatus />
@@ -1104,15 +1380,34 @@ export default function Workspace() {
               pickedIds={effectivePickedIds}
               onTogglePick={togglePick}
               onClearPicked={clearPicked}
-              onResolve={resolveBug}
+              onResolve={resolveHere}
               onReopen={reopenBug}
               onAssign={assign}
+              onToggleStatus={toggleStatus}
               onSend={claude.sendBugs}
               onCopy={claude.copyBugs}
+              onAsk={askAbout}
               onInvite={() => setInviteOpen(true)}
               onClaudeSetup={claude.openSetup}
+              onTour={() => setTourOpen(true)}
               claudeConnected={claude.connected}
               claudeRuns={claude.runs}
+              claudeRunList={claude.runList}
+              running={running}
+              updates={updatesView}
+              updateItems={updates.items}
+              updatesNew={updates.newCount}
+              onReview={updates.markReviewed}
+              onReopenUpdate={(bug) =>
+                reopenWithUndo(bug.id, bug.resolution_note).catch((err: unknown) => {
+                  toast(err instanceof Error ? err.message : 'Could not reopen it.', {
+                    tone: 'error',
+                  })
+                })
+              }
+              onTab={switchTab}
+              selectedNumber={selected && !selected.optimistic ? selected.number : null}
+              onOpenNumber={(n) => navigate(bugPath(n))}
               onboardingInDetail={desktop && !showDetail}
             />
           </div>
@@ -1141,10 +1436,26 @@ export default function Workspace() {
         onRegenerate={ws.regenerateInviteCode}
       />
       <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <TourDialog open={tourOpen} onClose={() => setTourOpen(false)} />
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={commands}
+      />
+      <AskClaudeDialog
+        open={askOpen}
+        onClose={closeAsk}
+        bugs={bugs}
+        initial={askItems}
+        status={claude.status}
+        questions={questions.questions}
+        onAsk={ask}
+        onForget={questions.forget}
+        onOpenNumber={(n) => navigate(bugPath(n))}
+        onSetup={() => {
+          setAskOpen(false)
+          claude.openSetup()
+        }}
       />
       <ClaudeSetupDialog
         open={claude.setupOpen}

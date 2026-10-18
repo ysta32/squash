@@ -2,6 +2,7 @@ import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { AlertCircle, ArrowUpRight, ChevronRight } from 'lucide-react'
 import type { UseFixRunsResult } from '../hooks/useFixRuns'
+import { useSignedUrl } from '../hooks/useSignedUrl'
 import {
   FIX_EVIDENCE_LABEL,
   diffCells,
@@ -132,6 +133,14 @@ export function FixRecord({ bugId, fix, attachments }: FixRecordProps) {
             </figure>
           )}
 
+          {!before && after && proof && (
+            <AfterShot
+              after={after}
+              label={runName(proof)}
+              figure={attachments.indexOf(after) + 1}
+            />
+          )}
+
           {others.length > 0 && <OtherRuns runs={others} now={now} />}
         </>
       )}
@@ -206,6 +215,44 @@ function Comparison({
         <View {...props} />
       </Suspense>
     </ChunkBoundary>
+  )
+}
+
+/**
+ * Claude's after screenshot on its own, for a bug filed without a "before" shot (a feature, or a
+ * new project's first item): there is nothing to compare, so it shows the result as it is.
+ */
+function AfterShot({
+  after,
+  label,
+  figure,
+}: {
+  after: BugAttachment
+  label: string
+  figure: number
+}) {
+  const url = useSignedUrl(after.storage_path)
+  const style = frameStyle(after)
+  return (
+    <figure className="mt-6 min-w-0">
+      {url ? (
+        <a href={url} target="_blank" rel="noreferrer" className="focus-ring block rounded-lg">
+          <img
+            src={url}
+            alt={`Screenshot after ${label}`}
+            width={after.width || undefined}
+            height={after.height || undefined}
+            style={style}
+            className="w-full rounded-lg border border-line bg-surface-1 object-contain"
+          />
+        </a>
+      ) : (
+        <div style={style} className="w-full animate-skeleton rounded-lg bg-surface-3" />
+      )}
+      <figcaption className="specimen-label mt-2 text-ink-3" style={{ maxWidth: style.maxWidth }}>
+        After · <span className="normal-case">{label}</span> · Fig. {figure}
+      </figcaption>
+    </figure>
   )
 }
 

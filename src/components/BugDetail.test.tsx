@@ -330,7 +330,7 @@ describe('BugDetail', () => {
     expect(screen.getByText(/Resolved by/).textContent).toMatch(
       /Resolved by Grace Hopper · just now/,
     )
-    expect(screen.getByText('“Fixed it”')).toBeTruthy()
+    expect(screen.getByText('Fixed it')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
     fireEvent.click(screen.getByRole('button', { name: 'Skip note' }))
     await act(async () => {})
@@ -456,9 +456,9 @@ describe('BugDetail', () => {
         resolution_note: 'Fixed it',
       }),
     )
-    expect(screen.getByText('“Fixed it”')).toBeTruthy()
-    expect(screen.queryByText('Fixed it')).toBeNull()
+    expect(screen.getByText('Fixed it')).toBeTruthy()
     const timeline = screen.getByRole('list', { name: 'Timeline' })
+    expect(within(timeline).queryByText('Fixed it')).toBeNull()
     expect(within(timeline).getByText(/resolved/)).toBeTruthy()
   })
 

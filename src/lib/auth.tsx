@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { authCallbackUrl } from './authRedirect'
+import { clearDrafts } from './drafts'
 import { supabase } from './supabase'
 import { bumpSessionEpoch } from './sessionEpoch'
 import type { Profile } from './types'
@@ -133,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
     if (error) throw new Error(error.message)
+    clearDrafts()
   }, [])
 
   const value = useMemo<AuthContextValue>(

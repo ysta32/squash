@@ -10,6 +10,7 @@ import {
   Mic,
   MousePointerClick,
   RotateCcw,
+  Rocket,
   RotateCw,
   Trash2,
 } from 'lucide-react'
@@ -20,6 +21,7 @@ import { useFixRuns } from '../hooks/useFixRuns'
 import { useOverlayOpen } from '../hooks/useKeyboard'
 import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { ClaudeRun } from '../lib/claudeExport'
+import { formatTokens, formatUsd, type ItemUsage } from '../lib/claudeUsage'
 import { shortSha } from '../lib/fixRuns'
 import type {
   Bug,
@@ -29,7 +31,7 @@ import type {
   Severity,
   WorkspaceMember,
 } from '../lib/types'
-import { KIND_LABEL, SEVERITY_LABEL } from '../lib/types'
+import { KINDS, KIND_LABEL, SEVERITY_LABEL } from '../lib/types'
 import { Markdown } from '../lib/markdown'
 import { cn, relativeTime } from '../lib/utils'
 import { AssigneePicker } from './AssigneePicker'
@@ -73,10 +75,17 @@ export interface BugDetailProps {
   onRetryUploads?: () => void
   /** Opens Claude Code on this bug (or the setup guide when the helper is not connected). */
   onSend?: (bug: BugWithMeta) => void
+  /**
+   * Has Claude Code ship this bug's work: commit it to main, push it, resolve merge conflicts and
+   * check the deploy is live (or the setup guide when the helper is not connected).
+   */
+  onShip?: (bug: BugWithMeta) => void
   /** Copies a ready-to-paste Claude Code prompt for this bug. */
   onCopy?: (bug: BugWithMeta) => void
   /** The latest Claude Code session sent this bug, with what it is doing. */
   claudeRun?: ClaudeRun
+  /** What Claude Code has used on this bug across its runs (helper v13+). */
+  claudeUsage?: ItemUsage
 }
 
 type PopoverState = { bugId: string; mode: 'resolve' | 'reopen' } | null
@@ -182,8 +191,10 @@ function BugBody({
   onToast,
   onRetryUploads,
   onSend,
+  onShip,
   onCopy,
   claudeRun,
+  claudeUsage,
   popover,
   onPopover,
 }: BugBodyProps) {
@@ -361,7 +372,6 @@ function BugBody({
     if (severity !== bug.severity) run(() => onUpdate(bug.id, { severity }))
   }
 
-  const otherKind = bug.kind === 'feature' ? 'bug' : 'feature'
   const popoverOpen = popover !== null && editable
 
   function confirmPopover(note: string | null) {
@@ -404,7 +414,19 @@ function BugBody({
 
   const title = titleDraft ?? bug.title
   const noun = KIND_LABEL[bug.kind].one.toLowerCase()
+  const shipTitle = `Claude Code commits this ${noun}'s work to main, pushes it, resolves any merge conflicts and checks the deploy is live`
   const menuItems: MenuItem[] = [
+    ...(onShip
+      ? [
+          {
+            key: 'ship',
+            label: 'Ship to main with Claude Code',
+            icon: <MenuIcon icon={Rocket} />,
+            onSelect: () => onShip(bug),
+            disabled: !editable,
+          },
+        ]
+      : []),
     ...(onCopy
       ? [
           {
@@ -416,13 +438,13 @@ function BugBody({
           },
         ]
       : []),
-    {
-      key: 'kind',
-      label: `Move to ${KIND_LABEL[otherKind].many}`,
+    ...KINDS.filter((k) => k !== bug.kind).map((kind) => ({
+      key: `kind-${kind}`,
+      label: `Move to ${KIND_LABEL[kind].many}`,
       icon: <MenuIcon icon={ArrowRightLeft} />,
-      onSelect: () => run(() => onUpdate(bug.id, { kind: otherKind })),
+      onSelect: () => run(() => onUpdate(bug.id, { kind })),
       disabled: !editable,
-    },
+    })),
     ...(onDelete && canDelete
       ? [
           {
@@ -510,8 +532,8 @@ function BugBody({
                   )}
                 </p>
                 {bug.resolution_note && (
-                  <blockquote className="mt-1 max-w-[68ch] [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">
-                    “{bug.resolution_note}”
+                  <blockquote className="mt-1.5 max-w-[68ch] border-l-2 border-status-resolved/40 pl-3 [overflow-wrap:anywhere] whitespace-pre-wrap text-ink">
+                    {bug.resolution_note}
                   </blockquote>
                 )}
               </div>
@@ -562,6 +584,25 @@ function BugBody({
                 >
                   <SparkMark className="text-accent" />
                   <span className="max-sm:sr-only">Send to Claude Code</span>
+                </button>
+              )}
+              {/* Phones reach Ship from the … menu, so the bottom bar keeps its three controls. */}
+              {onShip && (
+                <button
+                  type="button"
+                  disabled={!editable}
+                  onClick={() => onShip(bug)}
+                  title={shipTitle}
+                  className={buttonClass('secondary', 'md', 'h-8 px-3 max-sm:hidden')}
+                >
+                  <Rocket
+                    size={16}
+                    strokeWidth={1.5}
+                    absoluteStrokeWidth
+                    aria-hidden="true"
+                    className="text-accent"
+                  />
+                  Ship to main
                 </button>
               )}
               {/* The popover hangs from the cluster's end edge (desktop) or replaces the bar
@@ -732,6 +773,21 @@ function BugBody({
           )}
 
           {claudeRun && <ClaudeProgress run={claudeRun} />}
+
+          {claudeUsage && claudeUsage.runs > 0 && (
+            <p
+              aria-label="Claude usage"
+              className="flex min-w-0 items-center gap-2 font-mono text-xs text-ink-3 nums"
+              title="Tokens Claude Code used on this item, and what that would cost at API prices. Runs sent with several items are split evenly between them."
+            >
+              <SparkMark className="shrink-0 text-ink-3" />
+              <span className="min-w-0 truncate">
+                Claude used {formatTokens(claudeUsage.tokens)} tokens ·{' '}
+                {formatUsd(claudeUsage.costUsd)} at API prices · {claudeUsage.runs}{' '}
+                {claudeUsage.runs === 1 ? 'run' : 'runs'}
+              </span>
+            </p>
+          )}
 
           <FixRecord bugId={bug.id} fix={fix} attachments={bug.attachments} />
 

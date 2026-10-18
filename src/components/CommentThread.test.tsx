@@ -182,3 +182,23 @@ describe('CommentThread edit / delete', () => {
     expect(screen.getByRole('alert').textContent).toBe('You cannot delete this comment.')
   })
 })
+
+describe('CommentThread draft', () => {
+  beforeEach(() => {
+    thread.comments = []
+  })
+  afterEach(cleanup)
+
+  const box = () => screen.getByPlaceholderText('Leave a comment…') as HTMLTextAreaElement
+
+  it('keeps an unsent comment per bug across a reload', () => {
+    render(<CommentThread bugId="b1" members={members} selfId="u2" />)
+    fireEvent.change(box(), { target: { value: 'Half written' } })
+    cleanup()
+    render(<CommentThread bugId="b2" members={members} selfId="u2" />)
+    expect(box().value).toBe('')
+    cleanup()
+    render(<CommentThread bugId="b1" members={members} selfId="u2" />)
+    expect(box().value).toBe('Half written')
+  })
+})

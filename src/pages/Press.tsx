@@ -9,7 +9,7 @@ import { PageHero } from '../components/marketing/PageHero'
 import { Reveal } from '../components/marketing/Reveal'
 import { PRESS_COLORS, type PressColor } from '../components/marketing/pressColors'
 import { usePageTitle } from '../components/marketing/usePageTitle'
-import { LogoMark, buttonClass, proseLinkClass } from '../components/ui'
+import { AppIcon, buttonClass, proseLinkClass } from '../components/ui'
 import { cn } from '../lib/utils'
 
 const LOGOS: {
@@ -121,11 +121,15 @@ export default function Press() {
       <section aria-labelledby="logos-heading" className="border-t border-line py-16 lg:py-24">
         <div className={MK_CONTAINER}>
           <Reveal>
-            <SectionHead id="logos-heading" eyebrow="01 · Logo" title="The pin and the wordmark.">
+            <SectionHead
+              id="logos-heading"
+              eyebrow="01 · Logo"
+              title="The beetle and the wordmark."
+            >
               <p>
-                A specimen pin, then “squash” in lowercase IBM Plex Sans. Keep at least the width of
-                the pin head clear around it, do not recolour or stretch it, and use the darkroom
-                version on dark backgrounds.
+                A beetle with a check cut out of its shell, then “squash” in lowercase IBM Plex
+                Sans. Keep at least the width of the beetle’s head clear around it, do not recolour
+                or stretch it, and use the darkroom version on dark backgrounds.
               </p>
             </SectionHead>
           </Reveal>
@@ -307,7 +311,7 @@ export default function Press() {
             </p>
           </div>
           <div className="flex items-center gap-4 lg:col-span-4 lg:col-start-9 lg:justify-end">
-            <LogoMark size={56} />
+            <AppIcon size={56} />
             <a href="/og/press-dark.png" download className={buttonClass('secondary', 'lg')}>
               <Download size={16} aria-hidden="true" />
               Social card

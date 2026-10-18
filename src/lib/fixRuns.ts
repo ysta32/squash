@@ -131,6 +131,8 @@ export interface FixRunInput {
   status: FixRunStatus
   summary: string | null
   report: FixReport | null
+  /** The bug's attachment that shows the fix (Claude's after screenshot), if any. */
+  afterAttachmentId?: string | null
 }
 
 /** The row to insert for one bug of a run; throws when the run id is not one the table accepts. */
@@ -140,6 +142,7 @@ export function buildFixRunInsert({
   status,
   summary,
   report,
+  afterAttachmentId,
 }: FixRunInput): FixRunInsert {
   if (!isRunId(runId)) throw new Error('Invalid run id.')
   if (!FIX_RUN_STATUSES.includes(status)) throw new Error('Invalid fix run status.')
@@ -155,6 +158,7 @@ export function buildFixRunInsert({
     files_changed: report?.filesChanged ?? null,
     additions: report?.additions ?? null,
     deletions: report?.deletions ?? null,
+    ...(afterAttachmentId ? { after_attachment_id: afterAttachmentId } : {}),
     ...(report?.startedAt ? { started_at: report.startedAt } : {}),
   }
 }

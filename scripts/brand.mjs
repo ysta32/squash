@@ -1,11 +1,11 @@
 // Shared helpers for the brand asset scripts (gen-icons.mjs, gen-og.mjs): design tokens read
-// from src/index.css (so no color is duplicated here), the pin mark geometry from the app, the
+// from src/index.css (so no color is duplicated here), the beetle mark geometry from the app, the
 // self-hosted Plex font files, and a Chrome page for rasterizing.
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PIN_GRID, pinMarkShapes } from '../src/components/ui/pinMark.ts'
+import { MARK_GRID, markShapes } from '../src/components/ui/mark.ts'
 
 export const root = fileURLToPath(new URL('..', import.meta.url))
 
@@ -45,14 +45,14 @@ export function readTokens() {
   return { light, dark, grain: light.grain }
 }
 
-/** A standalone pin mark SVG. `pad` is the margin in grid units around the 16-unit artwork. */
-export function markSvg({ needle, head, background, pad = 0, radius = 0, size }) {
-  const box = PIN_GRID + pad * 2
+/** A standalone beetle mark SVG. `pad` is the margin in grid units around the 24-unit artwork. */
+export function markSvg({ paint, background, pad = 0, radius = 0, size }) {
+  const box = MARK_GRID + pad * 2
   const bg = background
     ? `<rect x="${-pad}" y="${-pad}" width="${box}" height="${box}" rx="${radius}" fill="${background}"/>`
     : ''
   const dims = size ? ` width="${size}" height="${size}"` : ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-pad} ${-pad} ${box} ${box}"${dims}>${bg}${pinMarkShapes(needle, head)}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-pad} ${-pad} ${box} ${box}"${dims}>${bg}${markShapes(paint)}</svg>`
 }
 
 const require = createRequire(import.meta.url)

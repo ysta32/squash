@@ -12,6 +12,8 @@ export interface GettingStartedProps {
   steps: OnboardingSteps
   onInvite?: () => void
   onClaudeSetup?: () => void
+  /** Opens the product tour, from a link beside the checklist's heading. */
+  onTour?: () => void
   /** `pane`: the focal point of the empty detail pane, on the detail column's gutter. */
   variant?: 'list' | 'pane'
   /** Shown instead when the checklist is dismissed or complete. */
@@ -30,6 +32,7 @@ function Checklist({
   steps,
   onInvite,
   onClaudeSetup,
+  onTour,
   variant = 'list',
   fallback = null,
 }: GettingStartedProps) {
@@ -96,10 +99,18 @@ function Checklist({
           Get started
         </h2>
         <span className="font-mono text-label text-ink-3 tabular-nums">{completed} of 4</span>
+        {onTour && (
+          <Button size="sm" variant="ghost" className={cn(ACTION, 'mr-0 ml-auto')} onClick={onTour}>
+            Take the tour
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"
-          className="-mr-1.5 ml-auto w-[2.2857rem] px-0 text-ink-3 hover:text-ink pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]"
+          className={cn(
+            '-mr-1.5 w-[2.2857rem] px-0 text-ink-3 hover:text-ink pointer-coarse:h-[3.1429rem] pointer-coarse:w-[3.1429rem]',
+            !onTour && 'ml-auto',
+          )}
           aria-label="Dismiss getting started"
           title="Dismiss"
           onClick={() => {

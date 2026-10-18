@@ -1,15 +1,8 @@
-import { useEffect, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
-import type { ClaudeRun, ClaudeRunState } from '../lib/claudeExport'
+import type { ClaudeRun } from '../lib/claudeExport'
+import { STATE_GLYPH, STATE_LABEL, elapsed, type StatusGlyphKind } from '../lib/claudeRunView'
+import { useNow } from '../hooks/useNow'
 import { cn, relativeTime } from '../lib/utils'
-
-const STATE_LABEL: Record<ClaudeRunState, string> = {
-  starting: 'Starting Claude Code…',
-  working: 'Claude is working',
-  waiting: 'Claude needs you in Terminal',
-  done: 'Claude finished',
-  ended: 'Claude session closed',
-}
 
 /**
  * The Claude Code mark: a 4-point spark drawn on the 16px icon grid at 1.5 stroke. Deliberately
@@ -31,7 +24,7 @@ export function SparkMark({ className }: { className?: string }) {
   )
 }
 
-export type StatusGlyphKind = 'open' | 'progress' | 'done' | 'working' | 'attention'
+export type { StatusGlyphKind }
 
 /**
  * Status glyphs from the Specimen icon set: hollow ring (open / to do), half-filled ring (in
@@ -75,32 +68,6 @@ export function StatusGlyph({ kind, className }: { kind: StatusGlyphKind; classN
   )
 }
 
-const STATE_GLYPH: Record<ClaudeRunState, { kind: StatusGlyphKind; tone: string }> = {
-  starting: { kind: 'working', tone: 'text-ink-3' },
-  working: { kind: 'working', tone: 'text-status-progress' },
-  waiting: { kind: 'attention', tone: 'text-warning' },
-  done: { kind: 'done', tone: 'text-status-resolved' },
-  ended: { kind: 'open', tone: 'text-ink-3' },
-}
-
-/** Re-renders every few seconds so "updated 12s ago" stays current while Claude works. */
-function useNow(live: boolean): Date {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    if (!live) return
-    const timer = setInterval(() => setNow(new Date()), 5000)
-    return () => clearInterval(timer)
-  }, [live])
-  return now
-}
-
-function elapsed(fromIso: string, to: Date): string {
-  const s = Math.max(0, Math.round((to.getTime() - new Date(fromIso).getTime()) / 1000))
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
-}
-
 const TODO_GLYPH = {
   completed: { kind: 'done', tone: 'text-status-resolved', label: 'Done' },
   in_progress: { kind: 'progress', tone: 'text-status-progress', label: 'Doing' },
@@ -109,7 +76,11 @@ const TODO_GLYPH = {
 
 /** Live view of the Claude Code session working on this bug, fed by the local bridge. */
 export function ClaudeProgress({ run }: { run: ClaudeRun }) {
-  const live = run.state === 'starting' || run.state === 'working' || run.state === 'waiting'
+  const live =
+    run.state === 'queued' ||
+    run.state === 'starting' ||
+    run.state === 'working' ||
+    run.state === 'waiting'
   const now = useNow(live)
   const others = run.bugs.length > 1 ? run.bugs.length - 1 : 0
   const waiting = run.state === 'waiting'

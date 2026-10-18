@@ -333,6 +333,36 @@ describe('Workspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Undo denied')
   })
 
+  it('unpicks a row on a second click, and clears every pick with Escape or Clear selection', () => {
+    show('/app/ws')
+    const two = () => screen.getByRole('option', { name: '#2 Bug number 2' })
+    const three = () => screen.getByRole('option', { name: '#3 Bug number 3' })
+    const bulk = () => screen.queryByRole('group', { name: 'Bulk actions' })
+    fireEvent.click(two(), { ctrlKey: true })
+    fireEvent.click(three(), { metaKey: true })
+    expect(bulk()).toHaveTextContent('2 selected')
+    fireEvent.click(two(), { ctrlKey: true })
+    expect(bulk()).toHaveTextContent('1 selected')
+    fireEvent.click(three(), { shiftKey: true })
+    expect(bulk()).not.toBeInTheDocument()
+
+    fireEvent.click(two(), { ctrlKey: true })
+    fireEvent.click(three(), { ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }))
+    expect(bulk()).not.toBeInTheDocument()
+
+    fireEvent.click(two(), { ctrlKey: true })
+    fireEvent.click(three(), { ctrlKey: true })
+    press('Escape')
+    expect(bulk()).not.toBeInTheDocument()
+
+    fireEvent.click(two(), { ctrlKey: true })
+    fireEvent.click(three(), { ctrlKey: true })
+    fireEvent.click(two())
+    expect(bulk()).toHaveTextContent('1 selected')
+    expect(two()).toHaveAttribute('aria-selected', 'true')
+  })
+
   it.each(['tab', 'query'])('prunes bulk picks hidden by a %s change', (change) => {
     show('/app/ws')
     fireEvent.click(screen.getByRole('option', { name: '#2 Bug number 2' }), { ctrlKey: true })

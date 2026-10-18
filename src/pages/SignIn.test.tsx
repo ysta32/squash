@@ -18,7 +18,7 @@ function renderSignIn() {
     </MemoryRouter>,
   )
   return {
-    input: screen.getByLabelText('Work email') as HTMLInputElement,
+    input: screen.getByLabelText('Email') as HTMLInputElement,
     submit: screen.getByRole('button', { name: 'Email me a link' }),
   }
 }

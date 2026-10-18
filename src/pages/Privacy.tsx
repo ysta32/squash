@@ -3,7 +3,7 @@ import { LegalLayout } from '../components/marketing/LegalLayout'
 import { githubUrl } from '../components/marketing/links'
 import { usePageTitle } from '../components/marketing/usePageTitle'
 
-const PRIVACY_UPDATED = '2026-10-07'
+const PRIVACY_UPDATED = '2026-10-12'
 
 export default function Privacy() {
   usePageTitle('Privacy')
@@ -44,10 +44,10 @@ export default function Privacy() {
                   roles, and when each joined.
                 </li>
                 <li>
-                  <strong>Bugs and feature requests.</strong> Title, description, voice transcript
-                  (if you dictated), severity, status, assignee, resolution notes, who filed and
-                  resolved it and when, and where it was filed: your browser, operating system,
-                  window size and the page link in the description.
+                  <strong>Bugs, feature requests, tests and to-dos.</strong> Title, description,
+                  voice transcript (if you dictated), severity, status, assignee, resolution notes,
+                  who filed and resolved it and when, and where it was filed: your browser,
+                  operating system, window size and the page link in the description.
                 </li>
                 <li>
                   <strong>Screenshots.</strong> The images you attach, compressed to WebP in your
@@ -59,9 +59,11 @@ export default function Privacy() {
                   (number, title, who deleted it and when).
                 </li>
                 <li>
-                  <strong>Claude Code runs.</strong> If you send a bug to Claude Code, the run’s
-                  status and summary, and the branch, commit, pull request link and file counts if
-                  it reports them. Your code itself never leaves your computer through Squash.
+                  <strong>Claude Code runs.</strong> If you send an item to Claude Code (or ship it
+                  to main), the run’s status and summary, and the branch, commit, pull request link
+                  and file counts if it reports them. Your code itself never passes through Squash:
+                  Claude Code works in a folder on your computer, and when it commits and pushes, it
+                  pushes to your own git remote, not to Squash.
                 </li>
                 <li>
                   <strong>Rate limiting.</strong> The time of each bug you file, kept briefly to
@@ -100,7 +102,13 @@ export default function Privacy() {
               <p>
                 Your browser’s storage keeps your sign-in session and a few preferences: theme,
                 colour scheme, list width, the last workspace you opened, whether notifications are
-                on, and whether you dismissed the getting-started checklist.
+                on, whether Auto-fix is on, whether you dismissed the getting-started checklist, and
+                whether you have seen the tour.
+              </p>
+              <p>
+                The Claude Code helper, if you install it, runs only on your computer and listens
+                only on <code>127.0.0.1</code>. What Claude Code sends to Anthropic is covered by
+                your own Claude account and Anthropic’s terms, not by Squash.
               </p>
               <p>
                 Dictation uses your browser’s own speech recognition. Your browser decides where the
@@ -139,6 +147,19 @@ export default function Privacy() {
                 “Deleted user”. You can export a workspace’s bugs as CSV or Markdown at any time.
               </p>
             </>
+          ),
+        },
+        {
+          id: 'your-rights',
+          title: 'Your rights',
+          body: (
+            <p>
+              You can see, correct, export and delete what Squash holds about you from the app
+              itself: your name in Settings, your items through CSV or Markdown export, and your
+              account from Settings. For anything the app does not cover, open an issue or contact
+              the maintainer and it will be handled by hand. Squash is not meant for children under
+              13 and does not knowingly hold their data.
+            </p>
           ),
         },
         {

@@ -247,7 +247,7 @@ describe('BugList', () => {
     render(
       <Harness
         bugs={[...bugs, feature]}
-        openByKind={{ bug: 1, feature: 1 }}
+        openByKind={{ bug: 1, feature: 1, test: 0, todo: 0 }}
         onFilters={onFilters}
       />,
     )
@@ -258,6 +258,42 @@ describe('BugList', () => {
     expect(screen.getByRole('option', { name: '#3 Dark mode' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: 'Search features' })).toBeInTheDocument()
+  })
+
+  it('has a Tests tab that shows only tests', () => {
+    const onFilters = vi.fn()
+    const check = bug({ id: 'test', number: 4, title: 'Checkout smoke test', kind: 'test' })
+    render(
+      <Harness
+        bugs={[...bugs, check]}
+        openByKind={{ bug: 1, feature: 0, test: 1, todo: 0 }}
+        onFilters={onFilters}
+      />,
+    )
+    expect(screen.queryByRole('option', { name: '#4 Checkout smoke test' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Tests/ }))
+    expect(onFilters).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'test' }))
+    expect(screen.getByRole('option', { name: '#4 Checkout smoke test' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search tests' })).toBeInTheDocument()
+  })
+
+  it('has a To-dos tab that shows only to-dos', () => {
+    const onFilters = vi.fn()
+    const task = bug({ id: 'todo', number: 5, title: 'Write the README', kind: 'todo' })
+    render(
+      <Harness
+        bugs={[...bugs, task]}
+        openByKind={{ bug: 1, feature: 0, test: 0, todo: 1 }}
+        onFilters={onFilters}
+      />,
+    )
+    expect(screen.queryByRole('option', { name: '#5 Write the README' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /To-dos/ }))
+    expect(onFilters).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'todo' }))
+    expect(screen.getByRole('option', { name: '#5 Write the README' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '#1 Broken login' })).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search to-dos' })).toBeInTheDocument()
   })
 
   it('shows feature wording when there are no feature requests', () => {
@@ -556,7 +592,7 @@ describe('BugList', () => {
     const trigger = screen.getByRole('button', { name: 'Status: Open' })
     expect(trigger.parentElement).not.toHaveClass('hidden')
     expect(
-      screen.getByRole('tablist', { name: 'Bugs or features' }).parentElement,
+      screen.getByRole('tablist', { name: 'Bugs, features or tests' }).parentElement,
     ).toContainElement(trigger)
     fireEvent.click(trigger)
     const menu = screen.getByRole('menu', { name: 'Status' })
@@ -578,7 +614,7 @@ describe('BugList', () => {
         bugs={[]}
         loading
         counts={{ open: 0, resolved: 0, all: 0 }}
-        openByKind={{ bug: 0, feature: 0 }}
+        openByKind={{ bug: 0, feature: 0, test: 0, todo: 0 }}
       />,
     )
     // Skeleton blocks the width of two digits stand in for the counts: no false "0", no shift.
@@ -621,7 +657,7 @@ describe('BugList', () => {
   })
 
   it('shows the open count only on the inactive kind tab', () => {
-    render(<Harness openByKind={{ bug: 1, feature: 3 }} />)
+    render(<Harness openByKind={{ bug: 1, feature: 3, test: 0, todo: 0 }} />)
     expect(screen.getByRole('tab', { name: 'Bugs' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Features 3' })).toHaveAttribute(
       'aria-selected',
@@ -771,5 +807,114 @@ describe('BugList', () => {
     rerender(<Harness />)
     expect(row).not.toHaveAttribute('data-highlighted')
     expect(screen.queryByLabelText('Currently viewing')).not.toBeInTheDocument()
+  })
+})
+
+describe('BugList Running tab', () => {
+  afterEach(cleanup)
+
+  const liveRun = {
+    id: 'r1',
+    bugs: [1],
+    folder: '/repo',
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    state: 'working' as const,
+    activity: 'Running tests',
+    message: null,
+    todos: null,
+    steps: [],
+    stepCount: 1,
+  }
+
+  it('offers a Running tab with the live count, and shows every run there', () => {
+    const onTab = vi.fn()
+    const { rerender } = render(
+      <MemoryRouter>
+        <Harness onTab={onTab} claudeRunList={[liveRun]} claudeConnected />
+      </MemoryRouter>,
+    )
+    const tab = screen.getByRole('tab', { name: /Running/ })
+    expect(tab).toHaveAttribute('aria-selected', 'false')
+    expect(tab).toHaveTextContent('1')
+    fireEvent.click(tab)
+    expect(onTab).toHaveBeenCalledWith('running')
+
+    rerender(
+      <MemoryRouter>
+        <Harness onTab={onTab} claudeRunList={[liveRun]} claudeConnected running />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: /Running/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('list', { name: 'Claude Code runs' })).toHaveTextContent('Broken login')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Status: / })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Features/ }))
+    expect(onTab).toHaveBeenCalledWith('feature')
+  })
+
+  it('has no Running tab without a handler for it', () => {
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('tab', { name: /Running/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('BugList Updates tab', () => {
+  afterEach(cleanup)
+
+  const done = bugs[1]
+  const items = [{ bug: { ...done, resolution_note: 'Fixed the grid gap.' }, isNew: true }]
+
+  it('counts new updates on the tab and lists what happened, to check off or reopen', () => {
+    const onTab = vi.fn()
+    const onReview = vi.fn()
+    const onReopenUpdate = vi.fn(() => Promise.resolve())
+    const { rerender } = render(
+      <MemoryRouter>
+        <Harness onTab={onTab} updateItems={items} updatesNew={1} />
+      </MemoryRouter>,
+    )
+    const tab = screen.getByRole('tab', { name: 'Updates, 1 new' })
+    fireEvent.click(tab)
+    expect(onTab).toHaveBeenCalledWith('updates')
+
+    rerender(
+      <MemoryRouter>
+        <Harness
+          onTab={onTab}
+          updates
+          updateItems={items}
+          updatesNew={1}
+          onReview={onReview}
+          onReopenUpdate={onReopenUpdate}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: 'Updates, 1 new' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    const list = screen.getByRole('list', { name: 'Updates' })
+    expect(list).toHaveTextContent('Fixed layout')
+    expect(list).toHaveTextContent('Fixed the grid gap.')
+    expect(list).toHaveTextContent('Resolved by Ada')
+    expect(screen.queryByRole('button', { name: /^Status: / })).not.toBeInTheDocument()
+    fireEvent.click(within(list).getByRole('button', { name: /Looks good/ }))
+    expect(onReview).toHaveBeenCalledWith([items[0].bug])
+    fireEvent.click(within(list).getByRole('button', { name: /Reopen/ }))
+    expect(onReopenUpdate).toHaveBeenCalledWith(items[0].bug)
+  })
+
+  it('says when nothing has been finished yet', () => {
+    render(
+      <MemoryRouter>
+        <Harness onTab={vi.fn()} updates />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('No updates yet')
   })
 })

@@ -1,11 +1,11 @@
 // @vitest-environment node
 /// <reference types="node" />
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ClaudeRun } from './claudeExport'
+import type { ClaudeLimits, ClaudeRun, ClaudeUsage } from './claudeExport'
 
 interface BridgeEvent {
   t: string
@@ -32,6 +32,11 @@ interface Bridge {
     acquire(): { track(run: string): void; release(): void } | null
     readonly running: number
   }
+  createRunQueue<J>(options: {
+    acquire: () => { track(run: string): void; release(): void } | null
+    start: (job: J, slot: { track(run: string): void; release(): void }) => void
+    maxQueued?: number
+  }): { add(job: J): boolean; drain(): void; readonly size: number }
   isReservedName(file: string): boolean
   runnerPidFile(batchDir: string, runId: string): string
   pidAlive(pid: number): boolean
@@ -49,6 +54,40 @@ interface Bridge {
     start: string | null,
     options?: { run?: Exec; startedAt?: string | null },
   ): Promise<GitReport | null>
+  readScreenshot(dir: string, file: string): Promise<{ data: Buffer; type: string }>
+  legacyBatches(
+    bugsDir: string,
+    workspaceId: string,
+  ): Promise<{ id: string; workspaceId: string; dir: string; legacy: true }[]>
+  askArgs(extra?: string[]): string[]
+  validateAsk(payload: unknown): {
+    id: string
+    question: string
+    bugs: number[]
+    files: { name: string; data: Buffer }[]
+  }
+  summarizeQuestion(
+    meta: Record<string, unknown>,
+    events: BridgeEvent[],
+    done: Record<string, unknown> | null,
+    live: boolean,
+  ): { state: string; answer?: string; activity?: string; error?: string }
+  BACKGROUND_TERMINAL_SCRIPT: string[]
+  CLOSE_OWN_WINDOW_SCRIPT: string[]
+  runUsage(result: Record<string, unknown>): Record<string, unknown>
+  parseLimits(event: Record<string, unknown>, now?: Date): ClaudeLimits | null
+  summarizeUsage(
+    entries: Record<string, unknown>[],
+    workspaceId: string,
+    limits?: ClaudeLimits | null,
+    limit?: number,
+  ): ClaudeUsage
+  validateProject(payload: unknown): {
+    workspaceId: string
+    workspaceName: string
+    name: string
+    parent: string | null
+  }
 }
 interface ExecOptions {
   cwd?: string
@@ -150,6 +189,11 @@ describe('summarizeRun', () => {
 
   it('is starting until Claude reports in', () => {
     expect(bridge.summarizeRun(meta, [])).toMatchObject({ state: 'starting', stepCount: 0 })
+  })
+
+  it('is queued while it waits for a slot, and ended if it never started', () => {
+    expect(bridge.summarizeRun({ ...meta, queued: true }, [])).toMatchObject({ state: 'queued' })
+    expect(bridge.summarizeRun({ ...meta, failed: true }, [])).toMatchObject({ state: 'ended' })
   })
 
   it('follows Claude from working to waiting to done', () => {
@@ -522,6 +566,44 @@ describe('createLaunchLimiter', () => {
   })
 })
 
+describe('createRunQueue', () => {
+  it('starts queued runs oldest first, as slots free up', () => {
+    const limiter = bridge.createLaunchLimiter({ maxRunning: 1, now: () => 0 })
+    const started: string[] = []
+    const slots: { release(): void }[] = []
+    const queue = bridge.createRunQueue<string>({
+      acquire: () => limiter.acquire(),
+      start: (job, slot) => {
+        started.push(job)
+        slots.push(slot)
+      },
+    })
+    expect(queue.add('a')).toBe(true)
+    expect(queue.add('b')).toBe(true)
+    queue.drain()
+    expect(started).toEqual(['a'])
+    expect(queue.size).toBe(1)
+    queue.drain()
+    expect(started).toEqual(['a'])
+    slots[0].release()
+    queue.drain()
+    expect(started).toEqual(['a', 'b'])
+    expect(queue.size).toBe(0)
+  })
+
+  it('turns runs away once maxQueued are waiting', () => {
+    const queue = bridge.createRunQueue<number>({
+      acquire: () => null,
+      start: () => {},
+      maxQueued: 2,
+    })
+    expect(queue.add(1)).toBe(true)
+    expect(queue.add(2)).toBe(true)
+    expect(queue.add(3)).toBe(false)
+    expect(queue.size).toBe(2)
+  })
+})
+
 describe('isReservedName', () => {
   it('reserves the files the bridge and runner use, in any case', () => {
     for (const name of [
@@ -792,5 +874,239 @@ describe('proof of fix', () => {
       deletions: 0,
     })
     expect(await bridge.startSha(tmpdir())).toBeNull()
+  })
+})
+
+describe('legacyBatches', () => {
+  const ws = '9d0d391d-3d9c-4689-af9c-7255e1e2085d'
+  function batch(root: string, name: string, files: Record<string, string>) {
+    const dir = join(root, name)
+    mkdirSync(dir)
+    for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body)
+  }
+  const prompt = (id: string) => `- Link: https://squash.example/app/${id}/bug/17\n`
+  const result = '{"bugs":[{"number":17,"resolved":true,"summary":"Done."}]}'
+
+  it('adopts unapplied results an old helper never picked up, for this workspace only', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'squash-legacy-'))
+    batch(root, '20261012-195226-17', { 'prompt.md': prompt(ws), 'result.json': result })
+    batch(root, '20261012-195316-18', { 'prompt.md': prompt('other-ws'), 'result.json': result })
+    batch(root, '20261012-195400-19', { 'prompt.md': prompt(ws) })
+    batch(root, '20261012-195500-20', {
+      'prompt.md': prompt(ws),
+      'result.json': result,
+      applied: 'x',
+    })
+    batch(root, '20261012-195600-21', {
+      'prompt.md': prompt(ws),
+      'result.json': result,
+      'run.json': '{}',
+    })
+    batch(root, '20261012-195700-22', {
+      'prompt.md': prompt(ws),
+      'result.json': result,
+      'done.json': '{}',
+    })
+    const found = await bridge.legacyBatches(root, ws)
+    expect(found).toEqual([
+      {
+        id: '20261012-195226-17',
+        workspaceId: ws,
+        dir: join(root, '20261012-195226-17'),
+        legacy: true,
+      },
+    ])
+  })
+
+  it('returns nothing when the folder has no batches', async () => {
+    expect(await bridge.legacyBatches(join(tmpdir(), 'squash-missing-dir-xyz'), ws)).toEqual([])
+  })
+})
+
+describe('readScreenshot', () => {
+  it('serves an image Claude saved in the batch folder', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'squash-shot-'))
+    writeFileSync(join(dir, 'after-4.png'), 'png-bytes')
+    const shot = await bridge.readScreenshot(dir, 'after-4.png')
+    expect(shot.type).toBe('image/png')
+    expect(shot.data.toString()).toBe('png-bytes')
+  })
+
+  it('refuses paths, non-images, bridge files, symlinks and missing files', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'squash-shot-'))
+    writeFileSync(join(dir, 'secret.png'), 'x')
+    symlinkSync(join(dir, 'secret.png'), join(dir, 'link.png'))
+    await expect(bridge.readScreenshot(dir, '../secret.png')).rejects.toThrow('Invalid')
+    await expect(bridge.readScreenshot(dir, 'prompt.md')).rejects.toThrow('Invalid')
+    await expect(bridge.readScreenshot(dir, 'link.png')).rejects.toThrow('No such')
+    await expect(bridge.readScreenshot(dir, 'missing.png')).rejects.toThrow('No such')
+  })
+})
+
+describe('validateProject', () => {
+  it('accepts a plain folder name and an optional parent', () => {
+    expect(
+      bridge.validateProject({
+        workspaceId: 'ws1',
+        workspaceName: 'Recipe Box',
+        name: 'recipe-box',
+      }),
+    ).toEqual({ workspaceId: 'ws1', workspaceName: 'Recipe Box', name: 'recipe-box', parent: null })
+    expect(
+      bridge.validateProject({ workspaceId: 'ws1', name: 'app', parent: '~/Projects' }).parent,
+    ).toBe('~/Projects')
+  })
+
+  it('refuses names that could leave the parent folder', () => {
+    for (const name of ['..', '../x', 'a/b', '.hidden', '', 'a..b']) {
+      expect(() => bridge.validateProject({ workspaceId: 'ws1', name })).toThrow()
+    }
+    expect(() => bridge.validateProject({ workspaceId: '../x', name: 'ok' })).toThrow()
+  })
+})
+
+describe('questions', () => {
+  it('runs read-only, whatever SQUASH_CLAUDE_ARGS says about permissions', () => {
+    const args = bridge.askArgs([
+      '--permission-mode',
+      'bypassPermissions',
+      '--dangerously-skip-permissions',
+      '--allowedTools=Edit',
+      '--model',
+      'opus',
+    ])
+    expect(args.slice(0, 2)).toEqual(['--permission-mode', 'default'])
+    expect(args).not.toContain('bypassPermissions')
+    expect(args).not.toContain('--dangerously-skip-permissions')
+    expect(args).not.toContain('--allowedTools=Edit')
+    expect(args).toContain('--model')
+    expect(args).toContain('opus')
+    const allowed = args.find((a) => a.startsWith('--allowedTools='))!
+    expect(allowed).toContain('Read')
+    expect(allowed).toContain('Bash(git log:*)')
+    expect(allowed).not.toMatch(/Edit|Write|git push|git commit/)
+    expect(args).toContain('--disallowedTools=Edit,MultiEdit,Write,NotebookEdit')
+  })
+
+  it('validates a question and decodes its attached files', () => {
+    const ask = bridge.validateAsk({
+      workspaceId: 'ws1',
+      id: 'ask-20261012-120000-ab12',
+      question: '  Is #12 fixed?  ',
+      prompt: 'Answer it',
+      bugs: [12, -1],
+      files: [{ name: 'file-1-notes.txt', data: Buffer.from('hello').toString('base64') }],
+    })
+    expect(ask.question).toBe('Is #12 fixed?')
+    expect(ask.bugs).toEqual([12])
+    expect(ask.files[0].data.toString()).toBe('hello')
+  })
+
+  it('rejects unsafe or reserved file names and a missing question', () => {
+    const base = { workspaceId: 'ws1', id: 'ask-1', question: 'Q', prompt: 'P' }
+    for (const name of ['../x', 'result.json', 'done.json', '.hidden', 'a/b']) {
+      expect(() => bridge.validateAsk({ ...base, files: [{ name, data: '' }] })).toThrow()
+    }
+    expect(() => bridge.validateAsk({ ...base, question: ' ' })).toThrow('Missing question')
+  })
+
+  it('reports a question as working, answered or failed', () => {
+    const meta = { id: 'ask-1', question: 'Q', askedAt: at(0).toISOString() }
+    const tool = { t: at(1).toISOString(), kind: 'tool', text: 'Reading src/App.tsx' }
+    expect(bridge.summarizeQuestion(meta, [tool], null, true)).toMatchObject({
+      state: 'working',
+      activity: 'Reading src/App.tsx',
+    })
+    expect(
+      bridge.summarizeQuestion(meta, [], { answer: 'Yes, fixed.', exitCode: 0 }, true),
+    ).toMatchObject({ state: 'answered', answer: 'Yes, fixed.' })
+    expect(bridge.summarizeQuestion(meta, [], { answer: '', exitCode: 1 }, true).state).toBe(
+      'failed',
+    )
+    expect(bridge.summarizeQuestion(meta, [], null, false).state).toBe('failed')
+  })
+})
+
+describe('run terminals', () => {
+  it('open without bringing Terminal to the front', () => {
+    const script = bridge.BACKGROUND_TERMINAL_SCRIPT.join('\n')
+    expect(script).not.toMatch(/^activate$/m)
+    expect(script).toContain('path to frontmost application')
+    expect(script).toContain('tell application previous to activate')
+  })
+
+  it("close their own window, found by the runner's tty while it is busy", () => {
+    const script = bridge.CLOSE_OWN_WINDOW_SCRIPT.join('\n')
+    // A finished window keeps showing its tty after the tty is reused by a newer window.
+    expect(script).toContain('if tty of t is myTty and busy of t then')
+    // Closed windows linger, invisible, in Terminal's window list.
+    expect(script).toContain('whose id is myWindow and visible is true')
+    expect(script).toContain('close (item 1 of matches)')
+    // `idle` is reserved in AppleScript (the idle handler) and fails at run time as a variable.
+    expect(script).not.toMatch(/\bidle\b/)
+  })
+})
+
+describe('usage', () => {
+  const result = {
+    type: 'result',
+    total_cost_usd: 1.38151600002,
+    num_turns: 38,
+    duration_ms: 233086,
+    usage: {
+      input_tokens: 72,
+      output_tokens: 14440,
+      cache_read_input_tokens: 2469500,
+      cache_creation_input_tokens: 74816,
+    },
+    modelUsage: { 'claude-opus-5-5[1m]': {} },
+  }
+
+  it('reads what a run used from its result event', () => {
+    expect(bridge.runUsage(result)).toEqual({
+      tokens: 72 + 14440 + 2469500 + 74816,
+      input: 72,
+      output: 14440,
+      cacheRead: 2469500,
+      cacheWrite: 74816,
+      costUsd: 1.3815,
+      turns: 38,
+      durationMs: 233086,
+      models: ['claude-opus-5-5[1m]'],
+    })
+    expect(bridge.runUsage({}).tokens).toBe(0)
+  })
+
+  it('reads plan limits from a rate limit event', () => {
+    const event = {
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        unifiedWindows: {
+          five_hour: { utilization: 0.03, resetsAt: 1791845400 },
+          seven_day: { utilization: 0.091, resetsAt: 1792141200 },
+        },
+      },
+    }
+    expect(bridge.parseLimits(event, at(0))).toEqual({
+      fiveHour: { usedPercent: 3, resetsAt: new Date(1791845400 * 1000).toISOString() },
+      sevenDay: { usedPercent: 9.1, resetsAt: new Date(1792141200 * 1000).toISOString() },
+      status: 'allowed',
+      updatedAt: at(0).toISOString(),
+    })
+    expect(bridge.parseLimits({ rate_limit_info: { status: 'allowed' } })).toBeNull()
+    expect(bridge.parseLimits({})).toBeNull()
+  })
+
+  it('totals a workspace and lists its runs newest first', () => {
+    const entries = [
+      { id: 'a', workspaceId: 'w1', kind: 'fix', bugs: [1, 2], tokens: 100, costUsd: 0.5 },
+      { id: 'b', workspaceId: 'w2', kind: 'fix', bugs: [1], tokens: 999, costUsd: 9 },
+      { id: 'c', workspaceId: 'w1', kind: 'question', bugs: [], tokens: 50, costUsd: 0.25 },
+    ]
+    const usage = bridge.summarizeUsage(entries, 'w1', null, 1)
+    expect(usage.total).toMatchObject({ runs: 2, tokens: 150, costUsd: 0.75 })
+    expect(usage.runs.map((r) => r.id)).toEqual(['c'])
+    expect(usage.limits).toBeNull()
   })
 })

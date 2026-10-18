@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, ChevronsUpDown, Plus } from 'lucide-react'
+import { Check, ChevronsUpDown, Plus, Rocket } from 'lucide-react'
 import type { Workspace } from '../lib/types'
 import { setLastWorkspace } from '../hooks/useWorkspaces'
 import { useDismiss } from '../hooks/useDismiss'
 import { cn } from '../lib/utils'
 import { menuRowClass, popoverClass } from './dialogStyles'
+import { NewProjectDialog } from './NewProjectDialog'
 
 const ITEM = menuRowClass
 
@@ -16,6 +17,7 @@ export interface WorkspaceSwitcherProps {
 
 export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const close = useCallback(() => setOpen(false), [])
@@ -90,8 +92,21 @@ export function WorkspaceSwitcher({ workspace, workspaces }: WorkspaceSwitcherPr
             <Plus aria-hidden="true" className="size-4 shrink-0" />
             Create or join…
           </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              setCreating(true)
+            }}
+            className={cn(ITEM, 'text-ink-2 hover:text-ink')}
+          >
+            <Rocket aria-hidden="true" className="size-4 shrink-0" />
+            New project with Claude…
+          </button>
         </div>
       )}
+      <NewProjectDialog open={creating} onClose={() => setCreating(false)} />
     </div>
   )
 }
