@@ -50,9 +50,10 @@
   --accent-fg: #ffffff;
   --accent-tint: #fdeeea;
   --focus: var(--accent);
-  /* severity: a value ramp up to the red, with the tick count carrying the exact rank */
+  /* severity: the ramp picks up the one red at medium (a dulled brick, so it reads as a warning
+     without shouting) and arrives at it in full at critical; the tick count carries the exact rank */
   --sev-low: #9b9891;
-  --sev-medium: #6e6b65;
+  --sev-medium: #9c3522;
   --sev-high: #000000;
   --sev-critical: #c92a14;
   --sev-critical-tint: #fdeeea;
@@ -113,7 +114,7 @@
   --accent-fg: #180502;
   --accent-tint: #2b0f09;
   --sev-low: #76746f;
-  --sev-medium: #9d9b96;
+  --sev-medium: #cf7a66;
   --sev-high: #f4f3f1;
   --sev-critical: #ff5236;
   --sev-critical-tint: #2b0f09;
